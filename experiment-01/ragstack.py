@@ -385,30 +385,52 @@ def list_collections(env=None):
     ]
 
 
+def build_queries(subject, term, aliases, additional_terms=""):
+    """One retrieval query per alias: subject, alias, then any additional
+    terms the caller supplied.
+
+    Takes any subject string, including one carrying punctuation or a
+    strain-style suffix ("Influenza A virus (H5N1)", "SARS-CoV-2"); the
+    string is only whitespace-normalized, never split or rewritten, so what
+    the user typed is what gets searched.
+
+    The record-type label (mutation, ppi) is never appended. It names the
+    shape of the rows we want back, not a word that belongs in a literature
+    search, and appending it narrowed results toward papers that happen to
+    use that word. Extra search vocabulary is the caller's explicit
+    additional_terms, never a built-in list.
+    """
+    aliases = [a for a in (list(aliases) or []) if (a or "").strip()]
+    if not aliases and (term or "").strip():
+        aliases = [term]
+    additional_terms = (additional_terms or "").strip()
+
+    queries = []
+    for alias in aliases:
+        parts = [(subject or "").strip(), (alias or "").strip(), additional_terms]
+        query = " ".join(" ".join(parts).split())
+        if query and query not in queries:
+            queries.append(query)
+    return queries
+
+
 def collect(
     organism,
     gene,
     aliases,
-    data_type_terms,
+    additional_terms="",
     collection="asm-semantic",
     top_k=25,
     filters=None,
     env=None,
 ):
-    """Union several query paraphrases from aliases x topic terms, dedupe by
-    chunk_id, return (kept_sources, manifest, stats). Never pads with
-    off-topic queries: only alias/topic paraphrases are issued.
+    """Union one query per alias, dedupe by chunk_id, return
+    (kept_sources, manifest, stats). Never pads with off-topic queries:
+    only the subject, the term's aliases, and the caller's additional terms
+    are issued. See build_queries for why the record-type label is left out.
     """
     env = env or load_env()
-    aliases = list(aliases) or [gene]
-    data_type_terms = list(data_type_terms) or [""]
-
-    queries = []
-    for alias in aliases:
-        for term in data_type_terms:
-            query = f"{organism} {alias} {term}".strip()
-            if query not in queries:
-                queries.append(query)
+    queries = build_queries(organism, gene, aliases, additional_terms)
 
     all_sources = []
     chunks_returned = 0
@@ -439,11 +461,24 @@ if __name__ == "__main__":
     print("-" * 40)
     print(f"Auth mode: {auth_mode(env)}")
 
+    print()
+    print("Query builder check (any subject string, no record-type label):")
+    built = build_queries("Influenza A virus (H5N1)", "PB2/PA", ["PB2/PA", "polymerase"], "")
+    print(f"  built: {built}")
+    if built == ["Influenza A virus (H5N1) PB2/PA", "Influenza A virus (H5N1) polymerase"]:
+        print("PASS: punctuation and strain suffix preserved, one query per alias")
+    else:
+        print("FAIL: unexpected queries")
+    if not any("mutation" in q or "ppi" in q for q in built):
+        print("PASS: no record-type label in the query")
+    else:
+        print("FAIL: a record-type label leaked into the query")
+
     kept, manifest, stats = collect(
         organism="Influenza A virus",
         gene="PB2",
         aliases=["PB2", "polymerase basic 2", "polymerase basic protein 2"],
-        data_type_terms=["mutation", "adaptation", "phenotype"],
+        additional_terms="",
         collection="asm-semantic",
         top_k=25,
         env=env,

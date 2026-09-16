@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Loop extract.run_extraction over a list of genes crossed with a list of
+"""Loop extract.run_extraction over subjects crossed with terms crossed with
 data types, with real concurrency, a hard call budget, resume-by-manifest,
 and a final summary.
 
@@ -7,11 +7,15 @@ Same code path as extract.py (imported, not duplicated). Append-only
 manifest at out/manifest.jsonl records each completed combination so a
 rerun skips it unless --force.
 
+Subjects and terms both accept a comma list or a file path. A subjects file
+with two columns is read as explicit subject/term pairs instead of a cross
+product, which is how a sweep names its own pairings.
+
 Usage:
-    python3 batch.py --genes PB2,PA,NP --papers 5 --cap 40
-    python3 batch.py --genes genes.txt --data-types mutation --workers 4
-    python3 batch.py --genes PB2,PA --dry-run
-    python3 batch.py --genes PB2 --force
+    python3 batch.py --organism "Influenza A virus" --genes PB2,PA,NP --papers 5 --cap 40
+    python3 batch.py --organisms "Influenza A virus,Dengue virus" --genes PB2,NS1
+    python3 batch.py --organisms pairs.tsv --dry-run
+    python3 batch.py --organism "Influenza A virus" --genes genes.txt --workers 4
 """
 
 import argparse
@@ -47,21 +51,96 @@ def combo_key(organism, gene, data_type, model, collection_str):
     return "|".join([organism, gene, data_type, model, collection_str])
 
 
-def load_genes(raw):
-    """--genes accepts a comma list or a path to a file of gene names, one
-    per line. Blank lines and lines starting with '#' are ignored in the
-    file form.
+def _read_rows(path):
+    """Read a list file into rows of columns. Splits on tab first, then on
+    comma, so both a .tsv and a .csv work. Blank lines and lines starting
+    with '#' are ignored.
     """
+    rows = []
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            separator = "\t" if "\t" in line else ","
+            cells = [c.strip() for c in line.split(separator)]
+            cells = [c for c in cells if c]
+            if cells:
+                rows.append(cells)
+    return rows
+
+
+def load_list(raw):
+    """A comma list or a path to a one-name-per-line file. Returns a list of
+    names, order preserved, duplicates dropped.
+    """
+    if raw is None:
+        return []
     if os.path.isfile(raw):
-        genes = []
-        with open(raw, "r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                genes.append(line)
-        return genes
-    return [g.strip() for g in raw.split(",") if g.strip()]
+        names = [row[0] for row in _read_rows(raw)]
+    else:
+        names = [n.strip() for n in raw.split(",") if n.strip()]
+    seen = []
+    for name in names:
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
+# Kept as the old name so anything importing it still works.
+def load_genes(raw):
+    return load_list(raw)
+
+
+def load_pairs(subjects_raw, terms_raw, default_subject=None):
+    """Work out the (subject, term) pairs this sweep should run.
+
+    Three input shapes, all of which the sweep needs:
+
+    - A two-column subjects file: each line is one explicit subject/term
+      pair, so a sweep can name its own pairings instead of taking every
+      combination. --genes is then not required, and is rejected if given,
+      because the file already decides the terms.
+    - A subjects comma list (or one-column file) plus a terms list: the full
+      cross product of the two.
+    - No subjects at all: the single --organism value crossed with the terms
+      list, which is the original behaviour.
+
+    Returns (pairs, mode). Raises ValueError with a plain message on a bad
+    combination of inputs.
+    """
+    if subjects_raw and os.path.isfile(subjects_raw):
+        rows = _read_rows(subjects_raw)
+        if any(len(row) >= 2 for row in rows):
+            if not all(len(row) >= 2 for row in rows):
+                raise ValueError(
+                    "%s mixes one-column and two-column lines: a pairs file needs "
+                    "a subject and a term on every line" % subjects_raw
+                )
+            if terms_raw:
+                raise ValueError(
+                    "%s is a two-column pairs file, which already names the terms, "
+                    "so --genes must not be given as well" % subjects_raw
+                )
+            pairs = []
+            for row in rows:
+                pair = (row[0], row[1])
+                if pair not in pairs:
+                    pairs.append(pair)
+            return pairs, "pairs_file"
+
+    subjects = load_list(subjects_raw) if subjects_raw else []
+    if not subjects:
+        if not (default_subject or "").strip():
+            raise ValueError("a subject is required: pass --organism or --organisms")
+        subjects = [default_subject.strip()]
+
+    terms = load_list(terms_raw)
+    if not terms:
+        raise ValueError("--genes must name at least one term")
+
+    pairs = [(subject, term) for subject in subjects for term in terms]
+    return pairs, "cross"
 
 
 def load_data_types(raw):
@@ -111,12 +190,12 @@ def append_manifest(manifest_path, entry):
 
 
 def print_results_table(results):
-    header = ("gene", "data_type", "status", "proposed", "emitted", "omitted",
+    header = ("organism", "gene", "data_type", "status", "proposed", "emitted", "omitted",
               "refusals", "calls", "seconds")
     rows = [header]
     for r in results:
         rows.append((
-            r["gene"], r["data_type"], r["status"],
+            r.get("organism", ""), r["gene"], r["data_type"], r["status"],
             str(r.get("proposed", "")), str(r.get("emitted", "")),
             str(r.get("omitted", "")), str(r.get("refusals", "")),
             str(r.get("model_calls", "")), str(r.get("elapsed_seconds", "")),
@@ -205,22 +284,24 @@ def project_batch(num_combos, papers, cap):
     return None, "unbounded: pass --papers or --cap to bound this projection"
 
 
-def run_combo(ns, env, gene, data_type, collections_list, collection_str, budget,
+def run_combo(ns, env, organism, gene, data_type, collections_list, collection_str, budget,
                manifest_path, state_lock, state, concurrency):
-    """Run one gene/data-type combination. Returns a result dict. Never
-    raises: a failed combination is recorded and reported, not thrown.
+    """Run one subject/term/data-type combination. Returns a result dict.
+    Never raises: a failed combination is recorded and reported, not thrown.
     """
-    key = combo_key(ns.organism, gene, data_type, ns.model, collection_str)
+    label = "%s / %s / %s" % (organism, gene, data_type)
+    key = combo_key(organism, gene, data_type, ns.model, collection_str)
     reserved = budget.reserve(ns.papers)
     if reserved is None:
         with state_lock:
-            print("skip (budget exhausted): %s / %s" % (gene, data_type))
-        return {"gene": gene, "data_type": data_type, "status": "budget_exhausted"}
+            print("skip (budget exhausted): %s" % label)
+        return {"organism": organism, "gene": gene, "data_type": data_type,
+                "status": "budget_exhausted"}
 
     start = time.time()
     try:
         out_path, summary = extract.run_extraction(
-            organism=ns.organism,
+            organism=organism,
             gene=gene,
             data_type=data_type,
             model=ns.model,
@@ -231,18 +312,20 @@ def run_combo(ns, env, gene, data_type, collections_list, collection_str, budget
             out_dir=ns.out_dir,
             env=env,
             concurrency=concurrency,
+            additional_terms=ns.additional_terms,
         )
     except Exception as error:  # a bad combo must not end the batch
         budget.settle(reserved, 0)
         with state_lock:
-            print("FAILED: %s / %s: %s" % (gene, data_type, error))
+            print("FAILED: %s: %s" % (label, error))
             append_manifest(manifest_path, {
-                "combo_key": key, "organism": ns.organism, "gene": gene,
+                "combo_key": key, "organism": organism, "gene": gene,
                 "data_type": data_type, "model": ns.model,
                 "collection": collection_str, "status": "failed",
                 "error": str(error), "timestamp": _now_iso(),
             })
-        return {"gene": gene, "data_type": data_type, "status": "failed"}
+        return {"organism": organism, "gene": gene, "data_type": data_type,
+                "status": "failed"}
 
     budget.settle(reserved, summary["model_calls"])
 
@@ -250,45 +333,59 @@ def run_combo(ns, env, gene, data_type, collections_list, collection_str, budget
         state["combos_done"] += 1
         state["calls_used"] += summary["model_calls"]
         print(
-            "done: %s / %s  papers=%d emitted=%d omitted=%d refusals=%d "
+            "done: %s  papers=%d emitted=%d omitted=%d refusals=%d "
             "seconds=%.1f  [progress %d/%d, calls used %d]"
-            % (gene, data_type, summary["papers_processed"], summary["emitted"],
+            % (label, summary["papers_processed"], summary["emitted"],
                summary["omitted"], summary["refusals"], summary["elapsed_seconds"],
                state["combos_done"], state["total_combos"], state["calls_used"])
         )
+        for notice in summary.get("notices") or []:
+            print("  notice [%s]: %s" % (notice["code"], notice["text"]))
         append_manifest(manifest_path, {
-            "combo_key": key, "organism": ns.organism, "gene": gene,
+            "combo_key": key, "organism": organism, "gene": gene,
             "data_type": data_type, "model": ns.model,
             "collection": collection_str, "status": "done",
             "out_path": out_path, "proposed": summary["proposed"],
             "emitted": summary["emitted"], "omitted": summary["omitted"],
             "refusals": summary["refusals"], "model_calls": summary["model_calls"],
+            "notices": [n["code"] for n in (summary.get("notices") or [])],
             "timestamp": _now_iso(),
         })
 
     return {
-        "gene": gene, "data_type": data_type, "status": "done",
+        "organism": organism, "gene": gene, "data_type": data_type, "status": "done",
         "proposed": summary["proposed"], "emitted": summary["emitted"],
         "omitted": summary["omitted"], "refusals": summary["refusals"],
         "model_calls": summary["model_calls"],
         "elapsed_seconds": summary["elapsed_seconds"],
+        "notices": summary.get("notices") or [],
     }
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--genes", required=True,
-                         help="comma-separated gene list, or a path to a file of gene names")
+    parser.add_argument("--genes", default=None,
+                         help="comma-separated term list, or a path to a file of "
+                              "terms, one per line. Not required when --organisms "
+                              "is a two-column pairs file")
     parser.add_argument("--data-types", default=None,
                          help="comma list, default both (%s)" % ", ".join(sorted(schemas.DATA_TYPES)))
-    parser.add_argument("--organism", default="Influenza A virus")
+    parser.add_argument("--organism", default=None,
+                         help="a single subject, crossed with every term")
+    parser.add_argument("--organisms", default=None,
+                         help="comma-separated subject list, or a file path. A "
+                              "one-column file is a subject list crossed with the "
+                              "terms; a two-column file (tab or comma separated) "
+                              "is read as explicit subject/term pairs instead")
+    parser.add_argument("--additional-terms", default="",
+                         help="extra words added to every retrieval query")
     parser.add_argument("--model", default="gpt56luna")
     parser.add_argument("--collection", default=None,
                          help="old alias for --collections, kept working")
     parser.add_argument("--collections", default=None,
                          help="comma list of collections to search, e.g. "
-                              "asm-semantic,open-access; currently reaches %s"
-                              % ", ".join(extract.KNOWN_COLLECTIONS))
+                              "asm-semantic,open-access; validated live against "
+                              "what the active credential can reach")
     parser.add_argument("--top-k", type=int, default=25)
     parser.add_argument("--papers", type=int, default=None,
                          help="cap papers processed per combination")
@@ -315,9 +412,10 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    genes = load_genes(args.genes)
-    if not genes:
-        sys.exit("--genes must name at least one gene")
+    try:
+        pairs, pair_mode = load_pairs(args.organisms, args.genes, args.organism)
+    except ValueError as error:
+        sys.exit(str(error))
     data_types = load_data_types(args.data_types)
 
     # Validate and normalize collections once, up front, so an unknown
@@ -331,14 +429,22 @@ def main(argv=None):
         sys.exit(str(error))
     collection_str = ",".join(collections_list)
 
-    combos = [(gene, data_type) for gene in genes for data_type in data_types]
+    combos = [
+        (organism, gene, data_type)
+        for organism, gene in pairs
+        for data_type in data_types
+    ]
 
     if args.dry_run:
         print("=== dry run: %d combination(s) ===" % len(combos))
+        print("subject/term source: %s (%d pair(s))" % (pair_mode, len(pairs)))
         print("collections: %s" % collection_str)
-        for gene, data_type in combos:
-            print("  %-16s %-10s model=%s papers=%s" % (
-                gene, data_type, args.model, args.papers if args.papers is not None else "uncapped"
+        for organism, gene, data_type in combos:
+            aliases, aliases_source = extract.aliases_for_term(gene)
+            print("  %-26s %-16s %-10s model=%s papers=%s aliases=%s (%s)" % (
+                organism, gene, data_type, args.model,
+                args.papers if args.papers is not None else "uncapped",
+                "|".join(aliases), aliases_source,
             ))
         total, note = project_batch(len(combos), args.papers, args.cap)
         print("projected model calls: %s (%s)" % (
@@ -352,13 +458,14 @@ def main(argv=None):
 
     to_run = []
     results = []
-    for gene, data_type in combos:
-        key = combo_key(args.organism, gene, data_type, args.model, collection_str)
+    for organism, gene, data_type in combos:
+        key = combo_key(organism, gene, data_type, args.model, collection_str)
         if key in completed:
-            print("skip (already done): %s / %s" % (gene, data_type))
-            results.append({"gene": gene, "data_type": data_type, "status": "skipped"})
+            print("skip (already done): %s / %s / %s" % (organism, gene, data_type))
+            results.append({"organism": organism, "gene": gene,
+                            "data_type": data_type, "status": "skipped"})
             continue
-        to_run.append((gene, data_type))
+        to_run.append((organism, gene, data_type))
 
     budget = BudgetTracker(args.cap)
     state_lock = threading.Lock()
@@ -377,11 +484,11 @@ def main(argv=None):
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [
                 pool.submit(
-                    run_combo, args, env, gene, data_type, collections_list,
+                    run_combo, args, env, organism, gene, data_type, collections_list,
                     collection_str, budget, manifest_path, state_lock, state,
                     concurrency,
                 )
-                for gene, data_type in to_run
+                for organism, gene, data_type in to_run
             ]
             for future in as_completed(futures):
                 results.append(future.result())
@@ -390,7 +497,9 @@ def main(argv=None):
     # Restore combo order (gene, then data type) for the printed table and
     # the summary file, since as_completed() finishes them out of order.
     order = {combo: i for i, combo in enumerate(combos)}
-    results.sort(key=lambda r: order.get((r["gene"], r["data_type"]), 1 << 30))
+    results.sort(key=lambda r: order.get(
+        (r.get("organism"), r["gene"], r["data_type"]), 1 << 30
+    ))
 
     totals = totals_from_results(results)
     totals["batch_elapsed_seconds"] = batch_elapsed
@@ -415,7 +524,9 @@ def main(argv=None):
     with open(summary_path, "w", encoding="utf-8") as handle:
         json.dump({
             "generated_at": _now_iso(),
-            "organism": args.organism,
+            "subject_term_pairs": [list(p) for p in pairs],
+            "subject_term_source": pair_mode,
+            "additional_terms": args.additional_terms,
             "model": args.model,
             "collections": collections_list,
             "data_types": data_types,

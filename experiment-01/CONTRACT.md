@@ -104,6 +104,7 @@ Run record:
     "organism": "Influenza A virus",
     "gene": "PB2",
     "aliases": ["PB2", "polymerase basic 2", "polymerase basic protein 2"],
+    "aliases_source": "synonyms.json",
     "additional_terms": "",
     "data_type": "mutation",
     "collection": "asm-semantic",
@@ -131,7 +132,7 @@ Verification record, one per spot-checked row, written by `sample.py` with blank
 
 ## Output file
 
-One file per gene per data type at `experiment-01/out/<gene>/<gene>__<dtype>__<run_id>.json`:
+One file per term per data type at `experiment-01/out/<term>/<term>__<dtype>__<run_id>.json`, where `<term>` is the `safe_name` form described under search subject and term:
 
 ```json
 {
@@ -149,6 +150,9 @@ One file per gene per data type at `experiment-01/out/<gene>/<gene>__<dtype>__<r
   "rows": [],
   "omitted": [],
   "refusals": [],
+  "notices": [
+    { "code": "thin_evidence", "text": "..." }
+  ],
   "tally": { "proposed": 0, "emitted": 0, "omitted": 0 }
 }
 ```
@@ -162,7 +166,7 @@ One file per gene per data type at `experiment-01/out/<gene>/<gene>__<dtype>__<r
   - Login token: written by `p3-login` into the user's home directory, or the path in `RAGSTACK_TOKEN_PATH` when set. Header `Authorization`, with no `Bearer ` prefix. Tenant is the signed-in BV-BRC user, `restricted_to` None, reaches `open-access`, `asm-semantic`, `Dengue`, and an empty index `ragstack_salesforce_sfr_embedding_mistral_4096_928f8ebe`.
   - `auto` mode uses the token when the file exists and is non-empty, otherwise the key. Never send `Authorization` and `X-API-Key` together; that is a 400. Never print or log either credential value, only report which mode was used.
 - The collection id is exactly `Dengue`, capital D. Lowercase fails.
-- `POST /v1/retrieve` body: `{"query": str, "collection": str, "top_k": int, "filters": {...}}`. Collection ids are validated live against `GET /v1/collections` for the active credential, not a hardcoded list, since the token and the key reach different collections.
+- `POST /v1/retrieve` body: `{"query": str, "collection": str, "top_k": int, "filters": {...}}`. Collection ids are validated live against `GET /v1/collections` for the active credential, not a hardcoded list, since the token and the key reach different collections. That endpoint also reports each collection's `count`, measured September 16: `asm-semantic` 6,718,269, `open-access` 47,625,155, `Dengue` 382, and the empty `ragstack_salesforce_sfr_embedding_mistral_4096_928f8ebe` index 0.
 - `filters` with `{"year": 2020}` returns only 2020 papers. Date range, PMID and PMCID filters are untested; treat an unsupported filter as a hard error, never as a silently ignored one.
 - `top_k` 25 is the highest value tested.
 - Each source: `chunk_id`, `doc_id`, `score` (0 to 1), `content`, and `metadata` with `title`, `journal`, `year`, `date`, `pmid`, `pmcid`, `doi`, `authors`, `prev_chunk_id`, `next_chunk_id`. Note the metadata keys are `pmid` and `pmcid`, while our JSON uses `pubmed_id` and `pmc_id`.
@@ -182,6 +186,38 @@ The prompt arrives on stdin. Call it as a subprocess, because `argo.py` exits th
 
 Slice 1 models: `gpt56luna` first, then the same inputs on `claudeopus5`.
 
-## PB2 aliases
+## Term synonyms
 
-Fixed list for slice 1, reviewed by a lead before the gene sweep: `PB2`, `polymerase basic 2`, `polymerase basic protein 2`. Do not generate aliases at run time.
+Synonyms live in `synonyms.json`, one key per term mapping to its alternative spellings. Lookup is case-insensitive, and the term the user typed always leads the alias list. The file is seeded with the single reviewed entry slice 1 had: `PB2` to `PB2`, `polymerase basic 2`, `polymerase basic protein 2`.
+
+Three rules hold:
+
+- A term with no entry runs with the term alone. The run record carries `query.aliases_source: "term_only"` and the run summary says so, so a narrower search is visible rather than silent.
+- Synonyms are never generated at run time, and never by a model. A new entry is added to the file by hand and reviewed, which is the same gate the PB2 list went through.
+- The file is data, not code. Adding a term needs no code change, and a missing file is not an error: it means no term has synonyms.
+
+## Search subject and term
+
+No subject or term has a default anywhere in the pipeline. `extract.py` requires `--organism` (the subject) and `--gene` (the term), `serve.py` rejects a run with no subject, and the browser form carries only greyed placeholder examples. Any string works, including one with punctuation or a strain-style suffix such as `Influenza A virus (H5N1)` or `SARS-CoV-2`.
+
+Query construction, in `ragstack.build_queries`: one query per alias, built as subject, then alias, then the caller's `additional_terms`. The subject string is only whitespace-normalized, never split or rewritten.
+
+The record-type label (`mutation`, `ppi`) is never appended to a search query. It names the shape of the rows we want back, not a word that belongs in a literature search. Extra search vocabulary is the caller's explicit `--additional-terms`, which is also handed to the model as context, never a built-in per-data-type list.
+
+A term carrying punctuation is reduced to a filesystem- and row-id-safe form by `extract.safe_name` before it reaches a `row_id` or an output path. A plain term such as `PB2` passes through untouched, so existing output paths and row ids do not move.
+
+## Run notices
+
+The output envelope carries a `notices` list, each entry `{"code": ..., "text": ...}`, stating in plain language what a run's evidence can and cannot support. Three codes:
+
+| Code | When | Why it matters |
+|---|---|---|
+| `thin_evidence` | The search returned fewer than 3 distinct documents | The run still completes, but a small or empty result is a near-empty search, not a negative finding |
+| `missing_pubmed_ids` | More than half the emitted rows (or, with no rows, the retrieved papers) carry no `pubmed_id` | It changes which identifier a reviewer can follow. The text names the collections searched, and how many rows carry a filename-derived `pmc_id` instead |
+| `no_synonyms` | The term had no `synonyms.json` entry | The search ran on the term alone |
+
+Notices never change a row, an outcome, or the tally. They are reported alongside, in the command-line summary, in the batch manifest, and in the browser summary strip.
+
+## Collections in the browser
+
+`GET /api/collections` returns each reachable collection with its `count` (the number of indexed items the endpoint reports, which is a chunk count, the only size it exposes), plus `auth_mode` naming the active credential and `hidden_empty` listing what was dropped. A collection reporting exactly 0 is dropped, since an empty index cannot answer a query; an unreported count never hides a collection. The page shows the count beside each name and names the credential in use.

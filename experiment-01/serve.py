@@ -122,15 +122,15 @@ def _retrieve_for_params(params):
     env = ragstack.load_env()
     gene = params["gene"]
     data_type = params["data_type"]
-    aliases = extract.aliases_for_gene(gene)
+    aliases, aliases_source = extract.aliases_for_term(gene)
     collections_list = extract.parse_collections(
         collection=params["collection"], env=env
     )
     filters = {"year": params["year"]} if params.get("year") else {}
-    data_type_terms = extract.DATA_TYPE_QUERY_TERMS[data_type]
+    additional_terms = (params.get("additional_terms") or "").strip()
 
     kept, manifest, stats = extract.collect_multi_collection(
-        params["organism"], gene, aliases, data_type_terms,
+        params["organism"], gene, aliases, additional_terms,
         collections_list, params["top_k"], filters, env,
     )
 
@@ -148,7 +148,7 @@ def _retrieve_for_params(params):
         "organism": params["organism"],
         "gene": gene,
         "aliases": aliases,
-        "additional_terms": "",
+        "additional_terms": additional_terms,
         "data_type": data_type,
     }
     return {
@@ -159,6 +159,7 @@ def _retrieve_for_params(params):
         "stats": stats,
         "spec": spec,
         "collections_list": collections_list,
+        "aliases_source": aliases_source,
     }
 
 
@@ -548,7 +549,8 @@ class JobStore:
             prompt_sha256=prompt_hash, prompt_edited=False,
             query={
                 "organism": params["organism"], "gene": gene, "aliases": spec["aliases"],
-                "additional_terms": "", "data_type": data_type,
+                "aliases_source": retrieval.get("aliases_source"),
+                "additional_terms": spec["additional_terms"], "data_type": data_type,
                 "collection": collection_str, "collections": collections_list,
                 "top_k": params["top_k"], "filters": filters,
                 "concurrency": concurrency,
@@ -564,6 +566,16 @@ class JobStore:
             "by_collection": stats["by_collection"],
         }
         envelope = schemas.output_envelope(run, retrieval_block, final_accepted, omitted, refusals)
+        notices = extract.build_query_notices(manifest, final_accepted, collections_list)
+        if retrieval.get("aliases_source") == "term_only":
+            notices.append({
+                "code": "no_synonyms",
+                "text": (
+                    "No synonym entry for %r in synonyms.json, so this run searched the "
+                    "term alone. Alternative spellings were not invented."
+                ) % gene,
+            })
+        envelope["notices"] = notices
         if stopped:
             envelope["stopped"] = True
             envelope["stopped_note"] = (
@@ -577,10 +589,13 @@ class JobStore:
                       finished_at=time.time(), stage="failed")
             return
 
-        gene_dir = os.path.join(OUT_DIR, gene)
+        gene_slug = extract.safe_name(gene)
+        gene_dir = os.path.join(OUT_DIR, gene_slug)
         os.makedirs(gene_dir, exist_ok=True)
         suffix = "__stopped" if stopped else ""
-        out_path = os.path.join(gene_dir, "%s__%s__%s%s.json" % (gene, data_type, run_id, suffix))
+        out_path = os.path.join(
+            gene_dir, "%s__%s__%s%s.json" % (gene_slug, data_type, run_id, suffix)
+        )
         with open(out_path, "w", encoding="utf-8") as handle:
             json.dump(envelope, handle, indent=2)
             handle.write("\n")
@@ -603,6 +618,7 @@ class JobStore:
             "model_calls": model_calls,
             "concurrency": concurrency,
             "stopped": stopped,
+            "notices": notices,
         }
 
         final_status = "stopped" if stopped else "done"
@@ -679,7 +695,8 @@ class JobStore:
             prompt_sha256=prompt_hash, prompt_edited=True,
             query={
                 "organism": params["organism"], "gene": params["gene"],
-                "aliases": spec["aliases"], "additional_terms": "",
+                "aliases": spec["aliases"],
+                "additional_terms": spec.get("additional_terms", ""),
                 "data_type": params["data_type"], "collection": params["collection"],
                 "top_k": params["top_k"], "filters": {"year": params["year"]} if params.get("year") else {},
                 "concurrency": concurrency,
@@ -712,10 +729,14 @@ class JobStore:
                        finished_at=time.time(), stage="failed")
             return
 
-        gene_dir = os.path.join(OUT_DIR, params["gene"])
+        gene_slug = extract.safe_name(params["gene"])
+        gene_dir = os.path.join(OUT_DIR, gene_slug)
         os.makedirs(gene_dir, exist_ok=True)
         suffix = "__stopped" if stopped else ""
-        out_path = os.path.join(gene_dir, "%s__%s__%s__rerun%s.json" % (params["gene"], params["data_type"], run_id, suffix))
+        out_path = os.path.join(
+            gene_dir,
+            "%s__%s__%s__rerun%s.json" % (gene_slug, params["data_type"], run_id, suffix),
+        )
         with open(out_path, "w", encoding="utf-8") as handle:
             json.dump(envelope, handle, indent=2)
             handle.write("\n")
@@ -1002,16 +1023,38 @@ class Handler(BaseHTTPRequestHandler):
             self._send_error_json("could not reach RAGStack: %s" % error, status=502)
             return
         raw = data.get("collections", data if isinstance(data, list) else [])
-        collections = [
-            {"id": entry.get("id"), "label": entry.get("label") or entry.get("id")}
-            for entry in raw
-            if isinstance(entry, dict) and entry.get("id")
-        ]
+        collections = []
+        hidden_empty = []
+        for entry in raw:
+            if not isinstance(entry, dict) or not entry.get("id"):
+                continue
+            # "count" is what /v1/collections reports: the number of indexed
+            # items (chunks), which is the only size the endpoint exposes.
+            # It is passed through under that name so the page can label it
+            # honestly rather than call it a paper count.
+            count = entry.get("count")
+            if count is None:
+                count = entry.get("text_count")
+            if count == 0:
+                # An index reporting nothing indexed cannot answer a query,
+                # so it is dropped rather than offered. Only an explicit
+                # zero hides a collection; an unreported count does not.
+                hidden_empty.append(entry.get("id"))
+                continue
+            collections.append({
+                "id": entry.get("id"),
+                "label": entry.get("label") or entry.get("id"),
+                "count": count,
+            })
         # auth_mode names which credential is active (token or key), never
         # the credential value, so the page can show the user which one is
         # supplying the collections listed here (e.g. Dengue only appears
         # when the token is active).
-        self._send_json({"collections": collections, "auth_mode": mode})
+        self._send_json({
+            "collections": collections,
+            "auth_mode": mode,
+            "hidden_empty": hidden_empty,
+        })
 
     def _handle_run(self):
         body = self._read_json_body()
@@ -1317,8 +1360,10 @@ def _compare_envelopes(parent_envelope, rerun_envelope, data_type):
 
 
 def _params_from_body(body, require_gene=True, require_data_type=True):
-    organism = body.get("organism") or "Influenza A virus"
-    gene = body.get("gene")
+    organism = (body.get("organism") or "").strip()
+    if not organism:
+        raise ValueError("organism is required and has no default")
+    gene = (body.get("gene") or "").strip()
     if require_gene and not gene:
         raise ValueError("gene is required")
     data_type = body.get("data_type")
@@ -1381,6 +1426,7 @@ def _params_from_body(body, require_gene=True, require_data_type=True):
     return {
         "organism": organism,
         "gene": gene,
+        "additional_terms": (body.get("additional_terms") or "").strip(),
         "data_type": data_type,
         "model": model,
         "collection": collection,

@@ -86,6 +86,8 @@
   .badge.status-failed { color: var(--danger); }
   .badge.status-running, .badge.status-queued { color: var(--accent); }
   .badge.status-stopped { color: var(--danger); }
+  .collections-group { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.88rem; }
+  .summary-notice { flex-basis: 100%; }
   .summary-strip { display: flex; flex-wrap: wrap; gap: 14px 22px; font-size: 0.88rem; color: var(--muted); margin-bottom: 12px; }
   .summary-strip strong { color: var(--fg); }
   .hidden { display: none !important; }
@@ -123,15 +125,17 @@
   <div class="field-row">
     <div class="field">
       <label for="f_organism">Organism</label>
-      <input type="text" id="f_organism" value="Influenza A virus">
+      <input type="text" id="f_organism" placeholder="for example: Influenza A virus">
+      <span class="note-small">any subject; the greyed text is only an example</span>
     </div>
     <div class="field">
       <label for="f_gene">Gene</label>
-      <input type="text" id="f_gene" value="PB2">
+      <input type="text" id="f_gene" placeholder="for example: PB2">
+      <span class="note-small">any term; the greyed text is only an example</span>
     </div>
     <div class="field grow">
       <label for="f_additional_terms">Additional terms</label>
-      <input type="text" id="f_additional_terms" placeholder="optional">
+      <input type="text" id="f_additional_terms" placeholder="optional extra search words">
     </div>
     <div class="field">
       <label for="f_data_type">Data type</label>
@@ -162,6 +166,13 @@
   </div>
   <div class="field-row">
     <div class="field grow">
+      <label>Collections</label>
+      <div class="collections-group" id="collectionsGroup">loading collections...</div>
+      <span class="note-small" id="collectionsNote"></span>
+    </div>
+  </div>
+  <div class="field-row">
+    <div class="field grow">
       <label class="checkbox-label"><input type="checkbox" id="f_no_paper_limit"> No paper limit (slow, costs more)</label>
       <span class="note-small">reads every retrieved paper instead of stopping at the cap above; ticking this shows the projected time and model-call count below before you can run</span>
       <span class="note-small" id="estimateNote"></span>
@@ -180,7 +191,7 @@
   <div class="field-row section-gap">
     <div class="field grow">
       <label for="b_genes">Genes (comma list)</label>
-      <input type="text" id="b_genes" placeholder="PB2, PA, NP">
+      <input type="text" id="b_genes" placeholder="for example: PB2, PA, NP">
     </div>
     <div class="field">
       <label for="b_max_concurrent">Max concurrent</label>
@@ -334,7 +345,7 @@
   var el = {};
   ["f_organism", "f_gene", "f_additional_terms", "f_data_type", "f_model",
    "f_top_k", "f_papers", "f_year", "f_no_paper_limit", "estimateNote",
-   "collectionsGroup", "runBtn", "exampleBtn", "runStatus",
+   "collectionsGroup", "collectionsNote", "runBtn", "exampleBtn", "runStatus",
    "b_genes", "b_max_concurrent", "b_cap", "batchBtn", "batchStatus",
    "jobsBody", "jobsEmpty", "resultsPanel", "resultsHeading", "resultsHint",
    "dismissResultsHint", "summaryStrip",
@@ -409,11 +420,23 @@
     el.runStatus.textContent = "could not load models: " + error.message;
   });
 
+  function formatCount(n) {
+    if (n === undefined || n === null) return "count not reported";
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " indexed chunks";
+  }
+
   jsonRequest("GET", "/api/collections").then(function (data) {
     clearChildren(el.collectionsGroup);
+    // The server drops any collection reporting zero indexed items, so an
+    // empty index is never offered as something to search.
     var collections = data.collections || [];
+    var notes = ["credential in use: " + (data.auth_mode || "unknown")];
+    if ((data.hidden_empty || []).length) {
+      notes.push("hidden as empty: " + data.hidden_empty.join(", "));
+    }
+    el.collectionsNote.textContent = notes.join(" — ").replace(/—/g, "-");
     if (!collections.length) {
-      el.collectionsGroup.appendChild(document.createTextNode("no collections returned"));
+      el.collectionsGroup.appendChild(document.createTextNode("no non-empty collections returned"));
       return;
     }
     collections.forEach(function (c, i) {
@@ -425,11 +448,14 @@
       cb.className = "collection-check";
       if (i === 0) cb.checked = true;
       label.appendChild(cb);
-      label.appendChild(document.createTextNode(c.label || c.id));
+      label.appendChild(document.createTextNode(
+        (c.label || c.id) + "  [" + formatCount(c.count) + "]"
+      ));
       el.collectionsGroup.appendChild(label);
     });
   }).catch(function (error) {
     clearChildren(el.collectionsGroup);
+    el.collectionsNote.textContent = "";
     el.collectionsGroup.appendChild(document.createTextNode("could not load collections: " + error.message));
   });
 
@@ -442,7 +468,8 @@
 
   function commonParams() {
     var params = {
-      organism: el.f_organism.value || "Influenza A virus",
+      organism: el.f_organism.value.trim(),
+      additional_terms: el.f_additional_terms.value.trim(),
       collections: selectedCollections(),
       top_k: Number(el.f_top_k.value) || 25,
       model: el.f_model.value
@@ -495,8 +522,12 @@
     body.gene = el.f_gene.value.trim();
     body.data_type = el.f_data_type.value;
     body.additional_terms = el.f_additional_terms.value.trim();
+    if (!body.organism) {
+      el.runStatus.textContent = "organism is required (the example text is only a placeholder)";
+      return;
+    }
     if (!body.gene) {
-      el.runStatus.textContent = "gene is required";
+      el.runStatus.textContent = "gene is required (the example text is only a placeholder)";
       return;
     }
     el.runStatus.textContent = "starting...";
@@ -531,6 +562,10 @@
     var genesRaw = el.b_genes.value.trim();
     if (!genesRaw) {
       el.batchStatus.textContent = "enter at least one gene";
+      return;
+    }
+    if (!el.f_organism.value.trim()) {
+      el.batchStatus.textContent = "enter an organism above first";
       return;
     }
     var body = commonParams();
@@ -745,6 +780,17 @@
       stoppedSpan.appendChild(document.createTextNode(envelope.stopped_note || "this run was stopped before it finished"));
       el.summaryStrip.appendChild(stoppedSpan);
     }
+    // Notices say plainly what this run's evidence can and cannot support:
+    // thin evidence, and records that mostly carry no PubMed identifier.
+    (envelope.notices || []).forEach(function (notice) {
+      var span = document.createElement("span");
+      span.className = "summary-notice";
+      var strong = document.createElement("strong");
+      strong.textContent = notice.code.replace(/_/g, " ") + ": ";
+      span.appendChild(strong);
+      span.appendChild(document.createTextNode(notice.text));
+      el.summaryStrip.appendChild(span);
+    });
     var retrieval = envelope.retrieval || {};
     var tally = envelope.tally || {};
     var omitCounts = {};

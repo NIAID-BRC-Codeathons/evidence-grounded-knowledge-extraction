@@ -199,6 +199,32 @@ def _norm_field(value):
     return normalize(str(value)) if value not in (None, "") else ""
 
 
+def _organism_matches(row_value, spec_value):
+    """True when the row's organism is the same organism the query asked about.
+
+    Exact equality is too strict in practice. A query for
+    "Influenza A virus (H5N1)" retrieves papers whose rows say
+    "Influenza A virus", and a query for "Mycobacterium tuberculosis"
+    matches rows saying "Mycobacterium tuberculosis H37Rv". Both are the
+    same organism at different precision, so either containing the other
+    counts as a match, as does agreement on the first two words, which for
+    a binomial name is the genus and species.
+    """
+    row_value = _norm_field(row_value)
+    spec_value = _norm_field(spec_value)
+    if not spec_value or not row_value:
+        return True
+    if row_value == spec_value:
+        return True
+    if row_value in spec_value or spec_value in row_value:
+        return True
+    row_words = row_value.split()
+    spec_words = spec_value.split()
+    if len(row_words) >= 2 and len(spec_words) >= 2:
+        return row_words[:2] == spec_words[:2]
+    return False
+
+
 def _organism_gene_check(row, spec):
     """Return (omit_reason, detail) or (None, None) when the row is on-spec."""
     data_type = _infer_data_type(row)
@@ -209,7 +235,7 @@ def _organism_gene_check(row, spec):
 
     if data_type == "mutation":
         row_organism = _norm_field(row.get("organism"))
-        if spec_organism and row_organism != spec_organism:
+        if spec_organism and not _organism_matches(row.get("organism"), spec.get("organism")):
             return "wrong_organism", "organism %r does not match query organism %r" % (
                 row.get("organism"), spec.get("organism"))
         row_gene = _norm_field(row.get("gene_name"))
@@ -218,7 +244,7 @@ def _organism_gene_check(row, spec):
                 row.get("gene_name"), aliases)
     elif data_type == "ppi":
         row_pathogen = _norm_field(row.get("pathogen"))
-        if spec_organism and row_pathogen != spec_organism:
+        if spec_organism and not _organism_matches(row.get("pathogen"), spec.get("organism")):
             return "wrong_organism", "pathogen %r does not match query organism %r" % (
                 row.get("pathogen"), spec.get("organism"))
         if norm_aliases:
