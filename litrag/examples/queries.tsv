@@ -1,0 +1,6 @@
+organism	genes	data_type	other_terms
+Mycobacterium tuberculosis	katG,inhA	mutation	isoniazid resistance
+Mycobacterium tuberculosis	rpoB	mutation	rifampicin resistance
+SARS-CoV-2	Spike,ACE2	ppi	viral entry
+SARS-CoV-2	NSP13	ppi	host interaction
+Escherichia coli	lacZ	protein-function	beta-galactosidase
