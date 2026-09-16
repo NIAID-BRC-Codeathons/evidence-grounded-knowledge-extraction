@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Extraction curator</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --panel: #f4f4f6;
+    --border: #d5d5da;
+    --accent: #2255aa;
+    --mark-bg: #fff1a8;
+    --mark-fg: #1a1a1a;
+    --btn-bg: #eceef2;
+    --btn-fg: #1a1a1a;
+    --btn-active-bg: #2255aa;
+    --btn-active-fg: #ffffff;
+    --danger: #a33;
+    --ok: #2a7a3a;
+  }
+  
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    max-width: 1100px;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.45;
+  }
+  h1 { font-size: 1.35rem; margin: 0 0 4px 0; }
+  h2 { font-size: 1rem; margin: 0 0 10px 0; color: var(--muted); font-weight: 600; }
+  .note-small { font-size: 0.82rem; color: var(--muted); }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .field-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+  .field.grow { flex: 1 1 220px; }
+  label { font-size: 0.82rem; color: var(--muted); }
+  input[type="text"], input[type="number"], select, textarea {
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 9px;
+  }
+  textarea { min-height: 50px; resize: vertical; }
+  .checkbox-group { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+  label.checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 0.92rem; color: var(--fg); }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border-radius: 6px;
+    padding: 8px 14px;
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.verdict-btn { text-align: left; }
+  button.verdict-btn .key { display: inline-block; min-width: 18px; font-weight: 700; margin-right: 8px; color: var(--muted); }
+  button.verdict-btn.active { background: var(--btn-active-bg); color: var(--btn-active-fg); border-color: var(--btn-active-bg); }
+  button.verdict-btn.active .key { color: inherit; }
+  .action-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  table th, table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 0.88rem; vertical-align: top; }
+  table th { color: var(--muted); font-weight: 600; }
+  table.jobs tr { cursor: pointer; }
+  table.jobs tr:hover { background: var(--bg); }
+  table.rows-table tr { cursor: pointer; }
+  table.rows-table tr:hover { background: var(--bg); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--btn-bg); font-size: 0.76rem; font-weight: 600; }
+  .badge.status-done { color: var(--ok); }
+  .badge.status-failed { color: var(--danger); }
+  .badge.status-running, .badge.status-queued { color: var(--accent); }
+  .badge.status-stopped { color: var(--danger); }
+  .summary-strip { display: flex; flex-wrap: wrap; gap: 14px 22px; font-size: 0.88rem; color: var(--muted); margin-bottom: 12px; }
+  .summary-strip strong { color: var(--fg); }
+  .hidden { display: none !important; }
+  .empty-state { padding: 24px 0; color: var(--muted); }
+  .passage-box { white-space: pre-wrap; font-size: 0.95rem; padding: 4px 2px; }
+  mark { background: var(--mark-bg); color: var(--mark-fg); padding: 0 1px; border-radius: 2px; }
+  .verdicts { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .detail-nav { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .link-line { font-size: 0.85rem; margin-top: 4px; }
+  a { color: var(--accent); }
+  .section-gap { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Extraction curator</h1>
+<div class="note-small">Runs the extraction pipeline over RAGStack and Argo. The API key stays on this server; this page never calls RAGStack directly.
+  For a dedicated row-by-row spot-check view, use <a href="/static/spotcheck.html" target="_blank">the spot-check page</a> with a file drawn by <code>sample.py</code>.</div>
+
+<section class="panel" id="startHerePanel">
+  <h2>Start here</h2>
+  <ol>
+    <li>A single extraction reads a handful of papers about one gene and pulls out claims, each one tied to the exact sentence in the paper that backs it up.</li>
+    <li>Queueing a batch runs that same extraction for several genes, one after another, so you can leave it working instead of clicking Run each time.</li>
+    <li>The prompt panel lets you edit the instructions sent to the model and rerun the same papers, so you can see how a wording change affects the results.</li>
+    <li>The jobs list shows every run you have started, with live progress, and lets you open any of them to see its rows or stop it early.</li>
+  </ol>
+  <div class="action-row">
+    <button type="button" id="dismissStartHere">Got it, hide this</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Run a single extraction</h2>
+  <div class="field-row">
+    <div class="field">
+      <label for="f_organism">Organism</label>
+      <input type="text" id="f_organism" value="Influenza A virus">
+    </div>
+    <div class="field">
+      <label for="f_gene">Gene</label>
+      <input type="text" id="f_gene" value="PB2">
+    </div>
+    <div class="field grow">
+      <label for="f_additional_terms">Additional terms</label>
+      <input type="text" id="f_additional_terms" placeholder="optional">
+    </div>
+    <div class="field">
+      <label for="f_data_type">Data type</label>
+      <select id="f_data_type">
+        <option value="mutation">Mutation</option>
+        <option value="ppi">Protein-protein interaction</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="f_model">Model</label>
+      <select id="f_model"></select>
+    </div>
+  </div>
+  <div class="field-row">
+    <div class="field">
+      <label for="f_top_k">top_k</label>
+      <input type="number" id="f_top_k" value="25" min="1" max="25">
+    </div>
+    <div class="field">
+      <label for="f_papers">Papers cap</label>
+      <input type="number" id="f_papers" value="5" min="1">
+      <span class="note-small">runs the same extraction for up to this many papers; an empty or zero value is treated as 5</span>
+    </div>
+    <div class="field">
+      <label for="f_year">Year filter</label>
+      <input type="number" id="f_year" placeholder="any year">
+    </div>
+  </div>
+  <div class="field-row">
+    <div class="field grow">
+      <label class="checkbox-label"><input type="checkbox" id="f_no_paper_limit"> No paper limit (slow, costs more)</label>
+      <span class="note-small">reads every retrieved paper instead of stopping at the cap above; ticking this shows the projected time and model-call count below before you can run</span>
+      <span class="note-small" id="estimateNote"></span>
+    </div>
+  </div>
+  <div class="action-row">
+    <button type="button" class="primary" id="runBtn">Run</button>
+    <button type="button" id="exampleBtn">Run the example</button>
+    <span class="note-small" id="runStatus"></span>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Queue a batch</h2>
+  <div class="note-small section-gap">Runs every listed gene against both data types, using the settings above (organism, model, collections, top_k, papers cap, year).</div>
+  <div class="field-row section-gap">
+    <div class="field grow">
+      <label for="b_genes">Genes (comma list)</label>
+      <input type="text" id="b_genes" placeholder="PB2, PA, NP">
+    </div>
+    <div class="field">
+      <label for="b_max_concurrent">Max concurrent</label>
+      <input type="number" id="b_max_concurrent" value="2" min="1">
+    </div>
+    <div class="field">
+      <label for="b_cap">Total call cap</label>
+      <input type="number" id="b_cap" placeholder="no cap" min="1">
+    </div>
+  </div>
+  <div class="action-row">
+    <button type="button" class="primary" id="batchBtn">Queue batch</button>
+    <span class="note-small" id="batchStatus"></span>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Prompt (edit and rerun)</h2>
+  <div class="note-small">Select a finished job below first. Editing the prompt here and rerunning replays the
+    <strong>same retrieved papers</strong> already fetched for that job, so only the model calls change, never a new
+    RAGStack search. Any rerun from an edited prompt is labeled and is not comparable to a golden-dataset run.</div>
+  <div class="field-row section-gap">
+    <div class="field grow">
+      <label for="promptJobLabel">Base job</label>
+      <div id="promptJobLabel" class="note-small">no job selected yet</div>
+    </div>
+  </div>
+  <div class="field grow section-gap">
+    <label for="promptSystem">System prompt</label>
+    <textarea id="promptSystem" style="min-height:140px;"></textarea>
+  </div>
+  <div class="field grow section-gap">
+    <label class="checkbox-label"><input type="checkbox" id="promptBodyUnlock"> Edit the per-paper prompt body too (applied verbatim to every cached paper on rerun)</label>
+    <textarea id="promptBody" style="min-height:160px;" readonly></textarea>
+  </div>
+  <div class="action-row">
+    <button type="button" id="promptLoadBtn">Load current</button>
+    <button type="button" id="promptResetBtn">Reset to default</button>
+    <button type="button" class="primary" id="promptRerunBtn">Rerun with this prompt</button>
+    <span class="note-small" id="promptStatus"></span>
+  </div>
+</section>
+
+<section class="panel hidden" id="comparePanel">
+  <h2>Compare: original vs rerun</h2>
+  <div class="summary-strip" id="compareTallyStrip"></div>
+  <div class="field-row">
+    <div class="field grow">
+      <h2>Only in original</h2>
+      <table><tbody id="compareOnlyOriginal"></tbody></table>
+    </div>
+    <div class="field grow">
+      <h2>Only in rerun</h2>
+      <table><tbody id="compareOnlyRerun"></tbody></table>
+    </div>
+    <div class="field grow">
+      <h2>In both</h2>
+      <table><tbody id="compareBoth"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Jobs</h2>
+  <div class="note-small section-gap">Click a finished job to view its results below.</div>
+  <table class="jobs section-gap" id="jobsTable">
+    <thead>
+      <tr><th>Gene</th><th>Data type</th><th>Model</th><th>Status</th><th>Progress</th><th>Elapsed</th><th>Prompt</th><th>Stop</th></tr>
+    </thead>
+    <tbody id="jobsBody"></tbody>
+  </table>
+  <div class="empty-state" id="jobsEmpty">No jobs yet.</div>
+</section>
+
+<section class="panel hidden" id="papersPanel">
+  <h2>Papers</h2>
+  <div class="note-small" id="papersJobLabel"></div>
+  <div style="background:var(--btn-bg); height:8px; border-radius:4px; overflow:hidden; margin:8px 0;">
+    <div id="papersProgressBar" style="background:var(--accent); height:8px; width:0%;"></div>
+  </div>
+  <div class="note-small" id="papersProgressLine"></div>
+  <table class="rows-table section-gap">
+    <thead><tr><th>Title</th><th>Year</th><th>PMID</th><th>Status</th></tr></thead>
+    <tbody id="papersBody"></tbody>
+  </table>
+</section>
+
+<section class="panel hidden" id="resultsPanel">
+  <h2 id="resultsHeading">Results</h2>
+  <div class="panel" id="resultsHint" style="background:var(--bg);">
+    <span class="note-small">Rows are claims. Each row carries the sentence that supports it. Click a row to see the passage.</span>
+    <button type="button" id="dismissResultsHint" style="margin-left:10px;">Dismiss</button>
+  </div>
+  <div class="summary-strip" id="summaryStrip"></div>
+  <table class="rows-table" id="rowsTable">
+    <thead><tr id="rowsHeadRow"></tr></thead>
+    <tbody id="rowsBody"></tbody>
+  </table>
+</section>
+
+<section class="panel hidden" id="detailPanel">
+  <h2>Row detail</h2>
+  <div class="detail-nav">
+    <button type="button" id="detailPrev">&larr; Prev</button>
+    <span class="note-small" id="detailPosition"></span>
+    <button type="button" id="detailNext">Next &rarr;</button>
+    <span class="note-small" id="detailSaveStatus"></span>
+  </div>
+  <table id="detailFields"></table>
+  <h2 class="section-gap">Passage</h2>
+  <div class="passage-box" id="detailPassage"></div>
+  <div class="link-line" id="detailPubmed"></div>
+  <h2 class="section-gap">Verdict</h2>
+  <div class="verdicts" id="detailVerdicts"></div>
+  <div class="field">
+    <label for="detailNote">Note</label>
+    <textarea id="detailNote"></textarea>
+  </div>
+  <div class="action-row">
+    <button type="button" class="primary" id="saveVerdictsBtn">Save verdicts</button>
+  </div>
+</section>
+
+<script>
+(function () {
+  "use strict";
+
+  // Mirrors schemas.py DATA_TYPES exactly, same as spotcheck.html.
+  var DATA_TYPES = {
+    mutation: {
+      label: "Mutation",
+      columns: ["Organism", "Gene Name", "Mutation", "Phenotype", "Assertion", "Reference"],
+      fields: ["organism", "gene_name", "mutation", "phenotype", "assertion", "reference"]
+    },
+    ppi: {
+      label: "Protein-Protein Interaction (PPI)",
+      columns: ["Pathogen", "Protein A", "Protein B", "Interaction Type", "Method", "Assertion", "Reference"],
+      fields: ["pathogen", "protein_a", "protein_b", "interaction_type", "method", "assertion", "reference"]
+    }
+  };
+
+  // Mirrors schemas.py VERDICTS exactly, in order, for the 1-5 shortcut map.
+  var VERDICTS = [
+    "correct",
+    "wrong entity",
+    "wrong relation or value",
+    "not supported by the quote",
+    "duplicate"
+  ];
+
+  var el = {};
+  ["f_organism", "f_gene", "f_additional_terms", "f_data_type", "f_model",
+   "f_top_k", "f_papers", "f_year", "f_no_paper_limit", "estimateNote",
+   "collectionsGroup", "runBtn", "exampleBtn", "runStatus",
+   "b_genes", "b_max_concurrent", "b_cap", "batchBtn", "batchStatus",
+   "jobsBody", "jobsEmpty", "resultsPanel", "resultsHeading", "resultsHint",
+   "dismissResultsHint", "summaryStrip",
+   "rowsHeadRow", "rowsBody", "detailPanel", "detailPrev", "detailNext",
+   "detailPosition", "detailSaveStatus", "detailFields", "detailPassage",
+   "detailPubmed", "detailVerdicts", "detailNote", "saveVerdictsBtn",
+   "promptJobLabel", "promptSystem", "promptBodyUnlock", "promptBody",
+   "promptLoadBtn", "promptResetBtn", "promptRerunBtn", "promptStatus",
+   "comparePanel", "compareTallyStrip", "compareOnlyOriginal", "compareOnlyRerun", "compareBoth",
+   "startHerePanel", "dismissStartHere",
+   "papersPanel", "papersJobLabel", "papersProgressBar", "papersProgressLine", "papersBody"
+  ].forEach(function (id) { el[id] = document.getElementById(id); });
+
+  var jobsById = {};
+  var pollTimer = null;
+
+  var currentJobId = null;
+  var currentEnvelope = null;
+  var currentRows = [];        // flattened list of {kind, row}
+  var currentVerification = []; // parallel array of verification records
+  var currentDetailIndex = -1;
+
+  var promptDefaults = { system: "", perPaperPrompt: "" };
+  var lastSeenStatus = {}; // job_id -> status, to detect a rerun finishing
+
+  // --- Dismissible guidance panels ------------------------------------------
+
+  el.dismissStartHere.addEventListener("click", function () {
+    el.startHerePanel.classList.add("hidden");
+  });
+  el.dismissResultsHint.addEventListener("click", function () {
+    el.resultsHint.classList.add("hidden");
+  });
+
+  function clearChildren(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function textCell(tag, text) {
+    var node = document.createElement(tag);
+    node.textContent = (text === null || text === undefined || text === "") ? "—" : String(text);
+    return node;
+  }
+
+  function jsonRequest(method, url, body) {
+    return fetch(url, {
+      method: method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (resp) {
+      return resp.json().then(function (data) {
+        if (!resp.ok) {
+          var msg = (data && data.error) ? data.error : ("request failed: " + resp.status);
+          throw new Error(msg);
+        }
+        return data;
+      });
+    });
+  }
+
+  // --- Setup: models and collections ------------------------------------
+
+  jsonRequest("GET", "/api/models").then(function (data) {
+    clearChildren(el.f_model);
+    (data.models || []).forEach(function (m) {
+      var opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.label || m.id;
+      el.f_model.appendChild(opt);
+    });
+  }).catch(function (error) {
+    el.runStatus.textContent = "could not load models: " + error.message;
+  });
+
+  jsonRequest("GET", "/api/collections").then(function (data) {
+    clearChildren(el.collectionsGroup);
+    var collections = data.collections || [];
+    if (!collections.length) {
+      el.collectionsGroup.appendChild(document.createTextNode("no collections returned"));
+      return;
+    }
+    collections.forEach(function (c, i) {
+      var label = document.createElement("label");
+      label.className = "checkbox-label";
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = c.id;
+      cb.className = "collection-check";
+      if (i === 0) cb.checked = true;
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(c.label || c.id));
+      el.collectionsGroup.appendChild(label);
+    });
+  }).catch(function (error) {
+    clearChildren(el.collectionsGroup);
+    el.collectionsGroup.appendChild(document.createTextNode("could not load collections: " + error.message));
+  });
+
+  function selectedCollections() {
+    var boxes = el.collectionsGroup.querySelectorAll(".collection-check:checked");
+    var out = [];
+    boxes.forEach(function (b) { out.push(b.value); });
+    return out;
+  }
+
+  function commonParams() {
+    var params = {
+      organism: el.f_organism.value || "Influenza A virus",
+      collections: selectedCollections(),
+      top_k: Number(el.f_top_k.value) || 25,
+      model: el.f_model.value
+    };
+    var noPaperLimit = el.f_no_paper_limit.checked;
+    var papers = el.f_papers.value.trim();
+    var year = el.f_year.value.trim();
+    // The papers field is never empty in effect: an empty or zero value
+    // means the server's default cap, not unlimited. Unlimited is only
+    // ever this explicit checkbox.
+    params.no_paper_limit = noPaperLimit;
+    params.papers = noPaperLimit ? null : (papers ? Number(papers) : 5);
+    params.year = year ? Number(year) : null;
+    return params;
+  }
+
+  // --- No-paper-limit projection --------------------------------------------
+
+  function refreshEstimate() {
+    if (!el.f_no_paper_limit.checked) {
+      el.estimateNote.textContent = "";
+      return;
+    }
+    var gene = el.f_gene.value.trim();
+    if (!gene) {
+      el.estimateNote.textContent = "enter a gene to see the projection";
+      return;
+    }
+    var body = commonParams();
+    body.gene = gene;
+    body.data_type = el.f_data_type.value;
+    el.estimateNote.textContent = "estimating...";
+    jsonRequest("POST", "/api/estimate", body).then(function (data) {
+      var minutes = (data.projected_seconds / 60).toFixed(1);
+      el.estimateNote.textContent = data.papers_total + " papers retrieved -> about " +
+        data.projected_seconds + "s (" + minutes + " min), " + data.projected_calls + " model calls";
+    }).catch(function (error) {
+      el.estimateNote.textContent = "could not estimate: " + error.message;
+    });
+  }
+
+  el.f_no_paper_limit.addEventListener("change", refreshEstimate);
+  el.f_gene.addEventListener("blur", function () { refreshEstimate(); });
+  el.f_data_type.addEventListener("change", function () { refreshEstimate(); });
+
+  // --- Run one extraction --------------------------------------------------
+
+  el.runBtn.addEventListener("click", function () {
+    var body = commonParams();
+    body.gene = el.f_gene.value.trim();
+    body.data_type = el.f_data_type.value;
+    body.additional_terms = el.f_additional_terms.value.trim();
+    if (!body.gene) {
+      el.runStatus.textContent = "gene is required";
+      return;
+    }
+    el.runStatus.textContent = "starting...";
+    jsonRequest("POST", "/api/run", body).then(function (data) {
+      el.runStatus.textContent = "queued job " + data.job_id;
+      pollJobs();
+    }).catch(function (error) {
+      el.runStatus.textContent = "error: " + error.message;
+    });
+  });
+
+  // --- Run the example (one click, per ONBOARDING.md's first run) ----------
+
+  el.exampleBtn.addEventListener("click", function () {
+    el.f_organism.value = "Influenza A virus";
+    el.f_gene.value = "PB2";
+    el.f_data_type.value = "mutation";
+    el.f_no_paper_limit.checked = false;
+    el.f_papers.value = "3";
+    el.estimateNote.textContent = "";
+    var hasModel = false;
+    for (var i = 0; i < el.f_model.options.length; i++) {
+      if (el.f_model.options[i].value === "gpt56luna") { hasModel = true; break; }
+    }
+    if (hasModel) el.f_model.value = "gpt56luna";
+    el.runBtn.click();
+  });
+
+  // --- Queue a batch -------------------------------------------------------
+
+  el.batchBtn.addEventListener("click", function () {
+    var genesRaw = el.b_genes.value.trim();
+    if (!genesRaw) {
+      el.batchStatus.textContent = "enter at least one gene";
+      return;
+    }
+    var body = commonParams();
+    body.genes = genesRaw.split(",").map(function (g) { return g.trim(); }).filter(Boolean);
+    body.data_types = ["mutation", "ppi"];
+    body.max_concurrent = Number(el.b_max_concurrent.value) || 2;
+    var cap = el.b_cap.value.trim();
+    body.cap = cap ? Number(cap) : null;
+
+    el.batchStatus.textContent = "queueing...";
+    jsonRequest("POST", "/api/batch", body).then(function (data) {
+      el.batchStatus.textContent = "queued " + (data.job_ids || []).length + " jobs";
+      pollJobs();
+    }).catch(function (error) {
+      el.batchStatus.textContent = "error: " + error.message;
+    });
+  });
+
+  // --- Job polling -----------------------------------------------------------
+
+  function statusBadge(status) {
+    var span = document.createElement("span");
+    span.className = "badge status-" + status;
+    span.textContent = status;
+    return span;
+  }
+
+  function progressCell(job) {
+    var td = document.createElement("td");
+    td.appendChild(document.createTextNode(job.progress_line));
+    if (job.papers_total) {
+      var outer = document.createElement("div");
+      outer.style.cssText = "background:var(--btn-bg);height:6px;border-radius:3px;overflow:hidden;margin-top:4px;width:90px;";
+      var inner = document.createElement("div");
+      var pct = Math.round(((job.papers_done || 0) / job.papers_total) * 100);
+      inner.style.cssText = "background:var(--accent);height:6px;width:" + pct + "%;";
+      outer.appendChild(inner);
+      td.appendChild(outer);
+    }
+    return td;
+  }
+
+  function stopCell(job) {
+    var td = document.createElement("td");
+    if (!job.stoppable) {
+      td.appendChild(textCell("span", "—"));
+      return td;
+    }
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "Stop";
+    btn.addEventListener("click", function (event) {
+      event.stopPropagation();
+      btn.disabled = true;
+      btn.textContent = "stopping...";
+      jsonRequest("POST", "/api/jobs/" + job.id + "/stop", {}).then(function () {
+        pollJobs();
+      }).catch(function (error) {
+        btn.disabled = false;
+        btn.textContent = "Stop";
+        btn.title = "could not stop: " + error.message;
+      });
+    });
+    td.appendChild(btn);
+    return td;
+  }
+
+  function renderJobs(jobs) {
+    jobsById = {};
+    clearChildren(el.jobsBody);
+    if (!jobs.length) {
+      el.jobsEmpty.classList.remove("hidden");
+      return;
+    }
+    el.jobsEmpty.classList.add("hidden");
+    jobs.sort(function (a, b) { return (a.id < b.id) ? 1 : -1; });
+    jobs.forEach(function (job) {
+      jobsById[job.id] = job;
+      var tr = document.createElement("tr");
+      tr.appendChild(textCell("td", job.params.gene));
+      tr.appendChild(textCell("td", job.params.data_type));
+      tr.appendChild(textCell("td", job.params.model));
+      var statusTd = document.createElement("td");
+      statusTd.appendChild(statusBadge(job.status));
+      tr.appendChild(statusTd);
+      tr.appendChild(progressCell(job));
+      tr.appendChild(textCell("td", job.elapsed_seconds + "s"));
+      var promptTd = document.createElement("td");
+      if (job.type === "rerun") {
+        var badge = document.createElement("span");
+        badge.className = "badge status-failed";
+        badge.textContent = "edited prompt (rerun of " + job.parent_job_id + ")";
+        promptTd.appendChild(badge);
+        if (job.status === "done") {
+          var compareBtn = document.createElement("button");
+          compareBtn.type = "button";
+          compareBtn.textContent = "Compare";
+          compareBtn.style.marginLeft = "8px";
+          compareBtn.addEventListener("click", function (event) {
+            event.stopPropagation();
+            openCompare(job.id);
+          });
+          promptTd.appendChild(compareBtn);
+        }
+      } else {
+        promptTd.appendChild(textCell("span", "default"));
+      }
+      tr.appendChild(promptTd);
+      tr.appendChild(stopCell(job));
+      tr.addEventListener("click", function () { selectJob(job.id); });
+      el.jobsBody.appendChild(tr);
+
+      if (lastSeenStatus[job.id] !== "done" && job.status === "done" && job.type === "rerun") {
+        openCompare(job.id);
+      }
+      var wasFinished = lastSeenStatus[job.id] === "done" || lastSeenStatus[job.id] === "stopped";
+      var nowFinished = job.status === "done" || job.status === "stopped";
+      if (job.id === currentJobId && !wasFinished && nowFinished) {
+        openResults(job.id);
+      }
+      lastSeenStatus[job.id] = job.status;
+    });
+
+    if (currentJobId && jobsById[currentJobId]) {
+      renderPapersPanel(currentJobId);
+    }
+  }
+
+  function pollJobs() {
+    jsonRequest("GET", "/api/jobs").then(function (data) {
+      renderJobs(data.jobs || []);
+    }).catch(function () {
+      // A transient poll failure should not spam the UI; next tick retries.
+    });
+  }
+
+  // --- Papers panel: shown the moment retrieval finishes, before any model call ---
+
+  function renderPapersPanel(jobId) {
+    var job = jobsById[jobId];
+    if (!job) {
+      el.papersPanel.classList.add("hidden");
+      return;
+    }
+    el.papersPanel.classList.remove("hidden");
+    el.papersJobLabel.textContent = jobId + "  (" + job.params.gene + " / " + job.params.data_type + ")";
+    el.papersProgressLine.textContent = job.progress_line;
+    var total = job.papers_total || 0;
+    var done = job.papers_done || 0;
+    var pct = total ? Math.round((done / total) * 100) : 0;
+    el.papersProgressBar.style.width = pct + "%";
+
+    clearChildren(el.papersBody);
+    var papers = job.papers || [];
+    if (!papers.length) {
+      var tr = document.createElement("tr");
+      var td = document.createElement("td");
+      td.colSpan = 4;
+      td.textContent = (job.status === "queued" || job.stage === "retrieving")
+        ? "retrieving passages..." : "no papers retrieved";
+      tr.appendChild(td);
+      el.papersBody.appendChild(tr);
+      return;
+    }
+    papers.forEach(function (p) {
+      var row = document.createElement("tr");
+      row.appendChild(textCell("td", p.title));
+      row.appendChild(textCell("td", p.year));
+      row.appendChild(textCell("td", p.pubmed_id));
+      var statusText = p.status;
+      if (p.status === "done") {
+        statusText = "done with " + (p.rows === null || p.rows === undefined ? 0 : p.rows) + " rows";
+      }
+      row.appendChild(textCell("td", statusText));
+      el.papersBody.appendChild(row);
+    });
+  }
+
+  function selectJob(jobId) {
+    currentJobId = jobId;
+    var job = jobsById[jobId];
+    if (job && (job.status === "done" || job.status === "stopped")) {
+      openResults(jobId);
+    } else {
+      el.resultsPanel.classList.add("hidden");
+      el.detailPanel.classList.add("hidden");
+      loadPromptForJob(jobId);
+    }
+    renderPapersPanel(jobId);
+  }
+
+  pollJobs();
+  pollTimer = setInterval(pollJobs, 2000);
+  loadPromptForJob(null); // populate the panel with the default template immediately, before any job exists
+
+  // --- Results view --------------------------------------------------------
+
+  function reasonList(obj) {
+    if (!obj) return "—";
+    var parts = [];
+    Object.keys(obj).forEach(function (k) { parts.push(k + ": " + obj[k]); });
+    return parts.length ? parts.join(", ") : "—";
+  }
+
+  function renderSummaryStrip(envelope) {
+    clearChildren(el.summaryStrip);
+    if (envelope.stopped) {
+      var stoppedSpan = document.createElement("span");
+      var stoppedStrong = document.createElement("strong");
+      stoppedStrong.textContent = "stopped early: ";
+      stoppedSpan.appendChild(stoppedStrong);
+      stoppedSpan.appendChild(document.createTextNode(envelope.stopped_note || "this run was stopped before it finished"));
+      el.summaryStrip.appendChild(stoppedSpan);
+    }
+    var retrieval = envelope.retrieval || {};
+    var tally = envelope.tally || {};
+    var omitCounts = {};
+    (envelope.omitted || []).forEach(function (rec) {
+      var reason = rec.omit_reason || "unknown";
+      omitCounts[reason] = (omitCounts[reason] || 0) + 1;
+    });
+    var pieces = [
+      ["papers", retrieval.papers],
+      ["proposed", tally.proposed],
+      ["emitted", tally.emitted],
+      ["omitted by reason", reasonList(omitCounts)],
+      ["refusals", (envelope.refusals || []).length]
+    ];
+    pieces.forEach(function (pair) {
+      var span = document.createElement("span");
+      var strong = document.createElement("strong");
+      strong.textContent = pair[1] === undefined || pair[1] === null ? "—" : String(pair[1]);
+      span.appendChild(document.createTextNode(pair[0] + ": "));
+      span.appendChild(strong);
+      el.summaryStrip.appendChild(span);
+    });
+  }
+
+  function flattenRows(envelope) {
+    var out = [];
+    (envelope.rows || []).forEach(function (row) { out.push({ kind: row.outcome || "cite", row: row }); });
+    (envelope.omitted || []).forEach(function (row) { out.push({ kind: "omit", row: row }); });
+    (envelope.refusals || []).forEach(function (row) { out.push({ kind: "refuse", row: row }); });
+    return out;
+  }
+
+  function renderRowsTable(envelope) {
+    var dataType = envelope.run && envelope.run.query ? envelope.run.query.data_type : null;
+    var spec = (dataType && DATA_TYPES[dataType]) ? DATA_TYPES[dataType] : null;
+
+    clearChildren(el.rowsHeadRow);
+    var headers = ["Kind"];
+    if (spec) headers = headers.concat(spec.columns);
+    headers.push("Row id");
+    headers.forEach(function (h) { el.rowsHeadRow.appendChild(textCell("th", h)); });
+
+    clearChildren(el.rowsBody);
+    currentRows.forEach(function (entry, index) {
+      var tr = document.createElement("tr");
+      tr.appendChild(textCell("td", entry.kind));
+      if (spec && entry.kind !== "refuse") {
+        spec.fields.forEach(function (field) {
+          tr.appendChild(textCell("td", entry.row[field]));
+        });
+      } else if (spec) {
+        for (var i = 0; i < spec.fields.length; i++) tr.appendChild(textCell("td", null));
+      }
+      tr.appendChild(textCell("td", entry.row.row_id || entry.row.reason || "—"));
+      tr.addEventListener("click", function () { openDetail(index); });
+      el.rowsBody.appendChild(tr);
+    });
+  }
+
+  function openResults(jobId) {
+    currentJobId = jobId;
+    el.resultsHeading.textContent = "Results: loading...";
+    jsonRequest("GET", "/api/result/" + jobId).then(function (envelope) {
+      currentEnvelope = envelope;
+      currentRows = flattenRows(envelope);
+      currentVerification = currentRows.map(function (entry, index) {
+        var rowId = entry.row.row_id || (jobId + "__refusal__" + index);
+        return { row_id: rowId, verdict: null, opened_paper: null, seconds: null, note: "" };
+      });
+      var run = envelope.run || {};
+      var query = run.query || {};
+      el.resultsHeading.textContent = "Results: " + (query.gene || "?") + " / " + (query.data_type || "?") + " / " + (run.model || "?");
+      renderSummaryStrip(envelope);
+      renderRowsTable(envelope);
+      el.resultsPanel.classList.remove("hidden");
+      el.detailPanel.classList.add("hidden");
+      el.promptJobLabel.textContent = jobId + "  (" + (query.gene || "?") + " / " + (query.data_type || "?") + ")";
+      loadPromptForJob(jobId);
+    }).catch(function (error) {
+      el.resultsHeading.textContent = "Results: error (" + error.message + ")";
+    });
+  }
+
+  // --- Prompt panel: load, reset, rerun -------------------------------------
+
+  function loadPromptForJob(jobId) {
+    // jobId may be null: with no job selected yet, /api/prompt still
+    // returns a real, non-empty template (built server-side from a sample
+    // passage), so the panel is never blank on first load.
+    el.promptStatus.textContent = "loading prompt...";
+    var url = "/api/prompt" + (jobId ? ("?job_id=" + encodeURIComponent(jobId)) : "");
+    jsonRequest("GET", url).then(function (data) {
+      promptDefaults.system = data.default_system || "";
+      promptDefaults.perPaperPrompt = data.default_per_paper_prompt || "";
+      el.promptSystem.value = data.system || promptDefaults.system || "(no system prompt returned)";
+      el.promptBody.value = data.per_paper_prompt || promptDefaults.perPaperPrompt || "(no prompt body returned)";
+      el.promptStatus.textContent = data.prompt_note ||
+        (data.source === "job" ? "showing the real prompt for this job" : "showing the default prompt template");
+    }).catch(function (error) {
+      // Never leave the panel blank: show the error where the text would go.
+      var message = "(could not load the prompt: " + error.message + ")";
+      el.promptSystem.value = message;
+      el.promptBody.value = message;
+      el.promptStatus.textContent = "error: " + error.message;
+    });
+  }
+
+  el.promptLoadBtn.addEventListener("click", function () {
+    if (!currentJobId) {
+      el.promptStatus.textContent = "select a job first";
+      return;
+    }
+    loadPromptForJob(currentJobId);
+  });
+
+  el.promptResetBtn.addEventListener("click", function () {
+    el.promptSystem.value = promptDefaults.system;
+    el.promptBody.value = promptDefaults.perPaperPrompt;
+    el.promptStatus.textContent = "reset to default";
+  });
+
+  el.promptBodyUnlock.addEventListener("change", function () {
+    el.promptBody.readOnly = !el.promptBodyUnlock.checked;
+  });
+
+  el.promptRerunBtn.addEventListener("click", function () {
+    if (!currentJobId) {
+      el.promptStatus.textContent = "select a finished job first";
+      return;
+    }
+    var body = { job_id: currentJobId, system: el.promptSystem.value };
+    if (el.promptBodyUnlock.checked && el.promptBody.value.trim()) {
+      body.prompt_body = el.promptBody.value;
+    }
+    el.promptStatus.textContent = "queueing rerun...";
+    jsonRequest("POST", "/api/rerun", body).then(function (data) {
+      el.promptStatus.textContent = "rerun queued as job " + data.job_id;
+      pollJobs();
+    }).catch(function (error) {
+      el.promptStatus.textContent = "error: " + error.message;
+    });
+  });
+
+  // --- Compare view ----------------------------------------------------------
+
+  function renderCompareRows(tbody, rows, dataType) {
+    clearChildren(tbody);
+    var spec = DATA_TYPES[dataType];
+    rows.forEach(function (row) {
+      var tr = document.createElement("tr");
+      if (spec) {
+        var label = spec.fields.slice(0, 3).map(function (f) { return row[f]; }).filter(Boolean).join(" / ");
+        tr.appendChild(textCell("td", label || row.row_id));
+      } else {
+        tr.appendChild(textCell("td", row.row_id));
+      }
+      tbody.appendChild(tr);
+    });
+    if (!rows.length) {
+      var tr = document.createElement("tr");
+      tr.appendChild(textCell("td", "none"));
+      tbody.appendChild(tr);
+    }
+  }
+
+  function openCompare(rerunJobId) {
+    jsonRequest("GET", "/api/compare/" + rerunJobId).then(function (data) {
+      var rerunJob = jobsById[rerunJobId];
+      var dataType = rerunJob ? rerunJob.params.data_type : null;
+
+      clearChildren(el.compareTallyStrip);
+      ["original", "rerun"].forEach(function (side) {
+        var t = data.tally[side];
+        var span = document.createElement("span");
+        var strong = document.createElement("strong");
+        strong.textContent = side;
+        span.appendChild(strong);
+        span.appendChild(document.createTextNode(
+          ": proposed " + t.proposed + ", emitted " + t.emitted + ", omitted " + t.omitted +
+          " (" + reasonList(t.omit_reasons) + "), refusals " + t.refusals
+        ));
+        el.compareTallyStrip.appendChild(span);
+      });
+
+      renderCompareRows(el.compareOnlyOriginal, data.only_in_original, dataType);
+      renderCompareRows(el.compareOnlyRerun, data.only_in_rerun, dataType);
+      renderCompareRows(el.compareBoth, data.in_both, dataType);
+
+      el.comparePanel.classList.remove("hidden");
+      el.comparePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }).catch(function (error) {
+      el.promptStatus.textContent = "compare error: " + error.message;
+    });
+  }
+
+  // --- Row detail / verdicts ------------------------------------------------
+
+  function renderDetailFields(entry) {
+    clearChildren(el.detailFields);
+    var row = entry.row;
+    var dataType = currentEnvelope.run && currentEnvelope.run.query ? currentEnvelope.run.query.data_type : null;
+    var spec = (dataType && DATA_TYPES[dataType]) ? DATA_TYPES[dataType] : null;
+
+    if (entry.kind === "refuse") {
+      [["Reason", row.reason], ["Chunks searched", row.chunks_searched], ["Papers searched", row.papers_searched]]
+        .forEach(function (pair) {
+          var tr = document.createElement("tr");
+          tr.appendChild(textCell("th", pair[0]));
+          tr.appendChild(textCell("td", pair[1]));
+          el.detailFields.appendChild(tr);
+        });
+      return;
+    }
+
+    if (spec) {
+      spec.fields.forEach(function (field, i) {
+        var tr = document.createElement("tr");
+        tr.appendChild(textCell("th", spec.columns[i]));
+        tr.appendChild(textCell("td", row[field]));
+        el.detailFields.appendChild(tr);
+      });
+    }
+    var rowIdTr = document.createElement("tr");
+    rowIdTr.appendChild(textCell("th", "Row id"));
+    rowIdTr.appendChild(textCell("td", row.row_id));
+    el.detailFields.appendChild(rowIdTr);
+
+    if (entry.kind === "omit") {
+      var reasonTr = document.createElement("tr");
+      reasonTr.appendChild(textCell("th", "Omit reason"));
+      reasonTr.appendChild(textCell("td", row.omit_reason));
+      el.detailFields.appendChild(reasonTr);
+      var detailTr = document.createElement("tr");
+      detailTr.appendChild(textCell("th", "Detail"));
+      detailTr.appendChild(textCell("td", row.detail));
+      el.detailFields.appendChild(detailTr);
+    }
+  }
+
+  function pubmedLink(pubmedId) {
+    if (!pubmedId) return null;
+    return "https://pubmed.ncbi.nlm.nih.gov/" + encodeURIComponent(String(pubmedId)) + "/";
+  }
+
+  function renderDetailPassage(entry) {
+    clearChildren(el.detailPassage);
+    clearChildren(el.detailPubmed);
+    var row = entry.row;
+    if (entry.kind === "refuse") {
+      el.detailPassage.appendChild(document.createTextNode("No passage: this is a refusal record."));
+      return;
+    }
+    var evidence = row.evidence || {};
+    var quote = evidence.passage;
+    if (!quote) {
+      el.detailPassage.appendChild(document.createTextNode("No passage on record for this row."));
+    } else {
+      // The stored evidence.passage IS the verbatim quote (CONTRACT.md); the
+      // server does not re-fetch surrounding chunk text, so the whole quote
+      // is shown highlighted, same visual language as spotcheck.html's mark.
+      var mark = document.createElement("mark");
+      mark.textContent = quote;
+      el.detailPassage.appendChild(mark);
+    }
+    var link = pubmedLink(evidence.pubmed_id);
+    if (link) {
+      var a = document.createElement("a");
+      a.href = link;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "Open on PubMed";
+      el.detailPubmed.appendChild(a);
+    } else {
+      el.detailPubmed.appendChild(document.createTextNode("no PubMed id on record"));
+    }
+    if (evidence.title) {
+      el.detailPubmed.appendChild(document.createTextNode("  —  " + evidence.title +
+        (evidence.year ? " (" + evidence.year + ")" : "")));
+    }
+  }
+
+  function renderDetailVerdicts() {
+    clearChildren(el.detailVerdicts);
+    var current = currentVerification[currentDetailIndex];
+    VERDICTS.forEach(function (verdict, i) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "verdict-btn" + (current.verdict === verdict ? " active" : "");
+      var key = document.createElement("span");
+      key.className = "key";
+      key.textContent = String(i + 1);
+      btn.appendChild(key);
+      btn.appendChild(document.createTextNode(verdict));
+      btn.addEventListener("click", function () { chooseVerdict(verdict); });
+      el.detailVerdicts.appendChild(btn);
+    });
+  }
+
+  function openDetail(index) {
+    currentDetailIndex = index;
+    var entry = currentRows[index];
+    el.detailPanel.classList.remove("hidden");
+    el.detailPosition.textContent = "row " + (index + 1) + " of " + currentRows.length;
+    renderDetailFields(entry);
+    renderDetailPassage(entry);
+    renderDetailVerdicts();
+    el.detailNote.value = currentVerification[index].note || "";
+    el.detailPrev.disabled = index === 0;
+    el.detailNext.disabled = index === currentRows.length - 1;
+    el.detailSaveStatus.textContent = "";
+    el.detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function chooseVerdict(verdict) {
+    currentVerification[currentDetailIndex].verdict = verdict;
+    renderDetailVerdicts();
+  }
+
+  el.detailNote.addEventListener("input", function () {
+    if (currentDetailIndex >= 0) currentVerification[currentDetailIndex].note = el.detailNote.value;
+  });
+
+  el.detailPrev.addEventListener("click", function () {
+    if (currentDetailIndex > 0) openDetail(currentDetailIndex - 1);
+  });
+  el.detailNext.addEventListener("click", function () {
+    if (currentDetailIndex < currentRows.length - 1) openDetail(currentDetailIndex + 1);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (el.detailPanel.classList.contains("hidden")) return;
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === "TEXTAREA" || tag === "INPUT") return;
+    if (event.key >= "1" && event.key <= "5") {
+      var i = Number(event.key) - 1;
+      if (i < VERDICTS.length) chooseVerdict(VERDICTS[i]);
+    } else if (event.key === "ArrowRight" && !el.detailNext.disabled) {
+      openDetail(currentDetailIndex + 1);
+    } else if (event.key === "ArrowLeft" && !el.detailPrev.disabled) {
+      openDetail(currentDetailIndex - 1);
+    }
+  });
+
+  el.saveVerdictsBtn.addEventListener("click", function () {
+    if (!currentJobId) return;
+    el.detailSaveStatus.textContent = "saving...";
+    jsonRequest("POST", "/api/verdicts", {
+      job_id: currentJobId,
+      verdicts: currentVerification
+    }).then(function () {
+      el.detailSaveStatus.textContent = "saved";
+    }).catch(function (error) {
+      el.detailSaveStatus.textContent = "error: " + error.message;
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spot-check curator</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --panel: #f4f4f6;
+    --border: #d5d5da;
+    --accent: #2255aa;
+    --mark-bg: #fff1a8;
+    --mark-fg: #1a1a1a;
+    --btn-bg: #eceef2;
+    --btn-fg: #1a1a1a;
+    --btn-active-bg: #2255aa;
+    --btn-active-fg: #ffffff;
+    --danger: #a33;
+  }
+  
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.45;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 4px 0; }
+  h2 { font-size: 1rem; margin: 0 0 8px 0; color: var(--muted); font-weight: 600; }
+  .top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .file-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  input[type="file"] {
+    color: var(--fg);
+  }
+  .progress {
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .summary-panel {
+    margin-left: auto;
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .summary-panel strong { color: var(--fg); }
+  .hidden { display: none !important; }
+  .empty-state {
+    padding: 40px 0;
+    color: var(--muted);
+    text-align: center;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  table.fields {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  table.fields th, table.fields td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    font-size: 0.92rem;
+  }
+  table.fields th {
+    width: 180px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--btn-bg);
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .badge.outcome-omit, .badge.outcome-refuse { color: var(--danger); }
+  .passage-box {
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 4px 2px;
+  }
+  mark {
+    background: var(--mark-bg);
+    color: var(--mark-fg);
+    padding: 0 1px;
+    border-radius: 2px;
+  }
+  .note-small {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .paper-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: baseline;
+    font-size: 0.95rem;
+  }
+  .paper-line .title { font-weight: 600; }
+  a.pubmed-link { color: var(--accent); }
+  .verdicts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border-radius: 6px;
+    padding: 8px 14px;
+  }
+  button.verdict-btn { text-align: left; }
+  button.verdict-btn .key {
+    display: inline-block;
+    min-width: 18px;
+    font-weight: 700;
+    margin-right: 8px;
+    color: var(--muted);
+  }
+  button.verdict-btn.active {
+    background: var(--btn-active-bg);
+    color: var(--btn-active-fg);
+    border-color: var(--btn-active-bg);
+  }
+  button.verdict-btn.active .key { color: inherit; }
+  button.nav-btn { min-width: 90px; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .row-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 60px;
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    resize: vertical;
+  }
+  label.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.92rem;
+  }
+  .footer-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .shortcut-help {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .timer-tag {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header class="top-bar">
+  <div>
+    <h1>Spot-check curator</h1>
+    <div class="note-small">Load a sample JSON written by <code>sample.py</code>. Nothing here leaves this browser tab.</div>
+  </div>
+  <div class="file-row">
+    <input type="file" id="filePicker" accept="application/json,.json">
+    <span class="progress" id="progressLabel"></span>
+  </div>
+  <div class="summary-panel" id="summaryPanel"></div>
+</header>
+
+<main id="mainArea">
+  <div class="empty-state" id="emptyState">No sample file loaded yet. Choose a file above to begin.</div>
+
+  <div id="rowArea" class="hidden">
+    <section class="panel" id="paperPanel"></section>
+
+    <section class="panel" id="fieldsPanel">
+      <h2>Extracted fields</h2>
+      <table class="fields" id="fieldsTable"></table>
+    </section>
+
+    <section class="panel" id="passagePanel">
+      <h2>Passage</h2>
+      <div class="passage-box" id="passageBox"></div>
+      <div class="note-small" id="passageNote"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Verdict</h2>
+      <div class="verdicts" id="verdictButtons"></div>
+      <div class="row-controls">
+        <label class="checkbox-label">
+          <input type="checkbox" id="openedPaperCheck">
+          Opened the paper
+        </label>
+        <span class="timer-tag" id="timerTag"></span>
+      </div>
+      <div style="margin-top:12px;">
+        <label for="noteField" class="note-small">Note</label>
+        <textarea id="noteField" placeholder="Optional note for this row"></textarea>
+      </div>
+    </section>
+
+    <div class="footer-bar">
+      <div>
+        <button type="button" class="nav-btn" id="prevBtn">&larr; Prev</button>
+        <button type="button" class="nav-btn" id="nextBtn">Next &rarr;</button>
+      </div>
+      <div class="shortcut-help">
+        Keys 1-5: verdict &middot; Left/Right: move between rows
+      </div>
+      <button type="button" id="downloadBtn">Download verification JSON</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // Mirrors schemas.py DATA_TYPES exactly (label, columns, fields in the
+  // same order), so the curator sees the same column order as the app.
+  var DATA_TYPES = {
+    mutation: {
+      label: "Mutation",
+      columns: ["Organism", "Gene Name", "Mutation", "Phenotype", "Assertion", "Reference"],
+      fields: ["organism", "gene_name", "mutation", "phenotype", "assertion", "reference"]
+    },
+    ppi: {
+      label: "Protein-Protein Interaction (PPI)",
+      columns: ["Pathogen", "Protein A", "Protein B", "Interaction Type", "Method", "Assertion", "Reference"],
+      fields: ["pathogen", "protein_a", "protein_b", "interaction_type", "method", "assertion", "reference"]
+    }
+  };
+
+  // Mirrors schemas.py VERDICTS exactly, in order, for the 1-5 shortcut map.
+  var VERDICTS = [
+    "correct",
+    "wrong entity",
+    "wrong relation or value",
+    "not supported by the quote",
+    "duplicate"
+  ];
+
+  var sampleData = null;
+  var verificationResults = [];
+  var currentIndex = 0;
+  var rowStartMs = null;
+
+  var el = {
+    filePicker: document.getElementById("filePicker"),
+    progressLabel: document.getElementById("progressLabel"),
+    summaryPanel: document.getElementById("summaryPanel"),
+    emptyState: document.getElementById("emptyState"),
+    rowArea: document.getElementById("rowArea"),
+    paperPanel: document.getElementById("paperPanel"),
+    fieldsTable: document.getElementById("fieldsTable"),
+    passageBox: document.getElementById("passageBox"),
+    passageNote: document.getElementById("passageNote"),
+    verdictButtons: document.getElementById("verdictButtons"),
+    openedPaperCheck: document.getElementById("openedPaperCheck"),
+    noteField: document.getElementById("noteField"),
+    timerTag: document.getElementById("timerTag"),
+    prevBtn: document.getElementById("prevBtn"),
+    nextBtn: document.getElementById("nextBtn"),
+    downloadBtn: document.getElementById("downloadBtn")
+  };
+
+  function clearChildren(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function textCell(tag, text) {
+    var node = document.createElement(tag);
+    node.textContent = (text === null || text === undefined || text === "") ? "—" : String(text);
+    return node;
+  }
+
+  // --- Loading -------------------------------------------------------
+
+  el.filePicker.addEventListener("change", function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var parsed;
+      try {
+        parsed = JSON.parse(String(reader.result));
+      } catch (error) {
+        window.alert("That file is not valid JSON: " + error.message);
+        return;
+      }
+      if (!parsed || !Array.isArray(parsed.samples)) {
+        window.alert("That file does not look like a sample.py output (no 'samples' array).");
+        return;
+      }
+      sampleData = parsed;
+      verificationResults = parsed.samples.map(function (entry) {
+        var v = entry.verification || {};
+        return {
+          row_id: v.row_id || null,
+          verdict: v.verdict === undefined ? null : v.verdict,
+          opened_paper: v.opened_paper === undefined ? null : v.opened_paper,
+          seconds: v.seconds === undefined ? null : v.seconds,
+          note: v.note || ""
+        };
+      });
+      currentIndex = 0;
+      el.emptyState.classList.add("hidden");
+      el.rowArea.classList.remove("hidden");
+      renderRow();
+    };
+    reader.onerror = function () {
+      window.alert("Could not read that file.");
+    };
+    reader.readAsText(file);
+  });
+
+  // --- Rendering one row ----------------------------------------------
+
+  function currentEntry() {
+    return sampleData.samples[currentIndex];
+  }
+
+  function renderPaperPanel(entry) {
+    clearChildren(el.paperPanel);
+
+    var kindBadge = document.createElement("span");
+    kindBadge.className = "badge";
+    kindBadge.textContent = entry.kind;
+    var outcomeBadge = null;
+    var row = entry.row || {};
+    if (row.outcome) {
+      outcomeBadge = document.createElement("span");
+      outcomeBadge.className = "badge outcome-" + row.outcome;
+      outcomeBadge.textContent = "outcome: " + row.outcome;
+    }
+
+    var heading = document.createElement("h2");
+    heading.appendChild(document.createTextNode("Paper"));
+    heading.appendChild(kindBadge);
+    if (outcomeBadge) heading.appendChild(outcomeBadge);
+    el.paperPanel.appendChild(heading);
+
+    var evidence = row.evidence || {};
+    var meta = entry.paper_metadata || {};
+
+    var line = document.createElement("div");
+    line.className = "paper-line";
+
+    var title = document.createElement("span");
+    title.className = "title";
+    title.textContent = evidence.title || "(no title on record)";
+    line.appendChild(title);
+
+    var journal = document.createElement("span");
+    journal.textContent = meta.journal ? meta.journal : "journal unknown";
+    line.appendChild(journal);
+
+    var year = document.createElement("span");
+    year.textContent = evidence.year ? String(evidence.year) : "year unknown";
+    line.appendChild(year);
+
+    if (entry.pubmed_link) {
+      var link = document.createElement("a");
+      link.className = "pubmed-link";
+      link.href = entry.pubmed_link;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Open on PubMed";
+      line.appendChild(link);
+    } else {
+      var noLink = document.createElement("span");
+      noLink.className = "note-small";
+      noLink.textContent = "no PubMed id on record";
+      line.appendChild(noLink);
+    }
+
+    el.paperPanel.appendChild(line);
+
+    if (row.citation_partial) {
+      var partial = document.createElement("div");
+      partial.className = "note-small";
+      partial.textContent = "Citation partial: PubMed or PMC id missing from retrieval metadata.";
+      el.paperPanel.appendChild(partial);
+    }
+  }
+
+  function renderFields(entry) {
+    clearChildren(el.fieldsTable);
+    var row = entry.row || {};
+
+    if (entry.kind === "refused") {
+      document.getElementById("fieldsPanel").classList.add("hidden");
+      return;
+    }
+    document.getElementById("fieldsPanel").classList.remove("hidden");
+
+    var dataType = (sampleData.data_type in DATA_TYPES) ? sampleData.data_type : null;
+    var spec = dataType ? DATA_TYPES[dataType] : null;
+
+    if (spec) {
+      for (var i = 0; i < spec.fields.length; i++) {
+        var tr = document.createElement("tr");
+        tr.appendChild(textCell("th", spec.columns[i]));
+        tr.appendChild(textCell("td", row[spec.fields[i]]));
+        el.fieldsTable.appendChild(tr);
+      }
+    }
+
+    var rowIdTr = document.createElement("tr");
+    rowIdTr.appendChild(textCell("th", "Row id"));
+    rowIdTr.appendChild(textCell("td", row.row_id));
+    el.fieldsTable.appendChild(rowIdTr);
+
+    if (entry.kind === "omitted") {
+      var reasonTr = document.createElement("tr");
+      reasonTr.appendChild(textCell("th", "Omit reason"));
+      reasonTr.appendChild(textCell("td", row.omit_reason));
+      el.fieldsTable.appendChild(reasonTr);
+
+      var detailTr = document.createElement("tr");
+      detailTr.appendChild(textCell("th", "Detail"));
+      detailTr.appendChild(textCell("td", row.detail));
+      el.fieldsTable.appendChild(detailTr);
+    }
+  }
+
+  function renderPassage(entry) {
+    clearChildren(el.passageBox);
+    el.passageNote.textContent = "";
+
+    if (entry.kind === "refused") {
+      document.getElementById("passagePanel").querySelector("h2").textContent = "Refusal";
+      var row = entry.row || {};
+      var p = document.createElement("div");
+      var lines = [
+        "Reason: " + (row.reason || "—"),
+        "Chunks searched: " + (row.chunks_searched === undefined ? "—" : row.chunks_searched),
+        "Papers searched: " + (row.papers_searched === undefined ? "—" : row.papers_searched)
+      ];
+      p.textContent = lines.join("\n");
+      p.style.whiteSpace = "pre-wrap";
+      el.passageBox.appendChild(p);
+      return;
+    }
+    document.getElementById("passagePanel").querySelector("h2").textContent = "Passage";
+
+    var chunkText = entry.chunk_text;
+    var row2 = entry.row || {};
+    var evidence = row2.evidence || {};
+    var quote = evidence.passage;
+
+    if (!chunkText) {
+      el.passageBox.appendChild(document.createTextNode("No chunk text available for this row."));
+      return;
+    }
+
+    if (entry.chunk_text_source === "passage_only") {
+      el.passageNote.textContent = "Full chunk text was not available; showing the stored quote only.";
+    }
+
+    if (!quote) {
+      el.passageBox.appendChild(document.createTextNode(chunkText));
+      return;
+    }
+
+    var offset = entry.passage_char_offset;
+    var start = -1;
+    if (typeof offset === "number" && chunkText.substr(offset, quote.length) === quote) {
+      start = offset;
+    } else {
+      start = chunkText.indexOf(quote);
+    }
+
+    if (start === -1) {
+      el.passageNote.textContent = "The quote could not be located verbatim inside this chunk text.";
+      el.passageBox.appendChild(document.createTextNode(chunkText));
+      return;
+    }
+
+    var before = chunkText.slice(0, start);
+    var match = chunkText.slice(start, start + quote.length);
+    var after = chunkText.slice(start + quote.length);
+
+    if (before) el.passageBox.appendChild(document.createTextNode(before));
+    var mark = document.createElement("mark");
+    mark.textContent = match;
+    el.passageBox.appendChild(mark);
+    if (after) el.passageBox.appendChild(document.createTextNode(after));
+  }
+
+  function renderVerdictButtons() {
+    clearChildren(el.verdictButtons);
+    var current = verificationResults[currentIndex];
+    VERDICTS.forEach(function (verdict, i) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "verdict-btn" + (current.verdict === verdict ? " active" : "");
+      var key = document.createElement("span");
+      key.className = "key";
+      key.textContent = String(i + 1);
+      btn.appendChild(key);
+      btn.appendChild(document.createTextNode(verdict));
+      btn.addEventListener("click", function () { chooseVerdict(verdict); });
+      el.verdictButtons.appendChild(btn);
+    });
+  }
+
+  function renderRow() {
+    var entry = currentEntry();
+    var total = sampleData.samples.length;
+    el.progressLabel.textContent = "row " + (currentIndex + 1) + " of " + total;
+
+    renderPaperPanel(entry);
+    renderFields(entry);
+    renderPassage(entry);
+    renderVerdictButtons();
+
+    var current = verificationResults[currentIndex];
+    el.openedPaperCheck.checked = !!current.opened_paper;
+    el.noteField.value = current.note || "";
+    el.timerTag.textContent = (current.seconds !== null && current.seconds !== undefined)
+      ? ("recorded: " + current.seconds + "s")
+      : "timing...";
+
+    el.prevBtn.disabled = currentIndex === 0;
+    el.nextBtn.disabled = currentIndex === total - 1;
+
+    rowStartMs = Date.now();
+    updateSummaryPanel();
+  }
+
+  // --- Verdict / note / checkbox handling ------------------------------
+
+  function chooseVerdict(verdict) {
+    var current = verificationResults[currentIndex];
+    var elapsed = rowStartMs ? (Date.now() - rowStartMs) / 1000 : 0;
+    current.verdict = verdict;
+    current.seconds = Math.round(elapsed * 10) / 10;
+    el.timerTag.textContent = "recorded: " + current.seconds + "s";
+    renderVerdictButtons();
+    updateSummaryPanel();
+  }
+
+  el.openedPaperCheck.addEventListener("change", function () {
+    verificationResults[currentIndex].opened_paper = el.openedPaperCheck.checked;
+    updateSummaryPanel();
+  });
+
+  el.noteField.addEventListener("input", function () {
+    verificationResults[currentIndex].note = el.noteField.value;
+  });
+
+  // --- Navigation -------------------------------------------------------
+
+  function goTo(index) {
+    if (!sampleData) return;
+    var total = sampleData.samples.length;
+    if (index < 0 || index >= total) return;
+    currentIndex = index;
+    renderRow();
+  }
+
+  el.prevBtn.addEventListener("click", function () { goTo(currentIndex - 1); });
+  el.nextBtn.addEventListener("click", function () { goTo(currentIndex + 1); });
+
+  document.addEventListener("keydown", function (event) {
+    if (!sampleData) return;
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === "TEXTAREA" || tag === "INPUT") return;
+
+    if (event.key >= "1" && event.key <= "5") {
+      var i = Number(event.key) - 1;
+      if (i < VERDICTS.length) chooseVerdict(VERDICTS[i]);
+    } else if (event.key === "ArrowRight") {
+      goTo(currentIndex + 1);
+    } else if (event.key === "ArrowLeft") {
+      goTo(currentIndex - 1);
+    }
+  });
+
+  // --- Summary ------------------------------------------------------
+
+  function median(values) {
+    if (!values.length) return null;
+    var sorted = values.slice().sort(function (a, b) { return a - b; });
+    var mid = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 0) return (sorted[mid - 1] + sorted[mid]) / 2;
+    return sorted[mid];
+  }
+
+  function computeSummary() {
+    var counts = {};
+    VERDICTS.forEach(function (v) { counts[v] = 0; });
+    counts["unverdicted"] = 0;
+
+    var seconds = [];
+    var openedCount = 0;
+    var total = verificationResults.length;
+
+    verificationResults.forEach(function (r) {
+      if (r.verdict && counts.hasOwnProperty(r.verdict)) {
+        counts[r.verdict]++;
+      } else {
+        counts.unverdicted++;
+      }
+      if (typeof r.seconds === "number") seconds.push(r.seconds);
+      if (r.opened_paper) openedCount++;
+    });
+
+    return {
+      total: total,
+      verdict_counts: counts,
+      median_seconds: median(seconds),
+      opened_paper_share: total ? (openedCount / total) : null
+    };
+  }
+
+  function updateSummaryPanel() {
+    if (!sampleData) { el.summaryPanel.textContent = ""; return; }
+    var summary = computeSummary();
+    clearChildren(el.summaryPanel);
+
+    var doneCount = summary.total - summary.verdict_counts.unverdicted;
+    var pieces = [
+      "done: " + doneCount + "/" + summary.total,
+      "median s: " + (summary.median_seconds === null ? "—" : summary.median_seconds.toFixed(1)),
+      "opened: " + (summary.opened_paper_share === null ? "—" : Math.round(summary.opened_paper_share * 100) + "%")
+    ];
+    pieces.forEach(function (text) {
+      var span = document.createElement("span");
+      span.textContent = text;
+      el.summaryPanel.appendChild(span);
+    });
+  }
+
+  // --- Download -------------------------------------------------------
+
+  el.downloadBtn.addEventListener("click", function () {
+    if (!sampleData) {
+      window.alert("Load a sample file first.");
+      return;
+    }
+    var output = {
+      gene: sampleData.gene,
+      data_type: sampleData.data_type,
+      run_id: sampleData.run_id,
+      seed: sampleData.seed,
+      generated_at: new Date().toISOString(),
+      verification_records: verificationResults,
+      summary: computeSummary()
+    };
+    var blob = new Blob([JSON.stringify(output, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    var gene = (sampleData.gene || "sample").toLowerCase();
+    var dtype = sampleData.data_type || "unknown";
+    a.download = gene + "__" + dtype + "__verification.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>
+</body>
+</html>
