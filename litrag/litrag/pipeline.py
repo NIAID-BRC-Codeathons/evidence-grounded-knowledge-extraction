@@ -131,6 +131,10 @@ class RunResult:
             "dropped_cells": self.extraction.dropped_cells,
             "unresolved_citations": self.extraction.unresolved_citations,
             "model": self.result.model,
+            # `generator` only says hosted or not. On a machine where the local
+            # vLLM hosts are unreachable, printing "local" for a gateway run is
+            # actively misleading about where the tokens came from.
+            "backend": self.spec.backend,
             "generator": self.result.generator,
             "endpoint": self.result.endpoint,
             "prompt_hash": self.result.prompt_hash,

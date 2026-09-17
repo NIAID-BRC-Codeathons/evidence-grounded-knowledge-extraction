@@ -219,3 +219,45 @@ def test_argo_without_a_model_is_rejected_before_the_query_runs():
     with pytest.raises(Exception) as excinfo:
         server._endpoint(server.QueryBody(organism="M. tb", llm="argo"))
     assert "model" in str(excinfo.value).lower()
+
+
+# --- CLI: eval subcommand and batch pre-flight --------------------------------
+
+def test_eval_rejects_a_missing_envelope(tmp_path):
+    from typer.testing import CliRunner
+    from litrag.cli import app
+
+    result = CliRunner().invoke(app, ["eval", str(tmp_path / "nope.json")])
+    assert result.exit_code == 2
+    assert "no envelope" in result.output.lower() or result.exception is not None
+
+
+def test_eval_runs_the_scorer_it_is_given(tmp_path):
+    """The scorer is a separate, stdlib-only codebase. Shelling out keeps the
+    two projects uncoupled; importing it would make one depend on the other."""
+    from typer.testing import CliRunner
+    from litrag.cli import app
+
+    envelope = tmp_path / "run.json"
+    envelope.write_text("{}")
+    scorer = tmp_path / "fake_evaluate.py"
+    scorer.write_text("import sys; print('scored', sys.argv[1])")
+
+    result = CliRunner().invoke(
+        app, ["eval", str(envelope), "--scorer", str(scorer)])
+    assert result.exit_code == 0
+    assert "scored" in result.output
+
+
+def test_eval_says_so_when_no_scorer_can_be_found(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+    from litrag.cli import app
+
+    envelope = tmp_path / "run.json"
+    envelope.write_text("{}")
+    # An isolated cwd with no experiment-01 anywhere above it.
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["eval", str(envelope)])
+    assert result.exit_code == 2
+    assert "--scorer" in result.output or "evaluate.py" in result.output

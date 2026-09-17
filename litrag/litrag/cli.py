@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -275,7 +276,7 @@ def query(
         f"{summary['n_sources']} sources from {summary['collections']} "
         f"-> {summary['n_rows']} rows "
         f"({summary['dropped_empty']} evidence-free dropped) "
-        f"| {summary['model']} ({summary['generator']}) "
+        f"| {summary['model']} via {summary['backend']} "
         f"| {summary['data_type']} v{summary['template_version']} "
         f"| {summary['elapsed_s']}s"
     )
@@ -389,6 +390,19 @@ def batch(
             _err(str(exc))
             raise typer.Exit(2)
 
+        # Specs are validated above; the generator is not. An unreachable
+        # endpoint currently surfaces as the first query's failure, inside the
+        # worker pool, after the run has already started and with N-1 more
+        # failures queued behind it. One GET is cheaper than that.
+        if endpoint is not None:
+            try:
+                with LlmClient(endpoint, timeout=20) as probe:
+                    probe.available_models()
+            except LlmError as exc:
+                _err(f"generator {endpoint.described()} is not reachable, so the "
+                     f"batch would fail one query at a time: {exc}")
+                raise typer.Exit(1)
+
         outcome = run_batch(
             client, registry, specs,
             concurrency=concurrency,
@@ -442,6 +456,51 @@ def batch(
         for failure in outcome.failures:
             _err(f"  failed: {failure.organism}: {failure.error}")
         raise typer.Exit(1)
+
+
+@app.command("eval")
+def evaluate_run(
+    envelope: Path = typer.Argument(..., help="A run envelope written by --envelope."),
+    scorer: Optional[Path] = typer.Option(
+        None, "--scorer",
+        help="Path to experiment-01/evaluate.py. Found automatically when the "
+             "codeathon layout is intact.",
+    ),
+    gold: Optional[Path] = typer.Option(None, "--gold", help="Gold file to score against."),
+) -> None:
+    """Score a run envelope.
+
+    A thin wrapper: the scorer lives in experiment-01, is standard-library only
+    and is not a dependency of this package. Shelling out keeps it that way --
+    importing it would couple two codebases that are deliberately separate, and
+    vendoring it would fork a file that is still being edited elsewhere.
+    """
+    if not envelope.is_file():
+        _err(f"no envelope at {envelope}")
+        raise typer.Exit(2)
+
+    candidates = [scorer] if scorer else [
+        # Walk up looking for the sibling project, so this works from any
+        # worktree without configuration.
+        parent / "experiment-01" / "evaluate.py"
+        for parent in [Path.cwd(), *Path.cwd().parents]
+    ]
+    found = next((p for p in candidates if p and p.is_file()), None)
+    if found is None:
+        _err("could not find evaluate.py. Pass --scorer /path/to/evaluate.py.")
+        raise typer.Exit(2)
+
+    command = [sys.executable, str(found), str(envelope)]
+    if gold:
+        command += ["--gold", str(gold)]
+
+    _info(f"scoring with {found}")
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.stdout:
+        typer.echo(result.stdout.rstrip())
+    if result.returncode != 0:
+        _err(result.stderr.strip()[:500] or f"scorer exited {result.returncode}")
+        raise typer.Exit(result.returncode)
 
 
 @app.command()

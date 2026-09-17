@@ -272,3 +272,24 @@ def test_provenance_records_every_corpus_searched(registry, mutation_response):
     run = run_query(client, registry, spec)
     assert run.rows[0].provenance["_collection"] == "open-access+asm-semantic"
     assert run.summary()["collections"] == "open-access+asm-semantic"
+
+
+def test_summary_names_the_backend_not_just_the_generator_kind():
+    """The run header printed "(local)" for an Argo gateway run, because
+    `generator` only distinguishes hosted from not-hosted. On a machine where
+    the local vLLM hosts are unreachable, "local" is actively misleading about
+    where the tokens came from."""
+    from litrag.pipeline import QuerySpec, RunResult
+    from litrag.client import QueryResult
+    from litrag.extract import Extraction
+    from litrag.templates import Template
+
+    spec = QuerySpec(organism="M. tb", data_type="mutation", backend="argo")
+    result = QueryResult(answer="", sources=[], generator="local",
+                         endpoint="https://apps.inside.anl.gov/argoapi/v1",
+                         model="gpt-5.6-sol")
+    run = RunResult(spec=spec, template=Template(id="mutation", version=2,
+                    label="Mutation", columns=["Reference"]),
+                    extraction=Extraction(), rows=[], result=result)
+
+    assert run.summary()["backend"] == "argo"
