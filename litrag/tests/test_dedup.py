@@ -93,3 +93,39 @@ def test_support_count_accumulates(registry):
     ]
     merged = dedupe(rows, template.id, columns)
     assert len(merged) == 1 and merged[0].n_support == 4
+
+
+def test_citations_from_different_papers_survive_the_same_marker():
+    """Two papers both cited as [1] in different batches must both survive.
+
+    Once passages are split across parallel LLM calls, each call numbers its own
+    sources from 1, so `[1]` in batch A and `[1]` in batch B are different
+    papers. The merge key fell back to the marker number when a source had no
+    PMID/DOI/PMCID, so the second paper was silently dropped as a duplicate of
+    the first -- no error, no flag, no count.
+
+    This is not hypothetical: the Dengue and Influenza_2024_2025 collections
+    carry no pmid and no pmcid at all, so their chunks land in exactly that
+    fallback.
+    """
+    from litrag.dedup import _merge_citations
+    from litrag.extract import Citation
+
+    first = Citation(marker=1, doc_id="doc-aaa", title="Paper A")
+    second = Citation(marker=1, doc_id="doc-bbb", title="Paper B")
+
+    merged = _merge_citations([first], [second])
+    assert len(merged) == 2, "two distinct papers collapsed into one"
+    assert {c.doc_id for c in merged} == {"doc-aaa", "doc-bbb"}
+
+
+def test_same_paper_from_two_batches_still_merges():
+    """The other half: one paper reached twice must NOT become two citations."""
+    from litrag.dedup import _merge_citations
+    from litrag.extract import Citation
+
+    merged = _merge_citations(
+        [Citation(marker=1, doc_id="doc-aaa")],
+        [Citation(marker=7, doc_id="doc-aaa")],
+    )
+    assert len(merged) == 1

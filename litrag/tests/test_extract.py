@@ -229,3 +229,71 @@ def test_single_record_table_is_not_rotated(registry, mutation_response):
     result = extract(answer, template, mutation_response["sources"])
     assert result.transposed is False
     assert result.n_rows == 1
+
+
+def _fake_sources(n):
+    return [
+        {"chunk_id": f"chunk-{i}", "doc_id": f"doc-{i}", "content": "text",
+         "metadata": {"pmid": f"1000{i}", "title": f"Paper {i}"}}
+        for i in range(1, n + 1)
+    ]
+
+
+def test_citation_list_of_three_is_parsed():
+    """`[1, 2, 3]` resolved to NOTHING, silently.
+
+    The marker regex captured at most two numbers, so a three-item list matched
+    nothing at all and the row fell through to surname guessing. With ten
+    passages in context a model rarely cites three sources at once; with several
+    hundred it does so constantly, which is what makes this worth fixing now.
+    """
+    citations = parse_citations("[1, 2, 3]", _fake_sources(5))
+    assert [c.pmid for c in citations] == ["10001", "10002", "10003"]
+
+
+def test_long_and_mixed_citation_lists():
+    sources = _fake_sources(9)
+    assert len(parse_citations("[1, 2, 3, 4, 5]", sources)) == 5
+    # A span and a singleton in one bracket.
+    assert {c.marker for c in parse_citations("[1-3, 7]", sources)} == {1, 2, 3, 7}
+    # Semicolons separate too.
+    assert len(parse_citations("[2; 4]", sources)) == 2
+
+
+def test_span_and_list_still_mean_different_things():
+    """Regression guard: [1-3] is three papers, [1,3] is two. Do not conflate."""
+    sources = _fake_sources(5)
+    assert {c.marker for c in parse_citations("[1-3]", sources)} == {1, 2, 3}
+    assert {c.marker for c in parse_citations("[1,3]", sources)} == {1, 3}
+
+
+def test_citation_round_trips_through_dict():
+    """Guard: a field added to Citation must survive to_dict -> from_dict.
+
+    Passages have been lost this way before -- a field was added to the
+    dataclass and to to_dict, and from_dict was left behind, so anything written
+    to disk and read back came home empty with no error.
+    """
+    from litrag.extract import Citation
+
+    original = Citation(marker=3, pmid="123", doc_id="doc-x", chunk_id="chunk-y")
+    restored = Citation.from_dict(original.to_dict())
+    assert restored.doc_id == "doc-x"
+    assert restored.chunk_id == "chunk-y"
+    assert restored.identity == original.identity
+
+
+def test_citation_identity_prefers_pmid_then_falls_back_to_doc_id():
+    from litrag.extract import Citation
+
+    assert Citation(marker=1, pmid="9", doc_id="d").identity == "9"
+    assert Citation(marker=1, doc_id="d").identity == "d"
+    # Nothing at all to key on: the marker is the last resort, not the default.
+    assert Citation(marker=4).identity == "marker:4"
+
+
+def test_citation_carries_doc_id_from_the_source():
+    sources = _fake_sources(2)
+    sources[0]["doc_id"] = "doc-alpha"
+    citations = parse_citations("[1]", sources)
+    assert citations[0].doc_id == "doc-alpha"

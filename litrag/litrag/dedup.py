@@ -87,10 +87,13 @@ def identity_key(row: Row, template_id: str, columns: Sequence[str]) -> Tuple:
 
 
 def _merge_citations(existing: List[Citation], incoming: Iterable[Citation]) -> List[Citation]:
-    seen = {c.pmid or c.doi or c.pmcid or f"marker:{c.marker}" for c in existing}
+    # Citation.identity, not the marker: once passages are split across parallel
+    # calls each call numbers its sources from 1, so "[1]" in two batches is two
+    # different papers. Keying on the marker silently dropped the second.
+    seen = {c.identity for c in existing}
     merged = list(existing)
     for citation in incoming:
-        key = citation.pmid or citation.doi or citation.pmcid or f"marker:{citation.marker}"
+        key = citation.identity
         if key in seen:
             continue
         seen.add(key)

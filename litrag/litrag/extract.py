@@ -17,7 +17,15 @@ from .templates import Template
 
 _FENCE = re.compile(r"```[a-zA-Z]*\n?")
 _SEPARATOR_ROW = re.compile(r"^[\s\-|=:+]+$")
-_CITATION_REF = re.compile(r"\[(\d+(?:\s*[-,–]\s*\d+)?)\]")
+# Any number of markers in one bracket: [1], [1,3], [1-3], [1, 2, 3], [1-3; 7].
+# The previous pattern allowed at most two numbers, so "[1, 2, 3]" matched
+# nothing at all and the row fell through to surname guessing. That was rare
+# with ten passages in context and is routine with several hundred.
+_CITATION_REF = re.compile(r"\[(\d+(?:\s*[-,;–]\s*\d+)*)\]")
+_CITATION_SPAN = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
+# A span wider than this is a parsing artefact, not a citation. Without a bound,
+# a hallucinated "[1-99999]" would allocate that many Citation objects.
+MAX_CITATION_SPAN = 50
 
 # Columns that identify what a row is about rather than what was found about it.
 # A row with no content outside these is a restatement of the query.
@@ -52,6 +60,20 @@ class Citation:
     resolved: bool = True
     # "marker" for a [n] reference, "author" for a prose name match.
     matched_by: str = "marker"
+    # Which retrieved document and chunk this marker pointed at. The marker
+    # itself is only meaningful within the prompt that produced it -- once
+    # passages are split across parallel calls, every call numbers its sources
+    # from 1, so `doc_id` is the only stable identity a citation carries. Some
+    # corpora (Dengue, Influenza_2024_2025) publish no pmid or pmcid at all,
+    # which is exactly when the identifiers below are all None.
+    doc_id: Optional[str] = None
+    chunk_id: Optional[str] = None
+
+    @property
+    def identity(self) -> str:
+        """Stable key for "is this the same paper?" across batches."""
+        return (self.pmid or self.doi or self.pmcid or self.doc_id
+                or f"marker:{self.marker}")
 
     @property
     def url(self) -> Optional[str]:
@@ -93,6 +115,8 @@ class Citation:
             "url": self.url,
             "resolved": self.resolved,
             "matched_by": self.matched_by,
+            "doc_id": self.doc_id,
+            "chunk_id": self.chunk_id,
         }
 
 
@@ -105,6 +129,7 @@ class Citation:
             title=data.get("title"), first_author=data.get("first_author"),
             resolved=bool(data.get("resolved", True)),
             matched_by=data.get("matched_by", "marker"),
+            doc_id=data.get("doc_id"), chunk_id=data.get("chunk_id"),
         )
 
 
@@ -253,23 +278,30 @@ def parse_citations(text: str, sources: Sequence[Dict[str, Any]]) -> List[Citati
     seen: set = set()
 
     for match in _CITATION_REF.finditer(text or ""):
-        body = match.group(1)
-        parts = re.split(r"\s*[-,–]\s*", body)
-        try:
-            numbers = [int(p) for p in parts if p.strip()]
-        except ValueError:
-            continue
-        # "[1-3]" is a span of three papers; "[1, 2]" is two. The separator is
-        # what distinguishes them, so test it explicitly rather than relying on
-        # and/or precedence.
-        is_span = len(numbers) == 2 and re.search(r"[-–]", body) is not None
-        span = range(min(numbers), max(numbers) + 1) if is_span else numbers
-
-        for marker in span:
-            if marker in seen:
+        # Split on list separators first, then decide span-or-single per item.
+        # "[1-3]" is a span of three papers, "[1,3]" is two, and "[1-3, 7]" is
+        # both at once -- which the old single-shot test for a dash could not
+        # express.
+        for part in re.split(r"\s*[,;]\s*", match.group(1)):
+            part = part.strip()
+            if not part:
                 continue
-            seen.add(marker)
-            citations.append(_citation_for(marker, sources))
+            span = _CITATION_SPAN.fullmatch(part)
+            if span:
+                low, high = sorted((int(span.group(1)), int(span.group(2))))
+                if high - low >= MAX_CITATION_SPAN:
+                    continue
+                markers = range(low, high + 1)
+            elif part.isdigit():
+                markers = [int(part)]
+            else:
+                continue
+
+            for marker in markers:
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                citations.append(_citation_for(marker, sources))
 
     if not citations:
         citations = _match_by_text(text, sources)
@@ -278,7 +310,7 @@ def parse_citations(text: str, sources: Sequence[Dict[str, Any]]) -> List[Citati
     deduped: List[Citation] = []
     doc_seen: set = set()
     for citation in citations:
-        key = citation.pmid or citation.doi or citation.pmcid or f"marker:{citation.marker}"
+        key = citation.identity
         if key in doc_seen:
             continue
         doc_seen.add(key)
@@ -341,7 +373,8 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
     if index < 0 or index >= len(sources):
         return Citation(marker=marker, resolved=False)
 
-    meta = sources[index].get("metadata", {}) or {}
+    source = sources[index]
+    meta = source.get("metadata", {}) or {}
     authors = meta.get("authors") or []
     first_author = None
     if isinstance(authors, list) and authors:
@@ -360,6 +393,9 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
         title=_as_str(meta.get("title")),
         first_author=first_author,
         resolved=True,
+        # Top level on a retrieved source, not inside metadata.
+        doc_id=_as_str(source.get("doc_id")),
+        chunk_id=_as_str(source.get("chunk_id")),
     )
 
 
