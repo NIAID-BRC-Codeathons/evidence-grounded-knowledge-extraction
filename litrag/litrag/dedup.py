@@ -153,12 +153,15 @@ def dedupe(
                 query_ids=list(row.query_ids),
                 provenance=dict(row.provenance),
                 variants={k: list(v) for k, v in row.variants.items()},
+                standard=dict(row.standard),
             )
             merged[key] = clone
             order.append(key)
             continue
 
         existing.n_support += row.n_support
+        for column, canonical in row.standard.items():
+            existing.standard.setdefault(column, canonical)
         existing.citations = _merge_citations(existing.citations, row.citations)
         for query_id in row.query_ids:
             if query_id not in existing.query_ids:

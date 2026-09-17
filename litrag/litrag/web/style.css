@@ -167,12 +167,33 @@ a.passage:hover, a.marker:hover { background: var(--accent); color: #fff; }
   font-family: ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap;
 }
 
+.standard {
+  display: inline-block; margin-left: 5px; padding: 1px 6px;
+  border-radius: 3px; background: #eef2f7; color: var(--accent);
+  font-size: 11.5px; font-weight: 600;
+  font-family: ui-monospace, Menlo, monospace; cursor: help;
+}
+
 .defined {
   border-bottom: 1px dotted var(--muted);
   cursor: help;
 }
-th .defined { border-bottom-color: #9aa8b8; }
-.flag.defined { border-bottom: 1px dotted var(--flag); }
+th .standard {
+  display: inline-block; margin-left: 5px; padding: 1px 6px;
+  border-radius: 3px; background: #eef2f7; color: var(--accent);
+  font-size: 11.5px; font-weight: 600;
+  font-family: ui-monospace, Menlo, monospace; cursor: help;
+}
+
+.defined { border-bottom-color: #9aa8b8; }
+.flag.standard {
+  display: inline-block; margin-left: 5px; padding: 1px 6px;
+  border-radius: 3px; background: #eef2f7; color: var(--accent);
+  font-size: 11.5px; font-weight: 600;
+  font-family: ui-monospace, Menlo, monospace; cursor: help;
+}
+
+.defined { border-bottom: 1px dotted var(--flag); }
 .defined:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .tooltip {

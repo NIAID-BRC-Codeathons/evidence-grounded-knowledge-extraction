@@ -398,6 +398,32 @@ The rule attaches to the column, so it applies to the server's templates too —
 they carry no guidance of their own. **The hosted path is unaffected**: its
 prompt belongs to the operator, and it still emits its own wording.
 
+### Mutations written in prose
+
+Papers often write a substitution out in words. A dengue vaccine paper states
+*"NS1-53 glycine to aspartate"*, which matches nothing searching for `G53D`.
+
+Such values are converted to standard notation, and the conversion is reported
+rather than substituted — the cell keeps the source's wording and the notation
+appears beside it, as a badge in the UI and in `_standard_notation` in exports.
+
+| Written | Standard |
+|---|---|
+| `NS1-53 glycine to aspartate` | `G53D` |
+| `NS3-250 glutamate to valine` | `E250V` |
+| `5' UTR-57, C to T` | `n57T` |
+| `position 315 serine to threonine` | `S315T` |
+| `serine to threonine at position 315` | `S315T` |
+
+The converted form is also the dedup identity, so a row written in prose merges
+with one that used notation instead of sitting beside it as a separate fact.
+
+Only a genuine conversion is reported: a value already in notation gets no
+badge, and anything that is not a recognisable mutation (`katG deletion`,
+`Multiple mutations (codons 315, 316)`) is left alone rather than guessed at.
+A bare `C to T` is read as a base change only where the qualifier names a
+non-coding region, since `C to T` is Cys→Thr as readily as cytosine→thymine.
+
 ### Row flags
 
 | Flag | Meaning |

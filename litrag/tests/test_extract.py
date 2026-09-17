@@ -451,3 +451,50 @@ def test_a_bare_list_is_not_read_as_a_span(mutation_response):
     markers = [ch.marker for c in parse_citations("1, 3", mutation_response["sources"],
                                                   bare_numbers=True) for ch in c.chunks]
     assert markers == [1, 3]
+
+
+def test_prose_mutation_gets_its_standard_notation(registry, mutation_response):
+    """Reported miss: "NS1-53 glycine to aspartate" was unmatchable against a
+    row that wrote G53D. The source wording is kept; the notation sits beside it.
+    """
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "dengue virus\tNS1\tNS1-53 glycine to aspartate\tN/A\treported\t[1]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    row = result.rows[0]
+    assert row.get("Mutation") == "NS1-53 glycine to aspartate", "source wording kept"
+    assert row.standard["Mutation"] == "G53D"
+
+
+def test_already_standard_values_get_no_badge(registry, mutation_response):
+    """Only a genuine conversion is reported, so the badge means something."""
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "M. tuberculosis\tkatG\tS315T\tINH resistance\tmeasured\t[1]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    assert result.rows[0].standard == {}
+
+
+def test_standard_notation_survives_a_merge(registry, mutation_response):
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "dengue virus\tNS1\tNS1-53 glycine to aspartate\tN/A\treported\t[1]\n"
+        "dengue virus\tNS1\tG53D\tattenuation\tmeasured\t[2]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    merged = dedupe(result.rows, template.id, result.columns)
+    assert len(merged) == 1, "prose and notation are one fact"
+    assert merged[0].standard["Mutation"] == "G53D"
+
+
+def test_standard_notation_round_trips(mutation_response):
+    """Resume rebuilds rows from the sidecar."""
+    from litrag.extract import Row
+    row = Row(values={"Mutation": "NS1-53 glycine to aspartate"},
+              standard={"Mutation": "G53D"})
+    assert Row.from_dict(row.to_dict()).standard == {"Mutation": "G53D"}

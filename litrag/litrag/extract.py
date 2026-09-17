@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-from .normalize import clean, is_null, normalize_gene
+from .normalize import clean, is_null, normalize_gene, standard_notation
 from .templates import Template
 
 _FENCE = re.compile(r"```[a-zA-Z]*\n?")
@@ -39,6 +39,8 @@ _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "sourc
 _STATUS_COLUMNS = {"assertion", "confidence", "evidence"}
 # The column that carries the actual finding for each table type.
 _KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type", "site"}
+# Columns whose value may be written in prose and has a standard notation.
+_NOTATION_COLUMNS = {"mutation", "variant", "allele"}
 # Columns where at least one of a group must be present for the row to say
 # anything. An AST row needs an MIC or an SIR; neither alone is required.
 _EITHER_OR_COLUMNS = [{"mic", "sir"}]
@@ -182,6 +184,10 @@ class Row:
     # Differing values seen for a non-identity column across merged rows,
     # kept so a merge never hides disagreement between sources.
     variants: Dict[str, List[str]] = field(default_factory=dict)
+    # Standard notation derived from a value written in prose, by column. The
+    # source wording is never overwritten -- this sits beside it, so a row
+    # written "NS1-53 glycine to aspartate" is still findable as G53D.
+    standard: Dict[str, str] = field(default_factory=dict)
 
     def get(self, column: str) -> str:
         return self.values.get(column, "")
@@ -239,6 +245,7 @@ class Row:
             "query_ids": self.query_ids,
             "provenance": self.provenance,
             "variants": self.variants,
+            "standard": self.standard,
         }
 
     @classmethod
@@ -251,6 +258,7 @@ class Row:
             query_ids=list(data.get("query_ids", [])),
             provenance=dict(data.get("provenance", {})),
             variants={k: list(v) for k, v in (data.get("variants") or {}).items()},
+            standard=dict(data.get("standard") or {}),
         )
 
 
@@ -748,7 +756,18 @@ def extract_table(
                 if row_genes and not (row_genes & gene_keys):
                     flags.append("off_target_gene")
 
-            result.rows.append(Row(values=values, citations=citations, flags=flags))
+            row = Row(values=values, citations=citations, flags=flags)
+            for column in columns:
+                if column.strip().lower() not in _NOTATION_COLUMNS:
+                    continue
+                written = values.get(column, "")
+                gene_hint = next(
+                    (values.get(c) for c in gene_cols if values.get(c)), ""
+                )
+                canonical = standard_notation(written, gene_hint)
+                if canonical and canonical.lower() != written.strip().lower():
+                    row.standard[column] = canonical
+            result.rows.append(row)
 
     return result
 

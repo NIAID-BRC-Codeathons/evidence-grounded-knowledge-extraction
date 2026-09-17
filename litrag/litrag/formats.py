@@ -25,6 +25,10 @@ def _annotations(row: Row) -> Dict[str, Any]:
         "_pmids": ";".join(row.pmids),
         "_chunk_ids": ";".join(row.chunk_ids),
         "_markers": ";".join(str(m) for m in row.markers),
+        "_standard_notation": ";".join(
+            f"{c}={v}" if len(row.standard) > 1 else v
+            for c, v in sorted(row.standard.items())
+        ),
     }
 
 
@@ -83,6 +87,7 @@ def to_json(
                 **{c: row.get(c) for c in columns},
                 "citations": [c.to_dict() for c in row.citations],
                 "chunk_ids": row.chunk_ids,
+                "standard": row.standard,
                 "flags": row.flags,
                 "variants": row.variants,
                 "n_support": row.n_support,
@@ -105,6 +110,7 @@ def to_jsonl(rows: Sequence[Row], columns: Sequence[str], provenance: bool = Tru
         record = {c: row.get(c) for c in columns}
         record["citations"] = [c.to_dict() for c in row.citations]
         record["chunk_ids"] = row.chunk_ids
+        record["standard"] = row.standard
         record["flags"] = row.flags
         record["n_support"] = row.n_support
         if provenance:

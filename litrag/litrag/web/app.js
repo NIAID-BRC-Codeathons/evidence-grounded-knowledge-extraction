@@ -231,7 +231,15 @@ function renderTable(result) {
         if (value && !ordered.includes(value)) ordered.push(value);
       }
       // Any cell may carry a [n]; the Assertion usually does.
-      return `<td>${linkMarkers(ordered.join('; '), markerSet)}</td>`;
+      let cell = linkMarkers(ordered.join('; '), markerSet);
+      // A value written in prose gets its standard notation shown beside it,
+      // so the row is findable as G53D without losing the source's wording.
+      const canonical = row.standard && row.standard[column];
+      if (canonical) {
+        cell += ` <span class="standard" title="Standard notation derived from `
+          + `the wording in the source">${escapeHtml(canonical)}</span>`;
+      }
+      return `<td>${cell}</td>`;
     }).join('');
 
     const support = `<td class="num"><span class="support">${row.n_support}</span></td>`;
