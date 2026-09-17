@@ -85,6 +85,12 @@ class Template:
     # Extra prompt rules, used only on the local path where LitRAG writes the
     # prompt. The server's own templates carry their rules in their hidden body.
     guidance: List[str] = field(default_factory=list)
+    # Columns a row cannot be read without. Unlike the evidence columns, which
+    # say what was found, these say what the finding is ABOUT: a host-virus row
+    # naming only one end of the pair is not a partial finding but no finding.
+    # Declared here rather than hardcoded in extract.py so a new template brings
+    # its own answer to "what makes a row interpretable".
+    required: List[str] = field(default_factory=list)
 
     @property
     def is_table(self) -> bool:
@@ -112,6 +118,7 @@ class Template:
             slots=[Slot.from_decl(s) for s in decl.get("slots", [])],
             source=decl.get("source", "server"),
             guidance=list(decl.get("guidance", [])),
+            required=list(decl.get("required", [])),
         )
 
     def validate_vars(self, values: Dict[str, str]) -> Dict[str, str]:

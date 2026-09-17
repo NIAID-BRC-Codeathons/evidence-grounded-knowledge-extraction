@@ -210,3 +210,178 @@ def test_prompt_states_the_vocabulary_and_direction(hv, mutation_response):
     assert "always viral protein acting on host target" in prompt
     assert "never reverse the pair" in prompt.lower()
     assert "never an evidence category" in prompt
+
+
+# -- both ends of the pair -------------------------------------------------
+#
+# Live at top_k=40 the model returned 263 rows of which 255 named only one end
+# of the pair. They survived because Method held a real technique, so the
+# evidence-free filter saw a row that reported something -- it just had nothing
+# to report it about. Most read "nsp13  N/A  N/A  ...  affinity purification
+# mass spectrometry  reported": an interactome paper the model could not resolve
+# into named partners.
+
+def test_the_pair_and_the_verb_are_required(hv):
+    assert hv.required == ["Viral Protein", "Interaction Type", "Host Protein"]
+
+
+@pytest.mark.parametrize("gap,cells", [
+    ("Host Protein",
+     ["SARS-CoV-2", "nsp13", "binds", "N/A", "human", "N/A",
+      "affinity purification mass spectrometry", "reported", "[1]"]),
+    ("Viral Protein",
+     ["SARS-CoV-2", "N/A", "binds", "PUS7", "human", "N/A",
+      "computational prediction", "measured", "[1]"]),
+    ("Interaction Type",
+     ["SARS-CoV-2", "nsp15", "N/A", "N/A", "human", "N/A",
+      "affinity purification mass spectrometry", "reported", "[1]"]),
+])
+def test_half_a_pair_is_dropped(hv, mutation_response, gap, cells):
+    """One end of the pair is not a partial finding -- it is no finding."""
+    result = extract(_answer(cells), hv, mutation_response["sources"])
+    assert result.rows == []
+    assert result.dropped_incomplete == 1
+    # Not the evidence-free counter: these rows DID report a method.
+    assert result.dropped_empty == 0
+
+
+def test_a_complete_pair_survives_beside_incomplete_ones(hv, mutation_response):
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "nsp13", "binds", "N/A", "human", "N/A",
+             "affinity purification mass spectrometry", "reported", "[1]"],
+            ["SARS-CoV-2", "ORF6", "inhibits", "STAT1", "human",
+             "reduced interferon signalling", "co-immunoprecipitation",
+             "measured", "[1]"],
+            ["SARS-CoV-2", "N/A", "binds", "ACE2", "human", "N/A",
+             "affinity purification mass spectrometry", "reported", "[1]"],
+        ),
+        hv, mutation_response["sources"],
+    )
+    assert [r.get("Viral Protein") for r in result.rows] == ["ORF6"]
+    assert result.dropped_incomplete == 2
+
+
+def test_keep_empty_shows_which_end_is_missing(hv, mutation_response):
+    """Dropping is the default, not the only option -- the rows stay auditable."""
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "nsp13", "binds", "N/A", "human", "N/A",
+             "affinity purification mass spectrometry", "reported", "[1]"],
+        ),
+        hv, mutation_response["sources"], keep_empty=True,
+    )
+    assert result.dropped_incomplete == 0
+    assert "missing:Host Protein" in result.rows[0].flags
+
+
+def test_a_column_is_flagged_once(hv, mutation_response):
+    """Interaction Type is both a key-value column and a required one."""
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "nsp15", "N/A", "N/A", "human", "N/A",
+             "affinity purification mass spectrometry", "reported", "[1]"],
+        ),
+        hv, mutation_response["sources"], keep_empty=True,
+    )
+    flags = result.rows[0].flags
+    assert flags.count("missing:Interaction Type") == 1
+
+
+def test_a_template_without_required_columns_is_unaffected(mutation_response):
+    """The mutation table has no required list, so nothing new is dropped."""
+    registry = TemplateRegistry.from_declarations(declarations())
+    assert registry.resolve("host-virus").required
+    result = extract(
+        mutation_response["answer"],
+        _mutation_template(),
+        mutation_response["sources"],
+    )
+    assert result.dropped_incomplete == 0
+    assert result.rows
+
+
+def _mutation_template():
+    from litrag.templates import Template
+    return Template(
+        id="mutation", label="Mutation", output="table",
+        columns=["Organism", "Gene Name", "Mutation", "Phenotype",
+                 "Assertion", "Reference"],
+    )
+
+
+def test_the_prompt_asks_for_both_ends(hv):
+    prompt, _, _ = build_prompt(hv, [{"content": "x", "metadata": {}}], "SARS-CoV-2")
+    assert "Viral Protein, Interaction Type, Host Protein" in prompt
+    assert "write no row at all" in prompt
+    # The interactome trap that produced most of the junk rows.
+    assert "without naming" in prompt
+    assert "viral complex" in prompt
+
+
+# -- direction ---------------------------------------------------------------
+#
+# "PUS7 binds 3' terminal regions of SARS-CoV-2 RNA" came back live. PUS7 is
+# human and the RNA is viral, so the row is a real interaction written
+# backwards. It cannot be repaired here -- reversing the pair would have to
+# reverse the verb with it -- but it can be caught.
+
+def test_a_host_target_named_after_the_virus_is_flagged(hv, mutation_response):
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "PUS7", "binds", "3' terminal regions of SARS-CoV-2 RNA",
+             "human", "N/A", "computational prediction", "measured", "[1]"],
+        ),
+        hv, mutation_response["sources"],
+    )
+    assert "reversed_pair" in result.rows[0].flags
+
+
+def test_a_real_host_target_is_not_flagged(hv, mutation_response):
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "ORF6", "inhibits", "STAT1", "human",
+             "reduced interferon signalling", "co-immunoprecipitation",
+             "measured", "[1]"],
+        ),
+        hv, mutation_response["sources"],
+    )
+    assert "reversed_pair" not in result.rows[0].flags
+
+
+def test_spelling_of_the_organism_does_not_matter(hv, mutation_response):
+    """"SARS CoV 2 RNA" is the same claim as "SARS-CoV-2 RNA"."""
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "PUS7", "binds", "SARS CoV 2 genomic RNA", "human",
+             "N/A", "computational prediction", "measured", "[1]"],
+        ),
+        hv, mutation_response["sources"],
+    )
+    assert "reversed_pair" in result.rows[0].flags
+
+
+def test_a_phrase_is_not_a_list(hv, mutation_response):
+    """"5' and 3' terminal regions" split into a Host Protein reading "5'"."""
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "Nsp1", "binds",
+             "5' and 3' terminal regions of host mRNA", "human",
+             "impedes translation", "CLIP-seq", "measured", "[1]"],
+        ),
+        hv, mutation_response["sources"],
+    )
+    assert len(result.rows) == 1
+    assert result.rows[0].get("Host Protein").startswith("5'")
+
+
+def test_a_real_list_still_splits(hv, mutation_response):
+    """The guard must not defeat ordinary compound splitting."""
+    result = extract(
+        _answer(
+            ["SARS-CoV-2", "ORF6", "binds", "NUP98 and RAE1", "human", "N/A",
+             "co-immunoprecipitation", "measured", "[1]"],
+        ),
+        hv, mutation_response["sources"],
+    )
+    assert sorted(r.get("Host Protein") for r in result.rows) == ["NUP98", "RAE1"]

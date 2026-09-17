@@ -124,9 +124,25 @@ BUILTIN: List[Dict[str, Any]] = [
         ],
         "max_output_tokens": 3000,
         "slots": _STANDARD_SLOTS,
+        # The pair IS the finding. A row naming one end of it records that a
+        # protein interacts with something, which is not a curatable fact.
+        "required": ["Viral Protein", "Interaction Type", "Host Protein"],
         "guidance": [
             "One row per viral-protein / host-target pair. A viral protein "
             "acting on three host proteins is three rows.",
+            "Every row needs both ends of the pair and the verb joining them: "
+            "the viral protein, the interaction type, and the host protein. If "
+            "a passage does not give all three, leave the row out — do not "
+            'write "N/A" in one of them and report the rest.',
+            "Interactome, AP-MS, CRISPR-screen and interaction-map papers are "
+            "the common trap here. A source saying a viral protein was "
+            "profiled, or that a screen recovered host factors, without naming "
+            "which host proteins it bound, is not a finding. Report a row only "
+            "for the partners the passage actually names.",
+            "The host protein must belong to the host. Two viral proteins "
+            "binding each other — nsp7 with nsp12, nsp10 with nsp16 — is a "
+            "viral complex, not a host-virus interaction, and does not belong "
+            "in this table whatever the paper calls it.",
             "Interaction Type must be exactly one of: binds, cleaves, "
             "inhibits, activates, degrades, relocalizes. Pick the closest when "
             "the source uses another verb — sequesters or retains in the "

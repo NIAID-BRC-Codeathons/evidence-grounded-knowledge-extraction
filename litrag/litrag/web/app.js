@@ -129,6 +129,9 @@ function renderSummary(summary, rowCount) {
   if (summary.dropped_empty > 0) {
     chips.push(`<span class="chip warn">${summary.dropped_empty} evidence-free dropped</span>`);
   }
+  if (summary.dropped_incomplete > 0) {
+    chips.push(`<span class="chip warn">${summary.dropped_incomplete} incomplete dropped</span>`);
+  }
   if (summary.unresolved_citations > 0) {
     chips.push(`<span class="chip warn">${summary.unresolved_citations} unresolved citations</span>`);
   }

@@ -137,6 +137,19 @@ def _table_instructions(template: Template, spec_bits: str, n_sources: int) -> s
         "still state a finding in passing.",
         "- Output no text before or after the table.",
     ]
+    # What the template says a row cannot be read without. Stated as a rule so
+    # the model omits such rows rather than emitting them for extract.py to
+    # drop -- a dropped row still cost the tokens that wrote it, and at top_k
+    # 40 those rows were most of the answer and pushed it into truncation.
+    if template.required:
+        required = ", ".join(template.required)
+        rules.append(
+            f"- Every row must name a real value in each of these columns: "
+            f"{required}. These identify what the finding is about, so a row "
+            f'missing any of them is not a partial finding -- write no row at '
+            f'all rather than putting "N/A" in one of them.'
+        )
+
     # Rules for particular columns, then any the template itself declares.
     rules.extend(f"- {line}" for line in column_rules(template.columns or []))
     rules.extend(f"- {line}" for line in template.guidance)

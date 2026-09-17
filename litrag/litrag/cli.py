@@ -249,7 +249,7 @@ def query(
     fmt: str = typer.Option("table", "--format", "-f", help="table|tsv|csv|json|jsonl|md."),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Write to file."),
     no_provenance: bool = typer.Option(False, "--no-provenance", help="Omit provenance columns."),
-    keep_empty: bool = typer.Option(False, "--keep-empty", help="Keep evidence-free rows."),
+    keep_empty: bool = typer.Option(False, "--keep-empty", help="Keep rows that report nothing or name only part of their subject."),
     no_dedupe: bool = typer.Option(False, "--no-dedupe", help="Do not merge duplicate facts."),
     retrieval_mode: str = typer.Option(
         "fused", "--retrieval-mode",
@@ -300,7 +300,8 @@ def query(
     _info(
         f"{summary['n_sources']} sources from {summary['collections']} "
         f"-> {summary['n_rows']} rows "
-        f"({summary['dropped_empty']} evidence-free dropped) "
+        f"({summary['dropped_empty']} evidence-free, "
+        f"{summary['dropped_incomplete']} incomplete dropped) "
         f"| {summary['model']} ({summary['generator']}) "
         f"| {summary['data_type']} v{summary['template_version']} "
         f"| {summary['elapsed_s']}s"

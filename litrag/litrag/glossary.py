@@ -184,7 +184,20 @@ FLAGS: Dict[str, str] = {
         "The source packed several findings into one row and they could not be "
         "split apart unambiguously. Worth reading by hand."
     ),
-    "missing": "The column carrying the actual finding is empty for this row.",
+    "missing": (
+        "A column this row cannot be read without is empty — either the one "
+        "carrying the finding, or one naming what the finding is about. A "
+        "host-virus row needs both proteins and the verb between them, so a "
+        "row with only one end of the pair is normally dropped; it is shown "
+        "here because 'Keep empty rows' is on."
+    ),
+    "reversed_pair": (
+        "The host side of this row names the virus — a host protein called "
+        '"SARS-CoV-2 RNA", for instance. The interaction is usually real but '
+        "recorded backwards, with the host protein put in the viral column and "
+        "the viral target in the host one. Read it in the other direction, and "
+        "check the verb, which does not survive the swap unchanged."
+    ),
     "evidence_free": (
         "This row names a subject but reports nothing about it. Shown only "
         "because 'Keep empty rows' is on; normally such rows are dropped."

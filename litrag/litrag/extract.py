@@ -293,6 +293,8 @@ class Extraction:
     columns: List[str] = field(default_factory=list)
     dropped_empty: int = 0
     dropped_malformed: int = 0
+    # Rows dropped because a column the template declares required was empty.
+    dropped_incomplete: int = 0
     split_compound: int = 0
     # Rows whose cell count did not match the columns.
     realigned: int = 0
@@ -680,6 +682,51 @@ def _is_evidence_free(values: Dict[str, str], columns: Sequence[str]) -> bool:
     return all(is_null(values.get(c)) for c in evidence_columns)
 
 
+def _names_the_organism(value: str, organism: str) -> bool:
+    """True when a host-side value is named after the pathogen itself.
+
+    Observed live: "PUS7 binds 3' terminal regions of SARS-CoV-2 RNA" -- a real
+    interaction recorded backwards, since PUS7 is the human protein and the RNA
+    is viral. The direction cannot be repaired here (the verb would have to
+    turn round with it), but it is checkable, and a reversed row silently
+    presented as a host target is worse than a flagged one.
+
+    Compared on alphanumerics only, so "SARS-CoV-2" matches "SARS CoV 2".
+    """
+    def squash(text: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+    needle, haystack = squash(organism), squash(value)
+    # Short names ("HIV", "flu") appear inside ordinary words too often to key
+    # a flag on, and an exact match is the row restating its own organism.
+    return len(needle) >= 6 and needle in haystack
+
+
+def _missing_required(
+    values: Dict[str, str], columns: Sequence[str], required: Sequence[str]
+) -> List[str]:
+    """Required columns this row left empty.
+
+    The evidence-free filter asks whether a row reports anything; this asks
+    whether there is a subject to report it about. They are different failures
+    and only the first was caught, which is why a host-virus run returned rows
+    reading "nsp13 -- affinity purification mass spectrometry -- reported": the
+    method counted as evidence, so the row survived without either protein in
+    the pair it exists to record.
+
+    Matching is case-insensitive against the template's own column names, so a
+    declaration naming "Host Protein" still binds if the column is spelled
+    differently in a later template version.
+    """
+    wanted = {r.strip().lower() for r in required if r and r.strip()}
+    if not wanted:
+        return []
+    return [
+        column for column in columns
+        if column.strip().lower() in wanted and is_null(values.get(column))
+    ]
+
+
 # Columns whose value identifies the row's subject and must be singular. A row
 # reading "katG, inhA" with mutations "Ser315Thr, c-15t" is two facts packed
 # into one, and dedup cannot match either against its single-valued twin.
@@ -725,7 +772,13 @@ def _split_list(value: str) -> List[str]:
         current.append(char)
         index += 1
     parts.append("".join(current))
-    return [p.strip() for p in parts if p.strip()]
+    split = [p.strip() for p in parts if p.strip()]
+    # "5' and 3' terminal regions of SARS-CoV-2 RNA" is one phrase, and
+    # splitting it produced a Host Protein reading "5'". A name always has
+    # letters in it, so a part without any means the separator was internal.
+    if len(split) > 1 and any(not re.search(r"[A-Za-z]", p) for p in split):
+        return [value.strip()] if value.strip() else []
+    return split
 
 
 def _split_compound(
@@ -843,6 +896,7 @@ def extract_table(
 
     gene_keys = _gene_keys(requested_genes)
     gene_cols = _gene_columns(columns)
+    required = list(template.required or [])
 
     parsed_lines = [_split_cells(line, delimiter) for line in lines[start:]]
     parsed_lines, was_transposed = _maybe_transpose(parsed_lines, columns)
@@ -867,6 +921,10 @@ def extract_table(
 
         if not keep_empty and _is_evidence_free(parsed, columns):
             result.dropped_empty += 1
+            continue
+
+        if not keep_empty and _missing_required(parsed, columns, required):
+            result.dropped_incomplete += 1
             continue
 
         expanded, ambiguous = _split_compound(parsed, columns)
@@ -907,10 +965,16 @@ def extract_table(
                     flags.append("no_citation")
 
             # A mutation table row with no mutation names a subject without
-            # saying anything specific about it.
+            # saying anything specific about it. The same flag covers whatever
+            # the template declared required, so a row kept by --keep-empty
+            # still says which end of it is missing.
+            key_columns = set(_KEY_VALUE_COLUMNS)
+            key_columns |= {r.strip().lower() for r in required}
             for column in columns:
-                if column.strip().lower() in _KEY_VALUE_COLUMNS and not values.get(column):
-                    flags.append(f"missing:{column}")
+                if column.strip().lower() in key_columns and not values.get(column):
+                    flag = f"missing:{column}"
+                    if flag not in flags:
+                        flags.append(flag)
 
             # A prompt rule alone does not hold here: told plainly that
             # Method is a technique and never an evidence category, the model
@@ -928,6 +992,21 @@ def extract_table(
                 present = [c for c in columns if c.strip().lower() in group]
                 if present and all(is_null(values.get(c)) for c in present):
                     flags.append("missing:" + "/".join(sorted(group)).upper())
+
+            # The pair has a direction, and a value on the host side naming
+            # the virus means it was recorded the wrong way round.
+            organism_value = next(
+                (values.get(c) for c in columns
+                 if c.strip().lower() in {"organism", "pathogen", "species"}
+                 and values.get(c)),
+                "",
+            )
+            for column in columns:
+                if column.strip().lower() not in {"host protein", "host organism"}:
+                    continue
+                if _names_the_organism(values.get(column, ""), organism_value):
+                    flags.append("reversed_pair")
+                    break
 
             # A katG query legitimately returns inhA rows. Flag, do not drop --
             # the finding is real, it just was not what was asked for.
