@@ -498,3 +498,28 @@ def test_standard_notation_round_trips(mutation_response):
     row = Row(values={"Mutation": "NS1-53 glycine to aspartate"},
               standard={"Mutation": "G53D"})
     assert Row.from_dict(row.to_dict()).standard == {"Mutation": "G53D"}
+
+
+def test_converted_cell_shows_only_the_notation(registry, mutation_response):
+    """A column is for comparing values, and the prose is not comparable.
+
+    The source's wording stays in `values` and is exported as _as_written.
+    """
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "dengue virus\tNS1\tNS1-53 glycine to aspartate\tN/A\treported\t[1]\n"
+    )
+    row = extract(answer, template, mutation_response["sources"]).rows[0]
+    assert row.display("Mutation") == "G53D"
+    assert row.as_written("Mutation") == "NS1-53 glycine to aspartate"
+
+
+def test_unconverted_cell_is_untouched(registry, mutation_response):
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "M. tuberculosis\tkatG\tkatG deletion\tINH resistance\tmeasured\t[1]\n"
+    )
+    row = extract(answer, template, mutation_response["sources"]).rows[0]
+    assert row.display("Mutation") == "katG deletion"

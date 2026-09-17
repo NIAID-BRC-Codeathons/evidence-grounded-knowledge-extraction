@@ -38,6 +38,8 @@ ANNOTATION_COLUMNS: List[str] = [
     # Standard notation for a value the source wrote in prose, so a row can be
     # matched against one that used notation.
     "_standard_notation",
+    # What the source actually wrote, where a value was canonicalised.
+    "_as_written",
 ]
 
 

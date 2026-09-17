@@ -168,10 +168,8 @@ a.passage:hover, a.marker:hover { background: var(--accent); color: #fff; }
 }
 
 .standard {
-  display: inline-block; margin-left: 5px; padding: 1px 6px;
-  border-radius: 3px; background: #eef2f7; color: var(--accent);
-  font-size: 11.5px; font-weight: 600;
-  font-family: ui-monospace, Menlo, monospace; cursor: help;
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
 }
 
 .defined {
@@ -179,18 +177,14 @@ a.passage:hover, a.marker:hover { background: var(--accent); color: #fff; }
   cursor: help;
 }
 th .standard {
-  display: inline-block; margin-left: 5px; padding: 1px 6px;
-  border-radius: 3px; background: #eef2f7; color: var(--accent);
-  font-size: 11.5px; font-weight: 600;
-  font-family: ui-monospace, Menlo, monospace; cursor: help;
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
 }
 
 .defined { border-bottom-color: #9aa8b8; }
 .flag.standard {
-  display: inline-block; margin-left: 5px; padding: 1px 6px;
-  border-radius: 3px; background: #eef2f7; color: var(--accent);
-  font-size: 11.5px; font-weight: 600;
-  font-family: ui-monospace, Menlo, monospace; cursor: help;
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
 }
 
 .defined { border-bottom: 1px dotted var(--flag); }

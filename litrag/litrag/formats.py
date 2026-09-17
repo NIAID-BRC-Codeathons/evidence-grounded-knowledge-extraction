@@ -29,6 +29,10 @@ def _annotations(row: Row) -> Dict[str, Any]:
             f"{c}={v}" if len(row.standard) > 1 else v
             for c, v in sorted(row.standard.items())
         ),
+        "_as_written": ";".join(
+            f"{c}={row.as_written(c)}" if len(row.standard) > 1 else row.as_written(c)
+            for c in sorted(row.standard)
+        ),
     }
 
 

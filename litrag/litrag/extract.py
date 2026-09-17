@@ -192,13 +192,25 @@ class Row:
     def get(self, column: str) -> str:
         return self.values.get(column, "")
 
+    def as_written(self, column: str) -> str:
+        """Exactly what the source wrote, before any canonicalisation."""
+        return self.values.get(column, "")
+
     def display(self, column: str) -> str:
         """The cell value, with every merged alternative joined by "; ".
 
-        When rows merge, the representative value alone hides that the sources
-        said different things. Listing them all inline keeps a flat table
-        honest without needing a second line per cell.
+        A value converted to standard notation is shown in that form alone:
+        "NS1-53 glycine to aspartate" reads as G53D, because a table column is
+        for comparing values and the prose is not comparable. The original
+        wording stays in `values` and is exported as _as_written.
+
+        Otherwise, when rows merge, the representative value alone hides that
+        the sources said different things, so every alternative is listed.
         """
+        canonical = self.standard.get(column)
+        if canonical:
+            return canonical
+
         primary = self.values.get(column, "")
         alternatives = self.variants.get(column)
         if not alternatives:

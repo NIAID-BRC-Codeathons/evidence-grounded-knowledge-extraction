@@ -283,9 +283,15 @@ NT_FULL_TO_ONE = {
     "thymine": "T", "thymidine": "T", "uracil": "U",
 }
 
-_AA_NAME = "|".join(sorted(AA_FULL_TO_ONE, key=len, reverse=True))
+# Papers mix full names and three-letter codes: "glycine to aspartate" and
+# "NS1-53 Gly-to-Asp" are the same substitution written two ways.
+_AA_NAMES: Dict[str, str] = dict(AA_FULL_TO_ONE)
+_AA_NAMES.update(AA_THREE_TO_ONE)
+
+_AA_NAME = "|".join(sorted(_AA_NAMES, key=len, reverse=True))
 _NT_NAME = "|".join(sorted(NT_FULL_TO_ONE, key=len, reverse=True))
-_TO = r"(?:\s*(?:to|->|-->|→|>|into|by|for)\s*)"
+# The separator may be hyphenated -- "Gly-to-Asp" -- as well as spaced.
+_TO = r"(?:\s*[-–]?\s*(?:to|->|-->|→|>|into|by|for)\s*[-–]?\s*)"
 
 # A leading gene, protein or region qualifier: "NS1-53 ...", "5'UTR-57, ...".
 _QUALIFIED_POS = (
@@ -358,8 +364,8 @@ def _prose_notation(token: str) -> str:
         if not match:
             continue
         groups = match.groupdict()
-        ref = _letter(groups["ref"], AA_FULL_TO_ONE)
-        alt = _letter(groups["alt"], AA_FULL_TO_ONE)
+        ref = _letter(groups["ref"], _AA_NAMES)
+        alt = _letter(groups["alt"], _AA_NAMES)
         if ref and alt:
             return f"{ref}{int(groups['pos'])}{alt}"
     return ""

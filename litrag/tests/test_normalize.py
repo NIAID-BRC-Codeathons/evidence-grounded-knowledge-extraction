@@ -129,3 +129,22 @@ def test_ambiguous_single_letters_need_a_non_coding_qualifier():
     assert standard_notation("c.-15C>T") == "n-15T"
     # Spelled out, there is no ambiguity to resolve.
     assert standard_notation("57 cytosine to thymine") == "n57T"
+
+
+@pytest.mark.parametrize("value,expected", [
+    # Butrapet et al. write the same substitution with three-letter codes.
+    ("NS1-53 Gly-to-Asp", "G53D"),
+    ("NS1-53 Gly to Asp", "G53D"),
+    ("NS3-250 Glu-to-Val", "E250V"),
+    ("Ser315 to Thr", "S315T"),
+    ("position 315 Ser to Thr", "S315T"),
+])
+def test_three_letter_codes_convert(value, expected):
+    from litrag.normalize import standard_notation
+    assert standard_notation(value) == expected
+
+
+def test_full_names_and_codes_agree():
+    """Two papers writing one substitution differently must merge."""
+    forms = ["NS1-53 glycine to aspartate", "NS1-53 Gly-to-Asp", "G53D", "Gly53Asp"]
+    assert len({normalize_mutation(f) for f in forms}) == 1
