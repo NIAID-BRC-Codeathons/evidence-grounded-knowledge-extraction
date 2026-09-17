@@ -29,6 +29,9 @@ _SUBJECT_COLUMNS = {
     # identifiers that pin the strain down. The evidence is the MIC or SIR.
     "strain", "isolate", "antibiotic", "drug", "antimicrobial", "agent",
     "genbank accession", "accession", "biosample",
+    # For a host-virus row the subject is which viral protein acts on which
+    # host target; the consequence and the method are what is reported.
+    "viral protein", "host protein", "host organism",
     # A glycosylation row is about a site on a protein; the glycan, method and
     # effect are what is reported about it.
     "site", "position", "residue",
@@ -40,6 +43,11 @@ _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "sourc
 _STATUS_COLUMNS = {"assertion", "confidence", "evidence"}
 # The column that carries the actual finding for each table type.
 _KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type", "site"}
+_SYMBOL_EXTRA = {"viral protein", "host protein"}
+_METHOD_COLUMNS = {"method", "methods", "technique", "assay"}
+# Evidence categories that are not techniques. "predicted" is excluded on
+# purpose -- prediction genuinely is a method, as NetNGlyc or a docking run.
+_NOT_A_METHOD = {"measured", "reported", "inferred", "disputed"}
 # Columns whose value may be written in prose and has a standard notation.
 _NOTATION_COLUMNS = {"mutation", "variant", "allele"}
 _SITE_COLUMNS = {"site", "position", "residue"}
@@ -285,6 +293,8 @@ class Extraction:
     columns: List[str] = field(default_factory=list)
     dropped_empty: int = 0
     dropped_malformed: int = 0
+    # Rows dropped because a column the template declares required was empty.
+    dropped_incomplete: int = 0
     split_compound: int = 0
     # Rows whose cell count did not match the columns.
     realigned: int = 0
@@ -388,6 +398,9 @@ def _alignment_score(cells: Sequence[str], columns: Sequence[str]) -> int:
             score += 2 if _CITATION_SHAPED.match(value) else -2
         elif key in _LINKAGE_COLUMNS:
             score += 2 if normalize_glyco_type(value) in linkages else -2
+        elif key in {"interaction type", "interaction"}:
+            from .normalize import INTERACTION_TYPES, normalize_interaction
+            score += 2 if normalize_interaction(value) in INTERACTION_TYPES else -1
         elif key == "sir":
             score += 2 if normalize_sir(value) in {"S", "I", "R"} else -2
         elif key in _SITE_COLUMNS:
@@ -669,6 +682,51 @@ def _is_evidence_free(values: Dict[str, str], columns: Sequence[str]) -> bool:
     return all(is_null(values.get(c)) for c in evidence_columns)
 
 
+def _names_the_organism(value: str, organism: str) -> bool:
+    """True when a host-side value is named after the pathogen itself.
+
+    Observed live: "PUS7 binds 3' terminal regions of SARS-CoV-2 RNA" -- a real
+    interaction recorded backwards, since PUS7 is the human protein and the RNA
+    is viral. The direction cannot be repaired here (the verb would have to
+    turn round with it), but it is checkable, and a reversed row silently
+    presented as a host target is worse than a flagged one.
+
+    Compared on alphanumerics only, so "SARS-CoV-2" matches "SARS CoV 2".
+    """
+    def squash(text: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+    needle, haystack = squash(organism), squash(value)
+    # Short names ("HIV", "flu") appear inside ordinary words too often to key
+    # a flag on, and an exact match is the row restating its own organism.
+    return len(needle) >= 6 and needle in haystack
+
+
+def _missing_required(
+    values: Dict[str, str], columns: Sequence[str], required: Sequence[str]
+) -> List[str]:
+    """Required columns this row left empty.
+
+    The evidence-free filter asks whether a row reports anything; this asks
+    whether there is a subject to report it about. They are different failures
+    and only the first was caught, which is why a host-virus run returned rows
+    reading "nsp13 -- affinity purification mass spectrometry -- reported": the
+    method counted as evidence, so the row survived without either protein in
+    the pair it exists to record.
+
+    Matching is case-insensitive against the template's own column names, so a
+    declaration naming "Host Protein" still binds if the column is spelled
+    differently in a later template version.
+    """
+    wanted = {r.strip().lower() for r in required if r and r.strip()}
+    if not wanted:
+        return []
+    return [
+        column for column in columns
+        if column.strip().lower() in wanted and is_null(values.get(column))
+    ]
+
+
 # Columns whose value identifies the row's subject and must be singular. A row
 # reading "katG, inhA" with mutations "Ser315Thr, c-15t" is two facts packed
 # into one, and dedup cannot match either against its single-valued twin.
@@ -676,6 +734,7 @@ _SPLITTABLE_COLUMNS = {
     "gene name", "gene", "mutation", "variant", "allele", "protein",
     "antibiotic", "drug", "antimicrobial", "mic", "sir",
     "site", "position", "residue",
+    "viral protein", "host protein",
 }
 _LIST_SEPARATOR = re.compile(r"\s*[,;]\s*|\s+and\s+")
 
@@ -713,7 +772,13 @@ def _split_list(value: str) -> List[str]:
         current.append(char)
         index += 1
     parts.append("".join(current))
-    return [p.strip() for p in parts if p.strip()]
+    split = [p.strip() for p in parts if p.strip()]
+    # "5' and 3' terminal regions of SARS-CoV-2 RNA" is one phrase, and
+    # splitting it produced a Host Protein reading "5'". A name always has
+    # letters in it, so a part without any means the separator was internal.
+    if len(split) > 1 and any(not re.search(r"[A-Za-z]", p) for p in split):
+        return [value.strip()] if value.strip() else []
+    return split
 
 
 def _split_compound(
@@ -755,7 +820,11 @@ def _split_compound(
 
 # Columns whose value is a symbol, where "NA" is neuraminidase rather than
 # not-available.
-_SYMBOL_COLUMNS = {"gene name", "gene", "protein", "protein a", "protein b"}
+_SYMBOL_COLUMNS = {
+    "gene name", "gene", "protein", "protein a", "protein b",
+    # NA is neuraminidase here too, and NS is a real viral protein prefix.
+    "viral protein", "host protein",
+}
 
 
 def _clean_for(column: str, value: str) -> str:
@@ -788,7 +857,12 @@ def _gene_keys(requested: Optional[Sequence[str]]) -> set:
 def _gene_columns(columns: Sequence[str]) -> List[str]:
     return [
         c for c in columns
-        if c.strip().lower() in {"gene name", "gene", "protein a", "protein b", "protein"}
+        if c.strip().lower() in {
+            "gene name", "gene", "protein a", "protein b", "protein",
+            # The gene the user asked for is the viral one; a host protein is
+            # the target and is never off-target.
+            "viral protein",
+        }
     ]
 
 
@@ -822,6 +896,7 @@ def extract_table(
 
     gene_keys = _gene_keys(requested_genes)
     gene_cols = _gene_columns(columns)
+    required = list(template.required or [])
 
     parsed_lines = [_split_cells(line, delimiter) for line in lines[start:]]
     parsed_lines, was_transposed = _maybe_transpose(parsed_lines, columns)
@@ -846,6 +921,10 @@ def extract_table(
 
         if not keep_empty and _is_evidence_free(parsed, columns):
             result.dropped_empty += 1
+            continue
+
+        if not keep_empty and _missing_required(parsed, columns, required):
+            result.dropped_incomplete += 1
             continue
 
         expanded, ambiguous = _split_compound(parsed, columns)
@@ -886,15 +965,48 @@ def extract_table(
                     flags.append("no_citation")
 
             # A mutation table row with no mutation names a subject without
-            # saying anything specific about it.
+            # saying anything specific about it. The same flag covers whatever
+            # the template declared required, so a row kept by --keep-empty
+            # still says which end of it is missing.
+            key_columns = set(_KEY_VALUE_COLUMNS)
+            key_columns |= {r.strip().lower() for r in required}
             for column in columns:
-                if column.strip().lower() in _KEY_VALUE_COLUMNS and not values.get(column):
-                    flags.append(f"missing:{column}")
+                if column.strip().lower() in key_columns and not values.get(column):
+                    flag = f"missing:{column}"
+                    if flag not in flags:
+                        flags.append(flag)
+
+            # A prompt rule alone does not hold here: told plainly that
+            # Method is a technique and never an evidence category, the model
+            # still filled all 40 rows of one query with "reported". The value
+            # is checkable, so it is checked -- a cell naming a method that was
+            # never stated is worse than an empty one.
+            for column in columns:
+                if column.strip().lower() not in _METHOD_COLUMNS:
+                    continue
+                if values.get(column, "").strip().lower() in _NOT_A_METHOD:
+                    values[column] = ""
+                    flags.append("method_not_a_technique")
 
             for group in _EITHER_OR_COLUMNS:
                 present = [c for c in columns if c.strip().lower() in group]
                 if present and all(is_null(values.get(c)) for c in present):
                     flags.append("missing:" + "/".join(sorted(group)).upper())
+
+            # The pair has a direction, and a value on the host side naming
+            # the virus means it was recorded the wrong way round.
+            organism_value = next(
+                (values.get(c) for c in columns
+                 if c.strip().lower() in {"organism", "pathogen", "species"}
+                 and values.get(c)),
+                "",
+            )
+            for column in columns:
+                if column.strip().lower() not in {"host protein", "host organism"}:
+                    continue
+                if _names_the_organism(values.get(column, ""), organism_value):
+                    flags.append("reversed_pair")
+                    break
 
             # A katG query legitimately returns inhA rows. Flag, do not drop --
             # the finding is real, it just was not what was asked for.

@@ -60,8 +60,27 @@ COLUMNS: Dict[str, str] = {
     "phenotype": "The observable effect attributed to the finding.",
     "function": "The molecular or biological function attributed to the gene or protein.",
     "interaction type": (
-        "How the two partners relate — physical binding, inhibition, and so on — "
-        "in the source's own terms."
+        "How the two partners relate. For host-virus rows this is one of six "
+        "verbs — binds, cleaves, inhibits, activates, degrades, relocalizes — "
+        "with the source's own verb kept when none of them fits. For "
+        "protein-protein rows it is the source's own wording."
+    ),
+    "viral protein": (
+        "The viral protein doing the acting. The direction is always viral "
+        "protein onto host target, so a host protein never appears here."
+    ),
+    "host protein": (
+        "What the viral protein acts on, named as the source names it — STAT1, "
+        "TBK1, or a pathway such as type I interferon signalling."
+    ),
+    "host organism": (
+        "The host the work was done in — human, mouse, or the cell line where "
+        "that is all the source gives. Never assumed."
+    ),
+    "biological consequence": (
+        "What follows for the host or the infection: reduced interferon "
+        "signalling, blocked apoptosis, enhanced replication. N/A means the "
+        "source reported the interaction without a consequence."
     ),
     "method": "The experimental method the source used to establish the finding.",
     "antibiotic": (
@@ -149,6 +168,12 @@ FLAGS: Dict[str, str] = {
         "shown and the alternatives are listed underneath, so a single paper's "
         "wording is never presented as every source's finding."
     ),
+    "method_not_a_technique": (
+        "The Method cell held an evidence category rather than a technique — "
+        '"reported" or "measured" instead of co-immunoprecipitation or mass '
+        "spectrometry. It was cleared, since a method that was never stated is "
+        "worse than none. The evidence category is in Assertion."
+    ),
     "column_count_mismatch": (
         "The source row did not have one value per column, so the alignment "
         "shown is a reconstruction rather than a reading. It was fitted using "
@@ -159,7 +184,20 @@ FLAGS: Dict[str, str] = {
         "The source packed several findings into one row and they could not be "
         "split apart unambiguously. Worth reading by hand."
     ),
-    "missing": "The column carrying the actual finding is empty for this row.",
+    "missing": (
+        "A column this row cannot be read without is empty — either the one "
+        "carrying the finding, or one naming what the finding is about. A "
+        "host-virus row needs both proteins and the verb between them, so a "
+        "row with only one end of the pair is normally dropped; it is shown "
+        "here because 'Keep empty rows' is on."
+    ),
+    "reversed_pair": (
+        "The host side of this row names the virus — a host protein called "
+        '"SARS-CoV-2 RNA", for instance. The interaction is usually real but '
+        "recorded backwards, with the host protein put in the viral column and "
+        "the viral target in the host one. Read it in the other direction, and "
+        "check the verb, which does not survive the swap unchanged."
+    ),
     "evidence_free": (
         "This row names a subject but reports nothing about it. Shown only "
         "because 'Keep empty rows' is on; normally such rows are dropped."

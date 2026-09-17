@@ -110,6 +110,65 @@ BUILTIN: List[Dict[str, Any]] = [
             "when none is reported; do not supply one from general knowledge.",
         ],
     },
+    {
+        "id": "host-virus",
+        "label": "Host-Virus Interactions",
+        "output": "table",
+        "version": 1,
+        # The chain the curation is for: which viral protein acts on which host
+        # target, how, and to what effect.
+        "columns": [
+            "Organism", "Viral Protein", "Interaction Type", "Host Protein",
+            "Host Organism", "Biological Consequence",
+            "Method", "Assertion", "Reference",
+        ],
+        "max_output_tokens": 3000,
+        "slots": _STANDARD_SLOTS,
+        # The pair IS the finding. A row naming one end of it records that a
+        # protein interacts with something, which is not a curatable fact.
+        "required": ["Viral Protein", "Interaction Type", "Host Protein"],
+        "guidance": [
+            "One row per viral-protein / host-target pair. A viral protein "
+            "acting on three host proteins is three rows.",
+            "Every row needs both ends of the pair and the verb joining them: "
+            "the viral protein, the interaction type, and the host protein. If "
+            "a passage does not give all three, leave the row out — do not "
+            'write "N/A" in one of them and report the rest.',
+            "Interactome, AP-MS, CRISPR-screen and interaction-map papers are "
+            "the common trap here. A source saying a viral protein was "
+            "profiled, or that a screen recovered host factors, without naming "
+            "which host proteins it bound, is not a finding. Report a row only "
+            "for the partners the passage actually names.",
+            "The host protein must belong to the host. Two viral proteins "
+            "binding each other — nsp7 with nsp12, nsp10 with nsp16 — is a "
+            "viral complex, not a host-virus interaction, and does not belong "
+            "in this table whatever the paper calls it.",
+            "Interaction Type must be exactly one of: binds, cleaves, "
+            "inhibits, activates, degrades, relocalizes. Pick the closest when "
+            "the source uses another verb — sequesters or retains in the "
+            "cytoplasm is relocalizes, targets for proteasomal degradation is "
+            "degrades, blocks or antagonizes is inhibits, induces or "
+            "upregulates is activates. Only if none of the six fits, write the "
+            "verb the source used.",
+            "The direction is always viral protein acting on host target. "
+            "Never put a host protein in the Viral Protein column, and never "
+            "reverse the pair to make a verb fit.",
+            "Host Protein is the thing acted on, named as the source names it "
+            "— STAT1, TBK1, nuclear import machinery, the type I interferon "
+            "pathway. A pathway is an acceptable target.",
+            "Host Organism is the host the work was done in — human, mouse, "
+            'or the cell line where that is all the source gives. Use "N/A" '
+            "rather than assuming human.",
+            "Biological Consequence is what follows for the host or the "
+            "infection — reduced interferon signalling, blocked apoptosis, "
+            'enhanced replication. Use "N/A" when the source reports the '
+            "interaction without a consequence; do not supply one from general "
+            "knowledge.",
+            "Method is how the interaction was shown: co-immunoprecipitation, "
+            "affinity purification mass spectrometry, yeast two-hybrid, "
+            "reporter assay, microscopy, or computational prediction.",
+        ],
+    },
 ]
 
 
