@@ -441,6 +441,31 @@ full references:
 Those ids go straight to the API's `/v1/chunks?ids=` to fetch the passage text
 back, along with its `prev_chunk_id` / `next_chunk_id` neighbours.
 
+### How retrieval works
+
+Retrieval defaults to `fused`: the query runs under both `hybrid` and `bm25` and
+the two rankings are merged with reciprocal rank fusion. `--retrieval-mode`
+takes `fused`, `hybrid`, `vector` or `bm25`.
+
+Dense retrieval ranks a chunk by what it is *about*, which loses passages that
+mention an identifier in passing. Measured on the Dengue corpus, searching
+`dengue virus NS1 Mutation`:
+
+| Mode | Rank of a chunk stating "NS1-53 glycine to aspartate" |
+|---|---|
+| `hybrid` (was the default) | absent from the top 100 |
+| `vector` | absent from the top 100 |
+| `bm25` | **12** |
+| `fused` | **69** |
+
+Gene names, mutation codes and accessions are exactly the literal tokens BM25
+matches and dense similarity does not, so a curation tool should not rely on
+either alone. Fusion costs one extra retrieval call, around 0.3s, and leaves the
+top of a good ranking unchanged.
+
+Only the local path fuses. `/v1/query` retrieves server-side under a single
+mode, and is sent `hybrid`.
+
 ### Retrieval depth
 
 `--top-k` goes to 100, and the slider with it. A deeper retrieval finds more,

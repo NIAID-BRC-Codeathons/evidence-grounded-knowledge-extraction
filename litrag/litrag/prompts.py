@@ -75,6 +75,13 @@ def build_context(
 ASSERTION_VALUES = ("measured", "inferred", "predicted", "reported", "disputed")
 
 COLUMN_RULES = {
+    "mutation": (
+        "Mutations are often written in prose rather than notation. "
+        '"NS1-53 glycine to aspartate" is a mutation, so is "position 315 '
+        'serine to threonine", and so is "the 5\'UTR-57 C to T change". Record '
+        "these as the source words them. A finding does not have to be written "
+        "as S315T to count."
+    ),
     "assertion": (
         "The Assertion column must contain exactly one of: "
         + ", ".join(ASSERTION_VALUES) + ". Use "
@@ -112,6 +119,10 @@ def _table_instructions(template: Template, spec_bits: str, n_sources: int) -> s
         "- One finding per row. Never combine multiple genes, proteins, or "
         "variants into a single row.",
         "- Include only findings the sources actually state.",
+        "- Work through every numbered source in turn. Do not stop once one "
+        "source has yielded findings -- a later source usually reports "
+        "different ones, and a source whose main topic is something else can "
+        "still state a finding in passing.",
         "- Output no text before or after the table.",
     ]
     # Rules for particular columns, then any the template itself declares.

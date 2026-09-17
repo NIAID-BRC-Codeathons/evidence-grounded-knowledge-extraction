@@ -112,3 +112,31 @@ def test_column_rules_skip_templates_without_the_column():
 def test_column_rule_lookup_is_normalized():
     from litrag.prompts import column_rules
     assert column_rules(["assertion"]) == column_rules([" Assertion "])
+
+
+def test_prompt_demands_a_full_sweep_of_sources(registry, mutation_response):
+    """Given 100 sources the model returned four rows, all from one paper's
+    mutagenesis table, ignoring a mutation stated in passing elsewhere."""
+    prompt, _, _ = build_prompt(registry.resolve("mutation"),
+                                mutation_response["sources"], "dengue virus")
+    assert "every numbered source" in prompt
+    assert "in passing" in prompt
+
+
+def test_mutation_column_accepts_prose_notation(registry, mutation_response):
+    """The missed finding was written "NS1-53 glycine to aspartate", not G53D.
+
+    A rule keyed to the column reaches the server's templates too.
+    """
+    from litrag.prompts import column_rules
+    prompt, _, _ = build_prompt(registry.resolve("mutation"),
+                                mutation_response["sources"], "dengue virus")
+    assert "glycine to aspartate" in prompt
+    assert "does not have to be written" in prompt
+    assert column_rules(["Mutation"])
+
+
+def test_prose_rule_only_applies_where_there_is_a_mutation_column():
+    from litrag.prompts import column_rules
+    rules = " ".join(column_rules(["Organism", "Strain", "Antibiotic", "MIC"]))
+    assert "glycine to aspartate" not in rules
