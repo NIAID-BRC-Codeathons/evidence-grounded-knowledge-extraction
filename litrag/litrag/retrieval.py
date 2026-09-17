@@ -1,0 +1,310 @@
+"""How much of the literature to read, and in what order.
+
+Retrieval ranks *chunks*, not papers. A `top_k` of 10 returns ten ~500-character
+fragments, which in practice come from about eight different papers -- one
+fragment each. Two things follow, and neither is fixable by prompting:
+
+- The fragment that matched the query is often the Introduction, where a topic is
+  merely mentioned. The finding lives in the Results, in a chunk nobody
+  retrieved. Measured on a live katG query, the chunk *after* the top hit
+  contained the resistance result that the hit itself only alluded to.
+- Recall is capped before the model runs. Paper nine is not judged and rejected;
+  it is never looked at.
+
+So this module widens the input. `expand` walks each hit's neighbours to recover
+the surrounding section, `order` puts a paper's passages back into reading order,
+and `pack` splits the result into batches that can be sent concurrently.
+
+Measured against the live API (2026-09-17):
+
+    open-access  k=100 hops=2  ->  285 passages,  64 papers
+    Influenza    k=100 hops=3  ->  503 passages,  15 papers (~the whole corpus)
+    Dengue       k=100 hops=3  ->  252 passages,   2 papers (~the whole corpus)
+
+against 10 passages from 8 papers today.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+# /v1/retrieve rejects anything above this: "top_k must be <= 100".
+MAX_TOP_K = 100
+
+# Char budget per LLM call. ~60k chars is ~17k tokens by the project's
+# conservative 3.5 chars/token estimate, which leaves generous room for the
+# instruction block and a long table in a 32k-token context -- the smallest
+# context among the models this tool targets. Bigger batches mean fewer calls
+# but a longer tail: one slow batch holds up the whole query.
+DEFAULT_BATCH_CHARS = 60_000
+
+# Depth presets. "standard" is today's behaviour and must stay that way: it is
+# the control arm for any comparison, so it may not acquire expansion by
+# accident.
+STANDARD = "standard"
+ADAPTIVE = "adaptive"
+FULL = "full"
+DEPTHS = (STANDARD, ADAPTIVE, FULL)
+
+
+@dataclass(frozen=True)
+class RetrievalPlan:
+    """How wide to search and how far to read around each hit."""
+
+    top_k: int
+    hops: int
+    batch_chars: int = DEFAULT_BATCH_CHARS
+    depth: str = STANDARD
+
+    @property
+    def expands(self) -> bool:
+        return self.hops > 0
+
+
+def plan(count: int, depth: str = STANDARD, top_k: int = 10,
+         batch_chars: int = DEFAULT_BATCH_CHARS) -> RetrievalPlan:
+    """Choose depth from the size of the collection being searched.
+
+    `count` is the collection's chunk count, which the registry already knows
+    before a query runs. The asymmetry is deliberate: a small curated corpus can
+    be read almost in full, while PubMed Central cannot be read at all, so on the
+    big corpora the budget buys breadth (more distinct papers) and on the small
+    ones it buys depth (more of each paper).
+    """
+    if depth not in DEPTHS:
+        raise ValueError(f"unknown depth '{depth}'. Choose from: {', '.join(DEPTHS)}")
+
+    if depth == STANDARD:
+        # Exactly what the caller asked for: no expansion, and `batch_chars=0`
+        # meaning do not pack at all. Anything else would split a large top_k
+        # into several calls and quietly stop being the control arm -- which is
+        # precisely what a test caught here.
+        return RetrievalPlan(top_k=min(top_k, MAX_TOP_K), hops=0,
+                             batch_chars=0, depth=depth)
+
+    if depth == FULL:
+        # Walk until the documents run out. Only sane on a small corpus; the
+        # caller is responsible for not pointing this at 47M chunks.
+        return RetrievalPlan(top_k=MAX_TOP_K, hops=6, batch_chars=batch_chars,
+                             depth=depth)
+
+    # ADAPTIVE. top_k is the API maximum everywhere, because breadth and depth
+    # come from different levers and only one of them is top_k: expansion walks
+    # outward within the papers already found, so it adds passages but almost no
+    # new papers. Measured on open-access, top_k=50 with one hop reached 95
+    # passages across 44 papers -- the same 44 papers as top_k=50 alone. Lowering
+    # top_k here to save time would cost breadth and buy nothing back.
+    #
+    # What varies is how far to read INTO each paper, and that is what the
+    # corpus size should decide.
+    hops = 1
+    if count and count < 10_000:
+        # Dengue (382) and Influenza_2024_2025 (3,064): few enough papers that
+        # three hops covers most of each one -- effectively reading the corpus.
+        hops = 3
+    elif count and count < 1_000_000:
+        hops = 2
+    # asm-semantic (6.7M) and open-access (47.6M) keep one hop: at ~285 passages
+    # for two, the wall-clock and token cost outrun the marginal context.
+    return RetrievalPlan(max(MAX_TOP_K, min(top_k, MAX_TOP_K)), hops,
+                         batch_chars, depth)
+
+
+def dedupe_chunks(sources: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop repeated chunks, keeping the first (highest-scoring) occurrence.
+
+    Nothing did this before. The API can return the same chunk more than once --
+    notably when several collections are searched at once -- and every duplicate
+    was being paid for twice: once in context tokens, and again as a second
+    apparent source supporting the same claim.
+    """
+    seen: set = set()
+    unique: List[Dict[str, Any]] = []
+    for source in sources:
+        key = source.get("chunk_id")
+        if key is None:
+            # No id to dedupe on: keep it rather than guess. Losing a passage is
+            # worse than carrying a possible duplicate.
+            unique.append(source)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(source)
+    return unique
+
+
+def _neighbour_ids(sources: Sequence[Dict[str, Any]], held: set) -> List[str]:
+    """Ids adjacent to these chunks that we do not already have."""
+    wanted: List[str] = []
+    for source in sources:
+        meta = source.get("metadata") or {}
+        for key in ("prev_chunk_id", "next_chunk_id"):
+            neighbour = meta.get(key)
+            if neighbour and neighbour not in held and neighbour not in wanted:
+                wanted.append(neighbour)
+    return wanted
+
+
+def expand(client: Any, sources: Sequence[Dict[str, Any]],
+           collection: Optional[str], hops: int = 1) -> List[Dict[str, Any]]:
+    """Pull the chunks either side of each hit, `hops` times outward.
+
+    One bulk request per hop -- 182 ids in a single call took 0.26s against the
+    live API, so there is no reason to page. Chunks with no recorded neighbour
+    are normal (about 3 in 10 on open-access), not an error.
+
+    `collection` must be passed through. The endpoint scopes lookups to a
+    collection and returns an EMPTY LIST rather than an error when the parameter
+    is missing, so omitting it looks exactly like "this corpus has no
+    neighbours".
+    """
+    held = {s.get("chunk_id") for s in sources if s.get("chunk_id")}
+    collected = list(sources)
+    frontier = list(sources)
+
+    for _ in range(max(0, hops)):
+        wanted = _neighbour_ids(frontier, held)
+        if not wanted:
+            break
+        fetched = client.chunks(wanted, collection=collection) or []
+        asked = set(wanted)
+        frontier = []
+        for chunk in fetched:
+            key = chunk.get("chunk_id") or chunk.get("id")
+            # Only accept what we asked for. An unexpected id would otherwise
+            # become a root for the next hop and pull in a whole unrelated
+            # document, which the model would then cite as though it were a
+            # neighbour of a real hit.
+            if not key or key in held or key not in asked:
+                continue
+            held.add(key)
+            normalised = _as_source(chunk, key)
+            collected.append(normalised)
+            frontier.append(normalised)
+        if not frontier:
+            break
+    return collected
+
+
+def _as_source(chunk: Dict[str, Any], chunk_id: str) -> Dict[str, Any]:
+    """Shape a fetched chunk like a retrieved one.
+
+    Deliberately no `score`: this chunk was never ranked against the query, it
+    was pulled in because it sits next to something that was. Inventing a score
+    would let a neighbour outrank a real hit in any later sort.
+    """
+    source = dict(chunk)
+    source["chunk_id"] = chunk_id
+    source.setdefault("metadata", {})
+    source["expanded"] = True
+    return source
+
+
+def order(sources: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Group by paper, best paper first, passages in reading order within it.
+
+    Retrieval returns chunks ranked individually, so a paper's Methods can arrive
+    before its Abstract and with another paper's text in between. Presenting a
+    document's passages contiguously and in order is what lets the model read a
+    section rather than a shuffle of fragments.
+    """
+    groups: Dict[Any, List[Dict[str, Any]]] = {}
+    for source in sources:
+        groups.setdefault(source.get("doc_id"), []).append(source)
+
+    def best_score(group: List[Dict[str, Any]]) -> float:
+        scores = [s.get("score") for s in group if isinstance(s.get("score"), (int, float))]
+        return max(scores) if scores else -1.0
+
+    def position(source: Dict[str, Any]) -> tuple:
+        index = (source.get("metadata") or {}).get("chunk_index")
+        # Chunks with no index sort last, stably, rather than colliding at 0 and
+        # scrambling the ones that do have an index.
+        if isinstance(index, (int, float)):
+            return (0, index)
+        return (1, 0)
+
+    ordered: List[Dict[str, Any]] = []
+    for _, group in sorted(groups.items(), key=lambda kv: -best_score(kv[1])):
+        ordered.extend(sorted(group, key=position))
+    return ordered
+
+
+def pack(sources: Sequence[Dict[str, Any]],
+         max_chars: int = DEFAULT_BATCH_CHARS) -> List[List[Dict[str, Any]]]:
+    """Split into batches under a char budget, keeping papers whole.
+
+    A document is only split across batches when it exceeds the budget on its
+    own. Splitting a paper means the model sees half its evidence in one call and
+    half in another, and can reconcile neither -- the cost of an occasional
+    under-full batch is much lower.
+
+    `max_chars=0` disables packing entirely: everything goes in one batch. That
+    is what the "standard" depth uses to stay identical to the original
+    single-call behaviour.
+    """
+    if not sources:
+        return []
+    if not max_chars:
+        return [list(sources)]
+
+    batches: List[List[Dict[str, Any]]] = []
+    current: List[Dict[str, Any]] = []
+    used = 0
+
+    for group in _by_document(sources):
+        size = sum(len(s.get("content") or "") for s in group)
+        if current and used + size > max_chars:
+            batches.append(current)
+            current, used = [], 0
+        if size > max_chars and not current:
+            # One document bigger than a whole batch: split it, but only this
+            # one, and only because the alternative is dropping passages.
+            for piece in _split(group, max_chars):
+                batches.append(piece)
+            continue
+        current.extend(group)
+        used += size
+
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _by_document(sources: Sequence[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    """Consecutive runs of the same doc_id, preserving the given order."""
+    groups: List[List[Dict[str, Any]]] = []
+    for source in sources:
+        if groups and groups[-1][0].get("doc_id") == source.get("doc_id"):
+            groups[-1].append(source)
+        else:
+            groups.append([source])
+    return groups
+
+
+def _split(group: Sequence[Dict[str, Any]], max_chars: int) -> List[List[Dict[str, Any]]]:
+    pieces: List[List[Dict[str, Any]]] = []
+    current: List[Dict[str, Any]] = []
+    used = 0
+    for source in group:
+        size = len(source.get("content") or "")
+        if current and used + size > max_chars:
+            pieces.append(current)
+            current, used = [], 0
+        current.append(source)
+        used += size
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+def summarise(sources: Sequence[Dict[str, Any]]) -> Dict[str, int]:
+    """Counts worth showing a user: how much was actually read."""
+    return {
+        "n_passages": len(sources),
+        "n_papers": len({s.get("doc_id") for s in sources if s.get("doc_id")}),
+        "n_expanded": sum(1 for s in sources if s.get("expanded")),
+        "n_chars": sum(len(s.get("content") or "") for s in sources),
+    }

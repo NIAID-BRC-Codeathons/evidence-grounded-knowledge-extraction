@@ -297,3 +297,31 @@ def test_citation_carries_doc_id_from_the_source():
     sources[0]["doc_id"] = "doc-alpha"
     citations = parse_citations("[1]", sources)
     assert citations[0].doc_id == "doc-alpha"
+
+
+def test_one_paper_split_into_sub_documents_counts_once():
+    """PMC gives figures and tables their own doc_id.
+
+    Measured on the live index: 16 of 111 PMIDs from a single query came back
+    under more than one doc_id, one of them under five, because PMC splits an
+    article into sub-documents (`PMC4643029#figure-3`). Keying citation identity
+    on doc_id ahead of the PMID would therefore report one paper as five
+    independent supporting sources and inflate n_support -- the number used to
+    rank what a curator checks first.
+    """
+    from litrag.dedup import _merge_citations
+    from litrag.extract import Citation
+
+    article = Citation(marker=1, pmid="34147065", doc_id="086c5b46-article")
+    figure = Citation(marker=2, pmid="34147065", doc_id="329ee653-figure-3")
+
+    assert article.identity == figure.identity
+    assert len(_merge_citations([article], [figure])) == 1
+
+
+def test_identity_never_falls_back_to_a_bare_marker_when_a_chunk_is_known():
+    """A marker means a different paper in every batch, so it must be last."""
+    from litrag.extract import Citation
+
+    assert Citation(marker=1, chunk_id="c-1").identity == "c-1"
+    assert Citation(marker=1, doc_id="d-1", chunk_id="c-1").identity == "d-1"

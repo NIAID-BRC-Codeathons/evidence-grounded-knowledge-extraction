@@ -71,9 +71,27 @@ class Citation:
 
     @property
     def identity(self) -> str:
-        """Stable key for "is this the same paper?" across batches."""
+        """Stable key for "is this the same paper?" across batches.
+
+        Order matters and is not the obvious one. `doc_id` is present on every
+        source while pmid/doi are corpus-dependent, which argues for checking it
+        first -- but measured against the live index, 16 of 111 PMIDs from one
+        query came back under MORE THAN ONE doc_id, one of them under five. PMC
+        splits an article into sub-documents (`PMC4643029#figure-3`,
+        `PMC10290095#table-2-part-2`), each with its own doc_id. Keying on doc_id
+        first would therefore count a single paper as several independent
+        supporting sources and inflate `n_support`, which is exactly the signal
+        used to rank what a curator reviews first.
+
+        So: publication identifiers first, because they are what actually
+        identifies a paper; doc_id then chunk_id as fallbacks for corpora that
+        publish no identifiers at all (Dengue and Influenza_2024_2025 carry no
+        pmid or pmcid). The bare marker is last and should now be unreachable --
+        it is a different paper in every batch, so it must never be the thing
+        two citations are merged on.
+        """
         return (self.pmid or self.doi or self.pmcid or self.doc_id
-                or f"marker:{self.marker}")
+                or self.chunk_id or f"marker:{self.marker}")
 
     @property
     def url(self) -> Optional[str]:
@@ -196,10 +214,20 @@ class Extraction:
     unresolved_citations: int = 0
     raw_answer: str = ""
     is_table: bool = True
+    # How many LLM calls produced this, and how many of them failed. One batch
+    # is the ordinary case; several mean the passages were split across
+    # concurrent calls and the rows merged.
+    n_batches: int = 1
+    n_batches_failed: int = 0
 
     @property
     def n_rows(self) -> int:
         return len(self.rows)
+
+    @property
+    def partial(self) -> bool:
+        """True when some of the literature was retrieved but never read."""
+        return self.n_batches_failed > 0
 
 
 def _split_cells(line: str, delimiter: str) -> List[str]:

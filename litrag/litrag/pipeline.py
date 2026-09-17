@@ -8,12 +8,15 @@ provenance. Neither surface reimplements any of it.
 from __future__ import annotations
 
 import hashlib
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import provenance as prov
-from .client import QueryResult, RagStackClient
-from .llm import LlmClient, LlmEndpoint
+from . import retrieval
+from .client import ApiError, QueryResult, RagStackClient
+from .llm import LlmClient, LlmEndpoint, LlmError
 from .prompts import build_prompt
 from .dedup import dedupe
 from .extract import Extraction, Row, extract
@@ -41,6 +44,14 @@ class QuerySpec:
     # Backend name recorded in the identity hash so switching models
     # invalidates a resume rather than silently reusing the old answer.
     backend: str = "server"
+    # How much to read. "standard" is the original behaviour: top_k chunks, one
+    # call, no expansion. See retrieval.plan.
+    depth: str = retrieval.STANDARD
+    # Chunk count of the corpus being searched, which is what depth adapts to.
+    # The registry knows it before the query runs; 0 means "unknown", which
+    # plan() treats as a large corpus -- the conservative direction.
+    collection_count: int = 0
+    concurrency: int = 4
 
     @property
     def gene_list(self) -> List[str]:
@@ -83,6 +94,9 @@ class QuerySpec:
             self.data_type, str(self.top_k),
             ",".join(self.collections) or (self.collection or ""),
             self.backend,
+            # Depth changes how much was read, so a resumed batch must not mix
+            # shallow and deep rows into one table under the same id.
+            self.depth,
         ])
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
@@ -109,6 +123,14 @@ class RunResult:
             "genes": self.spec.genes,
             "data_type": self.template.id,
             "n_sources": len(self.result.sources),
+            # How much was actually read, which "n_sources" alone no longer
+            # conveys: a passage is a fragment, and several belong to one paper.
+            "n_papers": len({s.get("doc_id") for s in self.result.sources
+                             if s.get("doc_id")}),
+            "n_expanded": sum(1 for s in self.result.sources if s.get("expanded")),
+            "depth": self.spec.depth,
+            "n_batches": self.extraction.n_batches,
+            "n_batches_failed": self.extraction.n_batches_failed,
             "collections": self.spec.collection_label,
             "n_rows_raw": self.extraction.n_rows,
             "n_rows": len(self.rows),
@@ -143,50 +165,213 @@ def build_request(spec: QuerySpec, template: Template) -> Dict[str, Any]:
     )
 
 
+@dataclass
+class _BatchOutcome:
+    """What one batch produced, or why it produced nothing."""
+
+    index: int
+    completion: Any = None
+    extraction: Optional[Extraction] = None
+    prompt_hash: str = ""
+    error: Optional[str] = None
+
+
+def _run_batches(
+    llm: LlmClient,
+    spec: QuerySpec,
+    template: Template,
+    batches: Sequence[Sequence[Dict[str, Any]]],
+    on_batch: Optional[Callable[[int, int], None]] = None,
+) -> List[_BatchOutcome]:
+    """Send every batch, concurrently, and extract each against its own slice.
+
+    The concurrency shape is lifted from `batch.py`: a ThreadPoolExecutor, a
+    future-to-key dict, `as_completed`, and a per-future try/except so one
+    failure cannot take the query down. One `LlmClient` is shared across workers
+    -- httpx.Client is thread-safe and pooling the connections is the point.
+
+    A single batch runs inline. Threads for one call would add nothing but a
+    stack frame, and keeping that path identical to the old one is what lets
+    `depth=standard` stay a true control arm.
+    """
+    total = len(batches)
+    max_tokens = template.max_output_tokens or 2500
+
+    def work(index: int) -> _BatchOutcome:
+        slice_ = batches[index]
+        prompt, prompt_hash, _ = build_prompt(
+            template, slice_,
+            organism=spec.organism, genes=spec.genes,
+            other_terms=spec.other_terms,
+            max_context_tokens=spec.max_context_tokens,
+        )
+        completion = llm.complete(prompt, max_tokens=max_tokens)
+        # Extract HERE, against `slice_` -- the exact passages this prompt
+        # numbered. Deferring it to the caller would mean resolving a marker
+        # against the wrong list.
+        extraction = extract(
+            completion.text, template, slice_,
+            requested_genes=spec.gene_list, keep_empty=spec.keep_empty,
+        )
+        return _BatchOutcome(index, completion, extraction, prompt_hash)
+
+    if total <= 1:
+        try:
+            outcomes = [work(0)]
+        except (LlmError, ValueError) as exc:
+            outcomes = [_BatchOutcome(0, error=str(exc))]
+        if on_batch:
+            on_batch(1, total)
+        return outcomes
+
+    outcomes: List[_BatchOutcome] = []
+    workers = max(1, min(spec.concurrency, total))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(work, i): i for i in range(total)}
+        for future in as_completed(futures):
+            index = futures[future]
+            try:
+                outcomes.append(future.result())
+            except (ApiError, TemplateError, LlmError, ValueError) as exc:
+                # One lost batch costs a fraction of the answer; aborting costs
+                # all of it. The loss is counted and surfaced, never hidden.
+                outcomes.append(_BatchOutcome(index, error=str(exc)))
+            if on_batch:
+                on_batch(len(outcomes), total)
+
+    # as_completed yields in finish order; restore submission order so the
+    # merged answer and the row order do not depend on which batch was fastest.
+    return sorted(outcomes, key=lambda o: o.index)
+
+
+def _merge_extractions(done: Sequence[_BatchOutcome], total: int) -> Extraction:
+    """Fold per-batch extractions into one, summing the counters.
+
+    Rows keep the citations their own batch resolved, so the later dedupe merges
+    them on real document identity rather than on a marker number that means
+    something different in every batch.
+    """
+    first = done[0].extraction
+    merged = Extraction(
+        columns=list(first.columns),
+        is_table=first.is_table,
+        transposed=any(o.extraction.transposed for o in done),
+        raw_answer="\n\n".join(o.extraction.raw_answer for o in done
+                               if o.extraction.raw_answer),
+    )
+    for outcome in done:
+        part = outcome.extraction
+        merged.rows.extend(part.rows)
+        merged.dropped_empty += part.dropped_empty
+        merged.dropped_malformed += part.dropped_malformed
+        merged.split_compound += part.split_compound
+        merged.unresolved_citations += part.unresolved_citations
+        # A later batch may declare a column the first one did not, e.g. when a
+        # batch returned no rows at all.
+        for column in part.columns:
+            if column not in merged.columns:
+                merged.columns.append(column)
+
+    merged.n_batches = total
+    merged.n_batches_failed = total - len(done)
+    return merged
+
+
+def _combined_hash(hashes: Sequence[str]) -> str:
+    """One stable key for a run made of several prompts.
+
+    The ledger joins a run to the prompt that produced it. With N prompts there
+    is no single hash, so record a hash of the sorted batch hashes: identical
+    inputs give an identical key, and any prompt change moves it.
+    """
+    if len(hashes) == 1:
+        return hashes[0]
+    digest = hashlib.sha256("|".join(sorted(hashes)).encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
+def gather(
+    client: RagStackClient,
+    spec: QuerySpec,
+    template: Template,
+    plan: Optional[retrieval.RetrievalPlan] = None,
+) -> Tuple[List[Dict[str, Any]], retrieval.RetrievalPlan]:
+    """Retrieve, then read around each hit. No LLM call, so this is free.
+
+    Split out from generation so a caller can show the user what is about to be
+    read -- the UI's "reviewing N passages from M papers" and the CLI's banner
+    both come from here -- without paying for a completion first.
+    """
+    plan = plan or retrieval.plan(spec.collection_count, spec.depth, spec.top_k)
+    sources = client.retrieve(
+        query=spec.search_text(template),
+        top_k=plan.top_k,
+        collection=spec.collection,
+        collections=spec.collections,
+        use_graph=False,
+        retrieval_mode=spec.retrieval_mode,
+    )
+    sources = retrieval.dedupe_chunks(sources)
+    if plan.expands:
+        # Multi-collection requests have no single collection to scope a chunk
+        # lookup to, and the endpoint needs one. Expansion is skipped rather
+        # than silently returning nothing.
+        scope = spec.collection or (spec.collections[0] if len(spec.collections) == 1 else None)
+        if scope:
+            sources = retrieval.dedupe_chunks(
+                retrieval.expand(client, sources, scope, hops=plan.hops)
+            )
+    return retrieval.order(sources), plan
+
+
 def _generate_locally(
     client: RagStackClient,
     spec: QuerySpec,
     template: Template,
     endpoint: LlmEndpoint,
     llm_client: Optional[LlmClient] = None,
-) -> QueryResult:
+    on_batch: Optional[Callable[[int, int], None]] = None,
+) -> Tuple[QueryResult, Extraction]:
     """Retrieve from RAGStack, then generate against a directly-addressed model.
 
     The hosted /v1/query cannot select a model -- its `llm` field returns an
     empty answer with no sources -- so choosing a generator means splitting
     retrieval from generation. The template declaration still defines the
     columns; only the prompt wrapping them is ours, and its hash is recorded.
-    """
-    sources = client.retrieve(
-        query=spec.search_text(template),
-        top_k=spec.top_k,
-        collection=spec.collection,
-        collections=spec.collections,
-        use_graph=False,
-        retrieval_mode=spec.retrieval_mode,
-    )
 
-    prompt, prompt_hash, _included = build_prompt(
-        template,
-        sources,
-        organism=spec.organism,
-        genes=spec.genes,
-        other_terms=spec.other_terms,
-        max_context_tokens=spec.max_context_tokens,
-    )
+    Passages are packed into batches and sent concurrently. **Each batch is
+    extracted against its own slice, here, rather than by the caller against one
+    flat list.** That is not an optimisation -- it is the only way the citation
+    markers stay meaningful. Sources are numbered from 1 within each prompt, so
+    `[2]` in one batch and `[2]` in another are different papers; resolving each
+    batch's markers against the passages that batch actually saw turns them into
+    real PMIDs and doc ids before anything merges.
+    """
+    started = time.monotonic()
+    sources, plan = gather(client, spec, template)
+    batches = retrieval.pack(sources, plan.batch_chars) or [[]]
 
     owns = llm_client is None
     llm = llm_client or LlmClient(endpoint)
     try:
-        completion = llm.complete(
-            prompt, max_tokens=template.max_output_tokens or 2500
-        )
+        outcomes = _run_batches(llm, spec, template, batches, on_batch)
     finally:
         if owns:
             llm.close()
 
+    done = [o for o in outcomes if o.extraction is not None]
+    if not done:
+        errors = [o.error for o in outcomes if o.error]
+        raise LlmError(
+            f"all {len(batches)} generation batches failed. First error: "
+            f"{errors[0] if errors else 'unknown'}"
+        )
+
+    extraction = _merge_extractions(done, len(batches))
+    first = done[0].completion
+
     return QueryResult(
-        answer=completion.text,
+        answer=extraction.raw_answer,
         sources=sources,
         rewritten_queries=[],
         # The declaration that defined these columns, even though the prompt
@@ -194,13 +379,15 @@ def _generate_locally(
         template=template.id,
         template_version=template.version,
         template_hash=template.hash,
-        model=completion.model,
-        truncated=completion.truncated,
-        elapsed_s=completion.elapsed_s,
+        model=first.model,
+        truncated=any(o.completion.truncated for o in done),
+        # Wall clock, not the sum of the batches: they ran concurrently, so
+        # summing would report a duration that never elapsed.
+        elapsed_s=time.monotonic() - started,
         generator="local",
-        endpoint=completion.endpoint,
-        prompt_hash=prompt_hash,
-    )
+        endpoint=first.endpoint,
+        prompt_hash=_combined_hash([o.prompt_hash for o in done]),
+    ), extraction
 
 
 def run_query(
@@ -209,6 +396,7 @@ def run_query(
     spec: QuerySpec,
     endpoint: Optional[LlmEndpoint] = None,
     llm_client: Optional[LlmClient] = None,
+    on_batch: Optional[Callable[[int, int], None]] = None,
 ) -> RunResult:
     """Execute one curation query and return processed rows.
 
@@ -228,7 +416,12 @@ def run_query(
     body = build_request(spec, template)
 
     if endpoint is not None:
-        result = _generate_locally(client, spec, template, endpoint, llm_client)
+        # The local path extracts per batch, against the passages each prompt
+        # actually numbered, so it hands back the extraction rather than letting
+        # us redo it here against a flat list the markers do not index into.
+        result, extraction = _generate_locally(
+            client, spec, template, endpoint, llm_client, on_batch=on_batch,
+        )
     else:
         result = client.query(
             query=spec.search_text(template),
@@ -239,14 +432,13 @@ def run_query(
             use_graph=False,
             retrieval_mode=spec.retrieval_mode,
         )
-
-    extraction = extract(
-        result.answer,
-        template,
-        result.sources,
-        requested_genes=spec.gene_list,
-        keep_empty=spec.keep_empty,
-    )
+        extraction = extract(
+            result.answer,
+            template,
+            result.sources,
+            requested_genes=spec.gene_list,
+            keep_empty=spec.keep_empty,
+        )
 
     query_id = spec.identity()
     rows = list(extraction.rows)
@@ -259,6 +451,8 @@ def run_query(
         collection=spec.collection_label,
         top_k=spec.top_k,
         retrieval_mode=spec.retrieval_mode,
+        depth=spec.depth,
+        n_batches=extraction.n_batches,
     )
     prov.stamp(rows, record, query_id)
 

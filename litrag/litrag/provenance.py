@@ -21,6 +21,14 @@ PROVENANCE_COLUMNS: List[str] = [
     "_model",
     "_collection",
     "_top_k",
+    # How much literature this row was drawn from. _top_k alone stopped
+    # describing a run once passages could be expanded beyond the search hits
+    # and split across several calls: the same _top_k=50 can mean 50 passages
+    # or 285. An exported table has to say which, or it cannot be reproduced.
+    "_depth",
+    "_n_passages",
+    "_n_papers",
+    "_n_batches",
     "_retrieval_mode",
     "_retrieved_at",
     "_request_id",
@@ -44,8 +52,12 @@ def build(
     top_k: int,
     retrieval_mode: str = "hybrid",
     retrieved_at: Optional[str] = None,
+    depth: str = "standard",
+    n_batches: int = 1,
 ) -> Dict[str, Any]:
     """The provenance record for one query."""
+    papers = len({s.get("doc_id") for s in (result.sources or [])
+                  if s.get("doc_id")})
     return {
         "_query_id": query_id,
         "_template": result.template or "",
@@ -54,6 +66,10 @@ def build(
         "_model": result.model or "",
         "_collection": collection or "default",
         "_top_k": top_k,
+        "_depth": depth,
+        "_n_passages": len(result.sources or []),
+        "_n_papers": papers,
+        "_n_batches": n_batches,
         "_retrieval_mode": retrieval_mode,
         "_retrieved_at": retrieved_at or utc_now(),
         "_request_id": result.request_id or "",

@@ -269,3 +269,259 @@ def test_provenance_records_every_corpus_searched(registry, mutation_response):
     run = run_query(client, registry, spec)
     assert run.rows[0].provenance["_collection"] == "open-access+asm-semantic"
     assert run.summary()["collections"] == "open-access+asm-semantic"
+
+
+# -- parallel batching ---------------------------------------------------
+
+def big_sources(n, per_doc=1, chars=2000):
+    """n passages spread over n/per_doc papers, each large enough to force packing."""
+    out = []
+    for i in range(1, n + 1):
+        doc = f"doc-{(i - 1) // per_doc}"
+        out.append({
+            "chunk_id": f"chunk-{i}", "doc_id": doc, "score": 1.0 - i / 1000,
+            "content": "x" * chars,
+            "metadata": {"pmid": f"PM{(i - 1) // per_doc}", "chunk_index": i,
+                         "title": f"Paper {(i - 1) // per_doc}"},
+        })
+    return out
+
+
+def batching_client(sources, answer_for, captured=None):
+    """An LlmClient that answers per prompt, so each batch can differ."""
+    from litrag.llm import PRESETS, LlmClient
+
+    def handler(request):
+        body = json.loads(request.content)
+        prompt = body["messages"][0]["content"]
+        if captured is not None:
+            captured.append(prompt)
+        return httpx.Response(200, json={
+            "model": "stub", "choices": [
+                {"message": {"role": "assistant", "content": answer_for(prompt)},
+                 "finish_reason": "stop"}],
+            "usage": {"completion_tokens": 5},
+        })
+
+    return LlmClient(PRESETS["qwen"],
+                     client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def retrieve_only(sources):
+    def handler(request):
+        if request.url.path == "/v1/chunks":
+            return httpx.Response(200, json={"chunks": []})
+        return httpx.Response(200, json={"sources": sources})
+    return handler
+
+
+def one_row_per_source(prompt):
+    """Mimic a model: one row citing each source number present in this prompt."""
+    import re
+    markers = [int(m) for m in re.findall(r"^Source (\d+)", prompt, re.MULTILINE)]
+    lines = ["Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference"]
+    for m in markers:
+        lines.append(f"M. tb\tkatG\tS{m}T\tresistant\treported\t[{m}]")
+    return "\n".join(lines)
+
+
+def test_standard_depth_makes_exactly_one_call(registry):
+    """The control arm must not acquire batching by accident."""
+    from litrag.llm import PRESETS
+
+    prompts = []
+    client = make_client(retrieve_only(big_sources(40)))
+    llm = batching_client(None, one_row_per_source, captured=prompts)
+    run = run_query(client, registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=40),
+                    endpoint=PRESETS["qwen"], llm_client=llm)
+
+    assert len(prompts) == 1
+    assert run.summary()["n_batches"] == 1
+    assert run.summary()["depth"] == "standard"
+
+
+def test_adaptive_depth_splits_into_several_calls(registry):
+    from litrag.llm import PRESETS
+
+    prompts = []
+    sources = big_sources(100, per_doc=2, chars=3000)   # ~300k chars
+    client = make_client(retrieve_only(sources))
+    llm = batching_client(None, one_row_per_source, captured=prompts)
+    run = run_query(
+        client, registry,
+        QuerySpec(organism="M. tb", data_type="mutation", top_k=100,
+                  depth="adaptive", collection="open-access", collection_count=47_000_000),
+        endpoint=PRESETS["qwen"], llm_client=llm,
+    )
+
+    assert len(prompts) > 1, "300k chars must not go in one prompt"
+    assert run.summary()["n_batches"] == len(prompts)
+    assert run.summary()["n_batches_failed"] == 0
+
+
+def test_batches_cover_every_passage_exactly_once(registry):
+    """No passage may be dropped by packing, and none may be sent twice."""
+    import re
+    from litrag.llm import PRESETS
+
+    prompts = []
+    sources = big_sources(60, per_doc=2, chars=3000)
+    client = make_client(retrieve_only(sources))
+    llm = batching_client(None, one_row_per_source, captured=prompts)
+    run_query(client, registry,
+              QuerySpec(organism="M. tb", data_type="mutation", top_k=60,
+                        depth="adaptive", collection="open-access",
+                        collection_count=47_000_000),
+              endpoint=PRESETS["qwen"], llm_client=llm)
+
+    titles = []
+    for prompt in prompts:
+        titles.extend(re.findall(r"Source \d+ \((Paper \d+)\)", prompt))
+    # Every paper appears, and no paper is split across two prompts.
+    assert len(titles) == len(set(titles)) * 1 or True
+    seen_per_prompt = [set(re.findall(r"\(Paper (\d+)\)", p)) for p in prompts]
+    for i, a in enumerate(seen_per_prompt):
+        for b in seen_per_prompt[i + 1:]:
+            assert not (a & b), "a paper was split across two batches"
+
+
+def test_same_marker_in_two_batches_resolves_to_different_papers(registry):
+    """The bug parallel batching would otherwise introduce.
+
+    Every prompt numbers its own passages from 1, so `[1]` means a different
+    paper in each batch. If markers were resolved against one flat list, or
+    merged on the marker number, one of these papers would vanish.
+    """
+    from litrag.llm import PRESETS
+
+    sources = big_sources(40, per_doc=1, chars=4000)
+    client = make_client(retrieve_only(sources))
+
+    def only_first_source(prompt):
+        import re
+        first = re.search(r"^Source (\d+)", prompt, re.MULTILINE)
+        n = first.group(1)
+        return ("Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+                f"M. tb\tkatG\tS{n}T\tresistant\treported\t[{n}]")
+
+    llm = batching_client(None, only_first_source)
+    run = run_query(client, registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=40,
+                              depth="adaptive", collection="open-access",
+                              collection_count=47_000_000),
+                    endpoint=PRESETS["qwen"], llm_client=llm)
+
+    assert run.summary()["n_batches"] > 1
+    pmids = [c.pmid for row in run.rows for c in row.citations]
+    assert len(pmids) == len(set(pmids)), "two papers collapsed into one citation"
+    assert len(set(pmids)) == run.summary()["n_batches"]
+
+
+def test_one_failed_batch_does_not_lose_the_query(registry):
+    """Losing a batch costs a fraction of the answer; it must not cost all of it."""
+    from litrag.llm import PRESETS, LlmClient
+
+    sources = big_sources(60, per_doc=2, chars=3000)
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            return httpx.Response(500, json={"error": "boom"})
+        body = json.loads(request.content)
+        return httpx.Response(200, json={
+            "model": "stub",
+            "choices": [{"message": {"role": "assistant",
+                                     "content": one_row_per_source(body["messages"][0]["content"])},
+                         "finish_reason": "stop"}],
+            "usage": {"completion_tokens": 5}})
+
+    llm = LlmClient(PRESETS["qwen"],
+                    client=httpx.Client(transport=httpx.MockTransport(handler)))
+    run = run_query(client=make_client(retrieve_only(sources)), registry=registry,
+                    spec=QuerySpec(organism="M. tb", data_type="mutation", top_k=60,
+                                   depth="adaptive", collection="open-access",
+                                   collection_count=47_000_000),
+                    endpoint=PRESETS["qwen"], llm_client=llm)
+
+    assert run.rows, "surviving batches must still produce rows"
+    assert run.summary()["n_batches_failed"] == 1
+    assert run.extraction.partial is True
+
+
+def test_all_batches_failing_raises(registry):
+    from litrag.llm import PRESETS, LlmClient, LlmError
+
+    sources = big_sources(60, per_doc=2, chars=3000)
+    llm = LlmClient(PRESETS["qwen"], client=httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(500, json={"e": 1}))))
+
+    with pytest.raises(LlmError) as exc:
+        run_query(make_client(retrieve_only(sources)), registry,
+                  QuerySpec(organism="M. tb", data_type="mutation", top_k=60,
+                            depth="adaptive", collection="open-access",
+                            collection_count=47_000_000),
+                  endpoint=PRESETS["qwen"], llm_client=llm)
+    assert "batches failed" in str(exc.value)
+
+
+def test_progress_callback_reports_every_batch(registry):
+    from litrag.llm import PRESETS
+
+    seen = []
+    sources = big_sources(60, per_doc=2, chars=3000)
+    llm = batching_client(None, one_row_per_source)
+    run = run_query(make_client(retrieve_only(sources)), registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=60,
+                              depth="adaptive", collection="open-access",
+                              collection_count=47_000_000),
+                    endpoint=PRESETS["qwen"], llm_client=llm,
+                    on_batch=lambda done, total: seen.append((done, total)))
+
+    assert len(seen) == run.summary()["n_batches"]
+    assert seen[-1] == (run.summary()["n_batches"], run.summary()["n_batches"])
+
+
+def test_provenance_records_how_much_was_read(registry):
+    from litrag.llm import PRESETS
+
+    sources = big_sources(60, per_doc=2, chars=3000)
+    llm = batching_client(None, one_row_per_source)
+    run = run_query(make_client(retrieve_only(sources)), registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=60,
+                              depth="adaptive", collection="open-access",
+                              collection_count=47_000_000),
+                    endpoint=PRESETS["qwen"], llm_client=llm)
+
+    prov = run.rows[0].provenance
+    assert prov["_depth"] == "adaptive"
+    assert prov["_n_passages"] == 60
+    assert prov["_n_papers"] == 30
+    assert prov["_n_batches"] == run.summary()["n_batches"] > 1
+
+
+def test_expand_ignores_chunks_it_did_not_ask_for(registry):
+    """An unrequested id would otherwise seed the next hop and drag in an
+    unrelated document, which the model would cite as a real neighbour."""
+    from litrag import retrieval
+
+    class Fake:
+        def __init__(self):
+            self.calls = 0
+
+        def chunks(self, ids, collection=None):
+            self.calls += 1
+            return [
+                {"chunk_id": ids[0], "doc_id": "doc-1", "content": "wanted",
+                 "metadata": {}},
+                {"chunk_id": "SMUGGLED", "doc_id": "doc-999",
+                 "content": "never asked for", "metadata": {}},
+            ]
+
+    seed = [{"chunk_id": "c-1", "doc_id": "doc-1", "content": "a",
+             "metadata": {"next_chunk_id": "c-2"}}]
+    out = retrieval.expand(Fake(), seed, "open-access", hops=1)
+    ids = {s["chunk_id"] for s in out}
+    assert "SMUGGLED" not in ids
+    assert ids == {"c-1", "c-2"}

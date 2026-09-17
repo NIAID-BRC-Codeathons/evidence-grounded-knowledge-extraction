@@ -203,6 +203,28 @@ class RagStackClient:
         payload, _, _ = self._request("GET", "/v1/collections")
         return payload
 
+    def chunks(
+        self,
+        ids: Sequence[str],
+        collection: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch specific chunks by id -- used to read around a retrieved hit.
+
+        `collection` is not optional in practice. The endpoint scopes the lookup,
+        and for any collection that is not the server's default it returns an
+        empty list rather than an error when the parameter is absent. A caller
+        that forgets it sees "no such chunks", which is indistinguishable from a
+        corpus whose chunks record no neighbours.
+        """
+        wanted = [str(i) for i in ids if i]
+        if not wanted:
+            return []
+        params: Dict[str, Any] = {"ids": ",".join(wanted)}
+        if collection:
+            params["collection"] = collection
+        payload, _, _ = self._request("GET", "/v1/chunks", params=params)
+        return payload.get("chunks", [])
+
     def retrieve(
         self,
         query: str,
