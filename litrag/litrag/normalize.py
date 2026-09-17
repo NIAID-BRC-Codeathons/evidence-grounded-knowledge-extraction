@@ -144,6 +144,12 @@ def normalize_mutation(value: Optional[str], gene: Optional[str] = None) -> str:
             if parsed and parsed != normalize_text(candidate):
                 return parsed
 
+    # Written out in words: "NS1-53 glycine to aspartate" is G53D, and must
+    # merge with a row that wrote G53D.
+    prose = _prose_notation(token)
+    if prose:
+        return prose
+
     three = _THREE_LETTER_SUB.match(token)
     if three:
         ref, pos, alt = three.groups()
@@ -258,3 +264,139 @@ def normalize_glyco_type(value: Optional[str]) -> str:
     key = re.sub(r"\b(glycosylation|glycosylated|glycan|site|linked)\b", " ", key).strip()
     key = _WHITESPACE.sub(" ", key)
     return _GLYCO_TYPES.get(key, normalize_text(cleaned))
+
+
+# Full residue names, for mutations written out in words rather than notation.
+AA_FULL_TO_ONE = {
+    "alanine": "A", "arginine": "R", "asparagine": "N",
+    "aspartate": "D", "aspartic acid": "D", "aspartic-acid": "D",
+    "cysteine": "C", "glutamine": "Q",
+    "glutamate": "E", "glutamic acid": "E", "glutamic-acid": "E",
+    "glycine": "G", "histidine": "H", "isoleucine": "I", "leucine": "L",
+    "lysine": "K", "methionine": "M", "phenylalanine": "F", "proline": "P",
+    "serine": "S", "threonine": "T", "tryptophan": "W", "tyrosine": "Y",
+    "valine": "V", "selenocysteine": "U", "pyrrolysine": "O",
+    "stop": "*", "termination": "*",
+}
+NT_FULL_TO_ONE = {
+    "adenine": "A", "cytosine": "C", "guanine": "G",
+    "thymine": "T", "thymidine": "T", "uracil": "U",
+}
+
+# Papers mix full names and three-letter codes: "glycine to aspartate" and
+# "NS1-53 Gly-to-Asp" are the same substitution written two ways.
+_AA_NAMES: Dict[str, str] = dict(AA_FULL_TO_ONE)
+_AA_NAMES.update(AA_THREE_TO_ONE)
+
+_AA_NAME = "|".join(sorted(_AA_NAMES, key=len, reverse=True))
+_NT_NAME = "|".join(sorted(NT_FULL_TO_ONE, key=len, reverse=True))
+# The separator may be hyphenated -- "Gly-to-Asp" -- as well as spaced.
+_TO = r"(?:\s*[-–]?\s*(?:to|->|-->|→|>|into|by|for)\s*[-–]?\s*)"
+
+# A leading gene, protein or region qualifier: "NS1-53 ...", "5'UTR-57, ...".
+_QUALIFIED_POS = (
+    r"(?:(?P<prefix>[A-Za-z0-9'\u2019/]+(?:\s+[A-Za-z0-9'\u2019/]+){0,2})"
+    r"\s*[-–:]\s*)?(?P<pos>-?\d+)"
+)
+
+# "NS1-53 glycine to aspartate", "glycine 53 to aspartate", "Gly53 to Asp"
+_PROSE_POS_FIRST = re.compile(
+    rf"^{_QUALIFIED_POS}[\s,]*(?P<ref>{_AA_NAME})" + _TO + rf"(?P<alt>{_AA_NAME})$",
+    re.IGNORECASE,
+)
+# "glycine 53 to aspartate", "glycine-53 to aspartate"
+_PROSE_REF_FIRST = re.compile(
+    rf"^(?P<ref>{_AA_NAME})\s*[-–]?\s*(?P<pos>-?\d+)" + _TO + rf"(?P<alt>{_AA_NAME})$",
+    re.IGNORECASE,
+)
+# "position 315 serine to threonine", "codon 315, serine to threonine"
+_PROSE_POSITION_WORD = re.compile(
+    rf"^(?:at\s+)?(?:position|codon|residue|amino acid)\s*(?P<pos>-?\d+)[\s,]*"
+    rf"(?P<ref>{_AA_NAME})" + _TO + rf"(?P<alt>{_AA_NAME})$",
+    re.IGNORECASE,
+)
+# "glycine to aspartate at position 53"
+_PROSE_TRAILING_POS = re.compile(
+    rf"^(?P<ref>{_AA_NAME})" + _TO + rf"(?P<alt>{_AA_NAME})\s*"
+    rf"(?:at\s+)?(?:position|codon|residue)?\s*(?P<pos>-?\d+)$",
+    re.IGNORECASE,
+)
+# Nucleotides written out, or single letters after a UTR-style qualifier:
+# "5'UTR-57, C to T", "57 cytosine to thymine"
+_PROSE_NUCLEOTIDE = re.compile(
+    rf"^{_QUALIFIED_POS}[\s,]*(?P<ref>{_NT_NAME}|[ACGTU])" + _TO + rf"(?P<alt>{_NT_NAME}|[ACGTU])$",
+    re.IGNORECASE,
+)
+
+_PROSE_AA_PATTERNS = (
+    _PROSE_POSITION_WORD, _PROSE_POS_FIRST, _PROSE_REF_FIRST, _PROSE_TRAILING_POS,
+)
+# A qualifier naming a non-coding region means the change is nucleotide.
+_NONCODING = re.compile(r"utr|^5'?nc$|^3'?nc$|promoter|intron", re.IGNORECASE)
+# What a successfully canonicalised mutation looks like: S315T, or n-15T.
+_IS_NOTATION = re.compile(r"^(?:[A-Z]|n)-?\d+[A-Z*]$")
+
+
+def _letter(name: str, table: Dict[str, str]) -> str:
+    key = name.strip().lower()
+    if key in table:
+        return table[key]
+    return key.upper() if len(key) == 1 else ""
+
+
+def _prose_notation(token: str) -> str:
+    """Canonical form for a mutation written in words, or "" if it is not one."""
+    nucleotide = _PROSE_NUCLEOTIDE.match(token)
+    if nucleotide:
+        groups = nucleotide.groupdict()
+        prefix = groups.get("prefix") or ""
+        ref = _letter(groups["ref"], NT_FULL_TO_ONE)
+        alt = _letter(groups["alt"], NT_FULL_TO_ONE)
+        spelled_out = groups["ref"].lower() in NT_FULL_TO_ONE
+        # Single letters are ambiguous -- "C to T" is Cys->Thr as readily as
+        # cytosine->thymine -- so accept them only where the qualifier names a
+        # non-coding region, or the names were spelled out in full.
+        if ref and alt and (spelled_out or _NONCODING.search(prefix)):
+            return f"n{int(groups['pos'])}{alt}"
+
+    for pattern in _PROSE_AA_PATTERNS:
+        match = pattern.match(token)
+        if not match:
+            continue
+        groups = match.groupdict()
+        ref = _letter(groups["ref"], _AA_NAMES)
+        alt = _letter(groups["alt"], _AA_NAMES)
+        if ref and alt:
+            return f"{ref}{int(groups['pos'])}{alt}"
+    return ""
+
+
+def standard_notation(value: Optional[str], gene: Optional[str] = None) -> str:
+    """Convert a mutation written in prose into standard notation.
+
+    "NS1-53 glycine to aspartate" becomes G53D, "position 315 serine to
+    threonine" becomes S315T, "5'UTR-57, C to T" becomes n57T. Returns "" when
+    the text is not a recognisable mutation, so a caller can tell a real
+    conversion from a guess.
+
+    Reported against a dengue vaccine paper whose NS1-53 substitution was
+    written out in words and so never matched anything written as G53D.
+    """
+    cleaned = clean(value)
+    if not cleaned:
+        return ""
+
+    token = re.sub(r"\s+", " ", cleaned.strip(" .;")).strip()
+    # Drop a leading gene qualifier when it repeats the gene we already know.
+    gene_key = normalize_gene(gene)
+    if gene_key:
+        token = re.sub(rf"^{re.escape(gene_key)}\s*[-–:\s]\s*", "", token,
+                       flags=re.IGNORECASE).strip()
+
+    prose = _prose_notation(token)
+    if prose:
+        return prose
+
+    # Already written in a notation the normalizer understands.
+    canonical = normalize_mutation(cleaned, gene)
+    return canonical if _IS_NOTATION.match(canonical) else ""

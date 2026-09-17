@@ -35,6 +35,11 @@ ANNOTATION_COLUMNS: List[str] = [
     # The passages a claim came from -- the unit of evidence a curator checks,
     # and what /v1/chunks?ids= takes to fetch the text back.
     "_chunk_ids", "_markers",
+    # Standard notation for a value the source wrote in prose, so a row can be
+    # matched against one that used notation.
+    "_standard_notation",
+    # What the source actually wrote, where a value was canonicalised.
+    "_as_written",
 ]
 
 

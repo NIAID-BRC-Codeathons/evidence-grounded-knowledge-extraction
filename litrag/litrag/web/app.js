@@ -230,6 +230,14 @@ function renderTable(result) {
       for (const value of [primary, ...alternatives]) {
         if (value && !ordered.includes(value)) ordered.push(value);
       }
+      // A value converted to standard notation is shown in that form alone --
+      // a column is for comparing values, and the prose is not comparable.
+      // The source's wording stays available on hover.
+      const canonical = row.standard && row.standard[column];
+      if (canonical) {
+        return `<td><span class="standard" title="${escapeHtml(primary)}">`
+          + `${escapeHtml(canonical)}</span></td>`;
+      }
       // Any cell may carry a [n]; the Assertion usually does.
       return `<td>${linkMarkers(ordered.join('; '), markerSet)}</td>`;
     }).join('');

@@ -251,6 +251,10 @@ def query(
     no_provenance: bool = typer.Option(False, "--no-provenance", help="Omit provenance columns."),
     keep_empty: bool = typer.Option(False, "--keep-empty", help="Keep evidence-free rows."),
     no_dedupe: bool = typer.Option(False, "--no-dedupe", help="Do not merge duplicate facts."),
+    retrieval_mode: str = typer.Option(
+        "fused", "--retrieval-mode",
+        help="fused (hybrid+bm25, default), hybrid, vector, or bm25.",
+    ),
     show_sources: bool = typer.Option(False, "--show-sources", help="Print retrieved sources."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the request body and exit."),
     llm: str = LLM,
@@ -269,6 +273,7 @@ def query(
         organism=organism, genes=genes, other_terms=other_terms,
         data_type=data_type, top_k=top_k,
         keep_empty=keep_empty, no_dedupe=no_dedupe,
+        retrieval_mode=retrieval_mode,
         backend=endpoint.name if endpoint else SERVER,
     )
 

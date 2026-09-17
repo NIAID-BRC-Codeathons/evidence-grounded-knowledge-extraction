@@ -432,3 +432,94 @@ def test_doi_reference_is_flagged_rather_than_mis_cited(registry, mutation_respo
     row = extract(answer, template, mutation_response["sources"]).rows[0]
     assert row.citations == []
     assert "citation_not_in_sources" in row.flags
+
+
+def test_bare_and_bracketed_ranges_agree(mutation_response):
+    """A bare "1-3" spans three sources exactly as "[1-3]" does.
+
+    Reading only its endpoints dropped the middle citation, so the two forms
+    disagreed about what a range meant.
+    """
+    sources = mutation_response["sources"]
+    bracketed = parse_citations("[1-3]", sources)
+    bare = parse_citations("1-3", sources, bare_numbers=True)
+    markers = lambda cs: [ch.marker for c in cs for ch in c.chunks]
+    assert markers(bracketed) == markers(bare) == [1, 2, 3]
+
+
+def test_a_bare_list_is_not_read_as_a_span(mutation_response):
+    markers = [ch.marker for c in parse_citations("1, 3", mutation_response["sources"],
+                                                  bare_numbers=True) for ch in c.chunks]
+    assert markers == [1, 3]
+
+
+def test_prose_mutation_gets_its_standard_notation(registry, mutation_response):
+    """Reported miss: "NS1-53 glycine to aspartate" was unmatchable against a
+    row that wrote G53D. The source wording is kept; the notation sits beside it.
+    """
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "dengue virus\tNS1\tNS1-53 glycine to aspartate\tN/A\treported\t[1]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    row = result.rows[0]
+    assert row.get("Mutation") == "NS1-53 glycine to aspartate", "source wording kept"
+    assert row.standard["Mutation"] == "G53D"
+
+
+def test_already_standard_values_get_no_badge(registry, mutation_response):
+    """Only a genuine conversion is reported, so the badge means something."""
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "M. tuberculosis\tkatG\tS315T\tINH resistance\tmeasured\t[1]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    assert result.rows[0].standard == {}
+
+
+def test_standard_notation_survives_a_merge(registry, mutation_response):
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "dengue virus\tNS1\tNS1-53 glycine to aspartate\tN/A\treported\t[1]\n"
+        "dengue virus\tNS1\tG53D\tattenuation\tmeasured\t[2]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    merged = dedupe(result.rows, template.id, result.columns)
+    assert len(merged) == 1, "prose and notation are one fact"
+    assert merged[0].standard["Mutation"] == "G53D"
+
+
+def test_standard_notation_round_trips(mutation_response):
+    """Resume rebuilds rows from the sidecar."""
+    from litrag.extract import Row
+    row = Row(values={"Mutation": "NS1-53 glycine to aspartate"},
+              standard={"Mutation": "G53D"})
+    assert Row.from_dict(row.to_dict()).standard == {"Mutation": "G53D"}
+
+
+def test_converted_cell_shows_only_the_notation(registry, mutation_response):
+    """A column is for comparing values, and the prose is not comparable.
+
+    The source's wording stays in `values` and is exported as _as_written.
+    """
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "dengue virus\tNS1\tNS1-53 glycine to aspartate\tN/A\treported\t[1]\n"
+    )
+    row = extract(answer, template, mutation_response["sources"]).rows[0]
+    assert row.display("Mutation") == "G53D"
+    assert row.as_written("Mutation") == "NS1-53 glycine to aspartate"
+
+
+def test_unconverted_cell_is_untouched(registry, mutation_response):
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "M. tuberculosis\tkatG\tkatG deletion\tINH resistance\tmeasured\t[1]\n"
+    )
+    row = extract(answer, template, mutation_response["sources"]).rows[0]
+    assert row.display("Mutation") == "katG deletion"

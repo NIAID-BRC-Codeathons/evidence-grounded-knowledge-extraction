@@ -167,12 +167,27 @@ a.passage:hover, a.marker:hover { background: var(--accent); color: #fff; }
   font-family: ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap;
 }
 
+.standard {
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
+}
+
 .defined {
   border-bottom: 1px dotted var(--muted);
   cursor: help;
 }
-th .defined { border-bottom-color: #9aa8b8; }
-.flag.defined { border-bottom: 1px dotted var(--flag); }
+th .standard {
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
+}
+
+.defined { border-bottom-color: #9aa8b8; }
+.flag.standard {
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
+}
+
+.defined { border-bottom: 1px dotted var(--flag); }
 .defined:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .tooltip {

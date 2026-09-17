@@ -112,3 +112,37 @@ def test_column_rules_skip_templates_without_the_column():
 def test_column_rule_lookup_is_normalized():
     from litrag.prompts import column_rules
     assert column_rules(["assertion"]) == column_rules([" Assertion "])
+
+
+def test_prompt_demands_a_full_sweep_of_sources(registry, mutation_response):
+    """Given 100 sources the model returned four rows, all from one paper's
+    mutagenesis table, ignoring a mutation stated in passing elsewhere."""
+    prompt, _, _ = build_prompt(registry.resolve("mutation"),
+                                mutation_response["sources"], "dengue virus")
+    assert "every numbered source" in prompt
+    assert "in passing" in prompt
+
+
+def test_mutation_column_asks_for_standard_notation(registry, mutation_response):
+    """The missed finding was written "NS1-53 glycine to aspartate", not G53D.
+
+    An earlier version of this rule said to record prose "as the source words
+    them", and the model duly answered with prose -- returning "S to A, W to A,
+    D to A, T to A at positions 114, 115, 180, 301" as one value, which the
+    comma splitter then chopped into seven fragments. The rule has to ask for
+    notation and reject a set packed into one value.
+    """
+    from litrag.prompts import column_rules
+    prompt, _, _ = build_prompt(registry.resolve("mutation"),
+                                mutation_response["sources"], "dengue virus")
+    assert "standard notation" in prompt
+    assert "glycine to aspartate" in prompt and "G53D" in prompt
+    assert "four rows" in prompt
+    assert "as the source words it" in prompt, "prose is still a fallback"
+    assert column_rules(["Mutation"])
+
+
+def test_prose_rule_only_applies_where_there_is_a_mutation_column():
+    from litrag.prompts import column_rules
+    rules = " ".join(column_rules(["Organism", "Strain", "Antibiotic", "MIC"]))
+    assert "glycine to aspartate" not in rules

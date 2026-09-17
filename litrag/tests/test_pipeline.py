@@ -169,7 +169,7 @@ def test_local_path_retrieves_then_generates(registry, mutation_response):
     run = run_query(client, registry, QuerySpec(organism="M. tb", data_type="mutation"),
                     endpoint=PRESETS["qwen"], llm_client=llm)
 
-    assert paths == ["/v1/retrieve"], "must not call /v1/query on the local path"
+    assert set(paths) == {"/v1/retrieve"}, "must not call /v1/query on the local path"
     assert run.rows
     assert run.result.generator == "local"
     assert run.result.model == "Qwen/Qwen3.6-35B-A3B"
@@ -382,3 +382,79 @@ def test_nothing_dropped_when_everything_fits(registry, mutation_response):
     run = run_query(client, registry,
                     QuerySpec(organism="M. tb", data_type="mutation", top_k=6))
     assert run.summary()["sources_dropped"] == 0
+
+
+# -- fused retrieval -----------------------------------------------------
+
+def test_fused_retrieval_queries_both_modes(registry, mutation_response):
+    """Dense retrieval ranks a chunk by what it is about, so a passage that
+    merely mentions an identifier sinks. Measured on the Dengue corpus: BM25
+    ranked the target chunk 12th and hybrid missed it in the top 100 entirely.
+    """
+    from litrag.llm import PRESETS
+
+    modes = []
+
+    def handler(request):
+        modes.append(json.loads(request.content)["retrieval_mode"])
+        return httpx.Response(200, json={"sources": mutation_response["sources"]})
+
+    client = make_client(handler)
+    llm = local_client(mutation_response["answer"], mutation_response["sources"])
+    run_query(client, registry, QuerySpec(organism="M. tb", data_type="mutation"),
+              endpoint=PRESETS["qwen"], llm_client=llm)
+    assert modes == ["hybrid", "bm25"]
+
+
+def test_explicit_mode_makes_one_call(registry, mutation_response):
+    from litrag.llm import PRESETS
+
+    modes = []
+
+    def handler(request):
+        modes.append(json.loads(request.content)["retrieval_mode"])
+        return httpx.Response(200, json={"sources": mutation_response["sources"]})
+
+    client = make_client(handler)
+    llm = local_client(mutation_response["answer"], mutation_response["sources"])
+    run_query(client, registry,
+              QuerySpec(organism="M. tb", data_type="mutation", retrieval_mode="bm25"),
+              endpoint=PRESETS["qwen"], llm_client=llm)
+    assert modes == ["bm25"]
+
+
+def test_hosted_path_never_receives_the_fused_mode(registry, mutation_response):
+    """"fused" is ours; /v1/query retrieves server-side and would reject it."""
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=mutation_response)
+
+    client = make_client(handler)
+    run_query(client, registry, QuerySpec(organism="M. tb", data_type="mutation"))
+    assert bodies[0]["retrieval_mode"] == "hybrid"
+
+
+def test_fusion_keeps_a_hit_found_by_only_one_mode():
+    """The whole point: a BM25-only hit must survive into the fused set."""
+    from litrag.client import fuse_rankings
+    dense = [{"chunk_id": f"d{i}"} for i in range(10)]
+    keyword = [{"chunk_id": "d0"}, {"chunk_id": "target"}]
+    fused = [s["chunk_id"] for s in fuse_rankings([dense, keyword])]
+    assert "target" in fused
+    assert fused.index("target") < fused.index("d9")
+
+
+def test_fusion_rewards_agreement():
+    from litrag.client import fuse_rankings
+    a = [{"chunk_id": "x"}, {"chunk_id": "both"}]
+    b = [{"chunk_id": "y"}, {"chunk_id": "both"}]
+    assert fuse_rankings([a, b])[0]["chunk_id"] == "both"
+
+
+def test_fusion_is_deterministic():
+    from litrag.client import fuse_rankings
+    a = [{"chunk_id": "p"}, {"chunk_id": "q"}]
+    b = [{"chunk_id": "q"}, {"chunk_id": "p"}]
+    assert fuse_rankings([a, b]) == fuse_rankings([a, b])

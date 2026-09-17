@@ -11,22 +11,37 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
+from functools import partial
+
 from . import provenance as prov
 from .client import QueryResult, RagStackClient
-from .llm import LlmClient, LlmEndpoint
-from .prompts import build_prompt
 from .dedup import dedupe
 from .extract import Extraction, Row, extract
+from .llm import LlmClient, LlmEndpoint
+from .prompts import build_prompt
 from .templates import Template, TemplateError, TemplateRegistry
+
+# Retrieval strategy that merges several server-side modes locally.
+FUSED = "fused"
+
+
+def api_retrieval_mode(mode: str) -> str:
+    """The mode to put in an API request.
+
+    "fused" is LitRAG's own strategy -- two retrievals merged locally -- so it
+    is never a value the server understands. Requests that retrieve
+    server-side get the dense half of it.
+    """
+    return "hybrid" if mode == FUSED else mode
+
 
 # Room left for the chat template's own wrapping around our prompt.
 CONTEXT_MARGIN = 1024
 # Never squeeze the retrieved context below this, whatever the output needs.
 MIN_CONTEXT_TOKENS = 4000
 # A table row costs roughly this much to write, so more sources means more
-# output is needed before the answer gets cut off.
-# Measured against Qwen at top_k=100: rows carry verbose assertions and
-# phenotypes, so 110 tokens a source still truncated the table.
+# output is needed before the answer gets cut off. Measured against Qwen at
+# top_k=100: rows carry verbose assertions, so 110 a source still truncated.
 TOKENS_PER_SOURCE = 170
 MAX_OUTPUT_TOKENS = 20000
 
@@ -57,7 +72,9 @@ class QuerySpec:
     # Resolved corpus ids. Several means one multi-collection request, which
     # the API supports up to five.
     collections: List[str] = field(default_factory=list)
-    retrieval_mode: str = "hybrid"
+    # "fused" runs hybrid and bm25 and merges the rankings. Dense retrieval
+    # alone misses passages that mention an identifier without being about it.
+    retrieval_mode: str = "fused"
     max_context_tokens: Optional[int] = None
     keep_empty: bool = False
     no_dedupe: bool = False
@@ -168,7 +185,7 @@ def build_request(spec: QuerySpec, template: Template) -> Dict[str, Any]:
         # The graph backend reports itself disabled on this deployment, so
         # asking for it would only cost latency.
         use_graph=False,
-        retrieval_mode=spec.retrieval_mode,
+        retrieval_mode=api_retrieval_mode(spec.retrieval_mode),
     )
 
 
@@ -186,13 +203,15 @@ def _generate_locally(
     retrieval from generation. The template declaration still defines the
     columns; only the prompt wrapping them is ours, and its hash is recorded.
     """
-    sources = client.retrieve(
+    retrieve = (
+        client.retrieve_fused if spec.retrieval_mode == FUSED
+        else partial(client.retrieve, retrieval_mode=spec.retrieval_mode)
+    )
+    sources = retrieve(
         query=spec.search_text(template),
         top_k=spec.top_k,
         collection=spec.collection,
         collections=spec.collections,
-        use_graph=False,
-        retrieval_mode=spec.retrieval_mode,
     )
 
     # A large top_k produces both a bigger prompt and more rows to write, and
@@ -278,7 +297,7 @@ def run_query(
             template_vars=template_vars,
             collection=spec.collection,
             use_graph=False,
-            retrieval_mode=spec.retrieval_mode,
+            retrieval_mode=api_retrieval_mode(spec.retrieval_mode),
         )
 
     extraction = extract(
@@ -299,7 +318,7 @@ def run_query(
         query_id=query_id,
         collection=spec.collection_label,
         top_k=spec.top_k,
-        retrieval_mode=spec.retrieval_mode,
+        retrieval_mode=api_retrieval_mode(spec.retrieval_mode),
     )
     prov.stamp(rows, record, query_id)
 
