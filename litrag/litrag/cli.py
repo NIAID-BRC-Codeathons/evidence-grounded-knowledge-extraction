@@ -14,6 +14,7 @@ from .batch import BatchDefaults, load_specs, run_batch
 from .client import ApiError, RagStackClient
 from .collections import ALL, CollectionRegistry
 from .config import ConfigError, load_config
+from .envelope import build_envelope
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmClient, LlmError,
                   resolve_endpoint)
 from .pipeline import QuerySpec, build_request, merge_runs, run_query
@@ -220,6 +221,10 @@ def query(
     keep_empty: bool = typer.Option(False, "--keep-empty", help="Keep evidence-free rows."),
     no_dedupe: bool = typer.Option(False, "--no-dedupe", help="Do not merge duplicate facts."),
     show_sources: bool = typer.Option(False, "--show-sources", help="Print retrieved sources."),
+    envelope: Optional[Path] = typer.Option(
+        None, "--envelope",
+        help="Also write the scoring envelope here (input to evaluate.py).",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the request body and exit."),
     llm: str = LLM,
     llm_model: Optional[str] = LLM_MODEL,
@@ -268,6 +273,14 @@ def query(
         f"| {summary['data_type']} v{summary['template_version']} "
         f"| {summary['elapsed_s']}s"
     )
+
+    if envelope is not None:
+        envelope.parent.mkdir(parents=True, exist_ok=True)
+        envelope.write_text(
+            json.dumps(build_envelope(run), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        _info(f"envelope -> {envelope}")
 
     text = formats.render(
         run.extraction, run.rows, fmt,

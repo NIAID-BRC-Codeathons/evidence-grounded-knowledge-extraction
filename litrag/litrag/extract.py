@@ -52,6 +52,13 @@ class Citation:
     resolved: bool = True
     # "marker" for a [n] reference, "author" for a prose name match.
     matched_by: str = "marker"
+    # Passage-level provenance. The project's cite-or-refuse rule requires the
+    # supporting text, not just an identifier: a citation proves where a claim
+    # came from only if the passage it points at can be re-read. Without these,
+    # no quote gate and no unsupported-claim rate can be computed downstream.
+    chunk_id: Optional[str] = None
+    doc_id: Optional[str] = None
+    passage: str = ""
 
     @property
     def url(self) -> Optional[str]:
@@ -341,7 +348,8 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
     if index < 0 or index >= len(sources):
         return Citation(marker=marker, resolved=False)
 
-    meta = sources[index].get("metadata", {}) or {}
+    source = sources[index]
+    meta = source.get("metadata", {}) or {}
     authors = meta.get("authors") or []
     first_author = None
     if isinstance(authors, list) and authors:
@@ -359,6 +367,9 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
         year=_as_str(year),
         title=_as_str(meta.get("title")),
         first_author=first_author,
+        chunk_id=_as_str(source.get("chunk_id")),
+        doc_id=_as_str(source.get("doc_id")),
+        passage=source.get("content") or "",
         resolved=True,
     )
 
