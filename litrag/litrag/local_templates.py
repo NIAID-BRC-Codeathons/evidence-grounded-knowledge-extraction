@@ -74,7 +74,7 @@ BUILTIN: List[Dict[str, Any]] = [
         "output": "table",
         "version": 1,
         "columns": [
-            "Organism", "Protein", "Site", "Glycosylation Type",
+            "Organism", "Protein", "Strain", "Site", "Glycosylation Type",
             "Glycan", "Method", "Effect", "Assertion", "Reference",
         ],
         "max_output_tokens": 3000,
@@ -82,12 +82,20 @@ BUILTIN: List[Dict[str, Any]] = [
         "guidance": [
             "One row per glycosylation site. Never combine several sites, "
             "several proteins, or a range of positions into one row.",
+            "Always name the protein the site is on — HA, NA, Spike, gp120. A "
+            "site without a protein cannot be interpreted, so if a passage "
+            "does not name one, do not report the site.",
+            "Give the strain or isolate whenever the source names one, as it "
+            "is written: A/California/07/2009 (H1N1), H3N2 A/Hong Kong/1/68, "
+            'Wuhan-Hu-1. Use "N/A" when the source reports a site without '
+            "tying it to a strain. Do not infer a strain from the organism.",
             'Write the site as the residue letter plus its position, as the '
             'source numbers it — N234, Asn234, T678. Include the residue; a '
             'bare number does not identify a site.',
             "Use the position numbering the source uses and never renumber. "
             "Glycosite numbering differs between isoforms, strains and "
-            "constructs, so a renumbered position is a different site.",
+            "constructs, so a renumbered position is a different site — which "
+            "is why the strain matters.",
             'Glycosylation Type is N-linked, O-linked or C-mannosylation, and '
             'only when the source states it. Do not infer the type from the '
             'residue alone.',

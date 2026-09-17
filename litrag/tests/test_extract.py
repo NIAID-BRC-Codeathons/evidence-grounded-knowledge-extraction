@@ -631,3 +631,34 @@ def test_unconverted_cell_is_untouched(registry, mutation_response):
     )
     row = extract(answer, template, mutation_response["sources"]).rows[0]
     assert row.display("Mutation") == "katG deletion"
+
+
+def test_gene_matching_is_word_wise(registry, mutation_response):
+    """A gene field reading "hemagglutinin HA" names one protein two ways.
+
+    Splitting only on commas made it a single token, so a row saying "HA" was
+    flagged off-target on every row of a correct result.
+    """
+    from litrag.extract import _gene_keys
+    assert _gene_keys(["hemagglutinin HA"]) & _gene_keys(["HA"])
+    assert _gene_keys(["Spike protein"]) & _gene_keys(["Spike"])
+    # A genuinely different gene must still be caught.
+    assert not (_gene_keys(["katG"]) & _gene_keys(["inhA"]))
+    assert not (_gene_keys(["Spike"]) & _gene_keys(["ACE2"]))
+
+
+def test_neuraminidase_is_not_mistaken_for_a_null(registry, mutation_response):
+    """"NA" is influenza's neuraminidase and also a null marker, so the protein
+    column of every NA row was being silently emptied."""
+    from litrag.normalize import clean, clean_symbol
+    assert clean("NA") == "", "still null in an ordinary column"
+    assert clean_symbol("NA") == "NA", "kept in a gene or protein column"
+    assert clean_symbol("N/A") == "", "an explicit null stays null"
+
+    template = registry.resolve("ppi")
+    answer = (
+        "Pathogen\tProtein A\tProtein B\tInteraction Type\tMethod\tAssertion\tReference\n"
+        "Influenza A virus\tNA\tHA\tbinding\tco-IP\tmeasured\t[1]\n"
+    )
+    row = extract(answer, template, mutation_response["sources"]).rows[0]
+    assert row.get("Protein A") == "NA"

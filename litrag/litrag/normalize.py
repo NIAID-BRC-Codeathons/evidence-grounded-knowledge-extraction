@@ -8,7 +8,7 @@ identity comparison happens on normalized values instead.
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Dict, Optional
 
 # Values the model uses for "nothing here". Canonicalized so a row of them is
 # recognizable as empty regardless of which spelling came back.
@@ -69,6 +69,27 @@ def clean(value: Optional[str]) -> str:
     return "" if collapsed.lower() in NULL_TOKENS else collapsed
 
 
+# Gene symbols that collide with a null marker. Influenza's neuraminidase is
+# "NA" and its NADH-dehydrogenase genes are "ND", both of which clean() would
+# otherwise erase -- silently emptying the protein column of every NA row.
+# "N/A" stays null: only the bare symbol is rescued.
+SYMBOL_NOT_NULL = {"na", "nd"}
+
+
+def clean_symbol(value: Optional[str]) -> str:
+    """clean(), but keeps gene symbols that look like null markers.
+
+    Use for gene and protein columns only. Elsewhere "NA" really does mean
+    not-available and must keep nulling.
+    """
+    if value is None:
+        return ""
+    collapsed = _WHITESPACE.sub(" ", str(value)).strip()
+    if collapsed.lower() in SYMBOL_NOT_NULL:
+        return collapsed
+    return "" if collapsed.lower() in NULL_TOKENS else collapsed
+
+
 def normalize_text(value: Optional[str]) -> str:
     """Case- and punctuation-insensitive key for free-text comparison."""
     cleaned = clean(value).lower()
@@ -83,7 +104,7 @@ def normalize_gene(value: Optional[str]) -> str:
     Strips the decorations that vary between papers -- "gene", "protein",
     italics markers -- so katG, katG gene, and KatG protein agree.
     """
-    cleaned = clean(value)
+    cleaned = clean_symbol(value)
     if not cleaned:
         return ""
     cleaned = re.sub(r"\s*\b(gene|protein|orf|cds)\b\s*$", "", cleaned, flags=re.IGNORECASE)
@@ -400,3 +421,30 @@ def standard_notation(value: Optional[str], gene: Optional[str] = None) -> str:
     # Already written in a notation the normalizer understands.
     canonical = normalize_mutation(cleaned, gene)
     return canonical if _IS_NOTATION.match(canonical) else ""
+
+
+# The residue a linkage type implies. N-linked glycosylation occurs on
+# asparagine by definition, so a bare position under it is an N. O-linked sits
+# on serine or threonine and C-mannosylation on tryptophan -- only the last of
+# those is unambiguous, so only N and W are filled in.
+LINKAGE_RESIDUE = {"N-linked": "N", "C-mannosylation": "W"}
+
+
+def site_with_residue(site: Optional[str], glyco_type: Optional[str] = None) -> str:
+    """Add the residue letter to a site written as a bare position.
+
+    Papers routinely list influenza HA glycosites as "42, 44, 50". The residue
+    is not missing information under an N-linked heading -- it is asparagine by
+    definition -- so it can be supplied. Returns "" when the site already names
+    a residue, or when the linkage does not imply one (O-linked is Ser or Thr).
+    """
+    cleaned = clean(site)
+    if not cleaned:
+        return ""
+    bare = re.fullmatch(r"(-?\d+)", cleaned.strip())
+    if not bare:
+        return ""
+    residue = LINKAGE_RESIDUE.get(normalize_glyco_type(glyco_type))
+    if not residue:
+        return ""
+    return f"{residue}{int(bare.group(1))}"
