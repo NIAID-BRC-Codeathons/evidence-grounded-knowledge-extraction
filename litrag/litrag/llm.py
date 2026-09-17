@@ -73,6 +73,19 @@ PRESETS: Dict[str, LlmEndpoint] = {
 DEFAULT_BACKEND = "qwen"
 
 
+def _preset_for_url(url: str) -> Optional[LlmEndpoint]:
+    """The preset serving this URL, if one does.
+
+    Host names are case-insensitive and a trailing slash means nothing, so
+    compare on a normalised form rather than the string the user typed.
+    """
+    target = url.rstrip("/").lower()
+    for preset in PRESETS.values():
+        if preset.base_url.rstrip("/").lower() == target:
+            return preset
+    return None
+
+
 def resolve_endpoint(
     spec: Optional[str],
     model: Optional[str] = None,
@@ -92,7 +105,15 @@ def resolve_endpoint(
         if "://" not in choice:
             options = ", ".join([SERVER] + sorted(PRESETS))
             raise LlmError(f"unknown backend '{choice}'. Choose from: {options}, or give a URL")
-        preset = LlmEndpoint(name="custom", base_url=choice.rstrip("/"))
+        # Typing a preset's own URL should get that preset. Otherwise the same
+        # server behaves differently depending on how it was named: `--llm qwen`
+        # sends enable_thinking=false and budgets 131k of context, while
+        # `--llm http://mango...:8004/v1` leaves thinking unset -- so the server
+        # defaults it ON -- and sizes batches for 32k. Measured on one query:
+        # 0.87s/1 row by preset against 18.55s/0 rows by URL.
+        preset = _preset_for_url(choice) or LlmEndpoint(
+            name="custom", base_url=choice.rstrip("/")
+        )
 
     return LlmEndpoint(
         name=preset.name,

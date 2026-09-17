@@ -47,6 +47,38 @@ def test_bare_url_is_accepted():
     assert endpoint.model is None
 
 
+def test_a_presets_own_url_resolves_to_that_preset():
+    """Naming a server by URL must not silently give it different settings.
+
+    Left unmapped, the Qwen URL arrives with thinking unset -- which the server
+    reads as on -- and with the default 32k context instead of its real 131k.
+    """
+    endpoint = resolve_endpoint(PRESETS["qwen"].base_url)
+    assert endpoint.name == "qwen"
+    assert endpoint.thinking is False
+    assert endpoint.model == "Qwen/Qwen3.6-35B-A3B"
+    assert endpoint.context_tokens == 131072
+
+
+def test_a_presets_url_is_matched_past_case_and_trailing_slash():
+    endpoint = resolve_endpoint(PRESETS["qwen"].base_url.upper() + "/")
+    assert endpoint.name == "qwen" and endpoint.thinking is False
+
+
+def test_an_unrelated_url_stays_unconfigured():
+    """Only presets carry settings; a third-party server gets no kwargs guessed
+    at it, since an unexpected chat_template_kwargs is a 400 on some servers."""
+    endpoint = resolve_endpoint("http://elsewhere.test:8000/v1")
+    assert endpoint.name == "custom"
+    assert endpoint.thinking is None
+    assert endpoint.model is None
+
+
+def test_an_explicit_override_still_beats_a_matched_preset():
+    endpoint = resolve_endpoint(PRESETS["qwen"].base_url, thinking=True)
+    assert endpoint.thinking is True
+
+
 def test_unknown_backend_lists_choices():
     with pytest.raises(LlmError, match="unknown backend"):
         resolve_endpoint("gpt9")
