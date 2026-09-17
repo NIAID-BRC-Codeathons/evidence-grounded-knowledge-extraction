@@ -133,13 +133,18 @@ def build_envelope(
     # The scorer reads tally.proposed as the denominator of unsupported-claim
     # rate, so it must count every row the model offered, not the survivors.
     proposed = run.extraction.n_rows or len(rows)
-    dropped = run.extraction.dropped_empty + run.extraction.dropped_malformed
+    dropped = (run.extraction.dropped_empty + run.extraction.dropped_malformed
+               + len(run.extraction.quote_refused))
 
     omitted: List[Dict[str, Any]] = []
     for _ in range(run.extraction.dropped_empty):
         omitted.append({"outcome": "omit", "omit_reason": "evidence_free"})
     for _ in range(run.extraction.dropped_malformed):
         omitted.append({"outcome": "omit", "omit_reason": "malformed_row"})
+    # Quote-gate refusals carry omit_reason "quote_rejected", which is the exact
+    # numerator evaluate.py divides by tally.proposed. Without these the
+    # unsupported-claim rate is structurally 0.0 and means nothing.
+    omitted.extend(run.extraction.quote_refused)
 
     identity = run_id or hashlib.sha256(
         f"{spec.identity()}|{result.prompt_hash}|{result.model}".encode("utf-8")

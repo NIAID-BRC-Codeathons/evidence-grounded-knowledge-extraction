@@ -17,6 +17,7 @@ from .llm import LlmClient, LlmEndpoint
 from .prompts import build_prompt
 from .dedup import dedupe
 from .extract import Extraction, Row, extract
+from .quotegate import apply_gate, strip_quote_column, with_quote_column
 from .templates import Template, TemplateError, TemplateRegistry
 
 
@@ -37,6 +38,9 @@ class QuerySpec:
     max_context_tokens: Optional[int] = None
     keep_empty: bool = False
     no_dedupe: bool = False
+    # Cite or refuse: ask for a verbatim quote and drop rows whose quote is not
+    # in the cited passage. Opt-in, so an ungated baseline stays comparable.
+    quote_gate: bool = False
     query_id: str = ""
     # Backend name recorded in the identity hash so switching models
     # invalidates a resume rather than silently reusing the old answer.
@@ -83,6 +87,9 @@ class QuerySpec:
             self.data_type, str(self.top_k),
             ",".join(self.collections) or (self.collection or ""),
             self.backend,
+            # The gate changes both the prompt and which rows survive, so a
+            # gated and an ungated run are not interchangeable on resume.
+            "quoted" if self.quote_gate else "",
         ])
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
@@ -218,6 +225,22 @@ def run_query(
     template = registry.resolve(spec.data_type)
     template_vars = template.validate_vars(spec.template_vars())
 
+    # Cite or refuse needs an extra column in the prompt, which only the local
+    # path can add -- the hosted endpoint owns its own prompt body. Refusing
+    # loudly beats running ungated while the caller believes the gate is on.
+    gate_on = spec.quote_gate and template.is_table
+    if spec.quote_gate and endpoint is None:
+        raise TemplateError(
+            "--quote-gate needs a local generator: the hosted /v1/query path "
+            "owns its prompt, so the quote column cannot be added to it. "
+            "Re-run with --llm argo (or another local backend)."
+        )
+    if spec.quote_gate and not template.is_table:
+        raise TemplateError(
+            f"--quote-gate applies to table data types; '{template.id}' returns prose."
+        )
+    gen_template = with_quote_column(template) if gate_on else template
+
     if template.is_local and endpoint is None:
         raise TemplateError(
             f"data type '{template.id}' is defined by LitRAG, not by the server, "
@@ -228,7 +251,7 @@ def run_query(
     body = build_request(spec, template)
 
     if endpoint is not None:
-        result = _generate_locally(client, spec, template, endpoint, llm_client)
+        result = _generate_locally(client, spec, gen_template, endpoint, llm_client)
     else:
         result = client.query(
             query=spec.search_text(template),
@@ -242,7 +265,7 @@ def run_query(
 
     extraction = extract(
         result.answer,
-        template,
+        gen_template,
         result.sources,
         requested_genes=spec.gene_list,
         keep_empty=spec.keep_empty,
@@ -250,6 +273,16 @@ def run_query(
 
     query_id = spec.identity()
     rows = list(extraction.rows)
+
+    if gate_on:
+        # Gate before dedup: a refused row must not first merge into a kept one
+        # and carry its unsupported claim along inside `variants`.
+        rows, extraction.quote_refused = apply_gate(rows)
+        extraction.columns = strip_quote_column(extraction.columns, rows)
+        # extraction.rows deliberately keeps every parsed row, refused ones
+        # included: it is the "proposed" denominator the unsupported-claim rate
+        # divides by, so pruning it here would hide the refusals from the metric.
+
     if extraction.is_table and not spec.no_dedupe:
         rows = dedupe(rows, template.id, extraction.columns)
 

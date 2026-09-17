@@ -178,6 +178,10 @@ class Extraction:
     unresolved_citations: int = 0
     raw_answer: str = ""
     is_table: bool = True
+    # Rows the quote gate refused, kept rather than discarded: the refusal rate
+    # is the point of cite-or-refuse, and a pipeline that only logs successes
+    # cannot report an unsupported-claim rate at all.
+    quote_refused: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def n_rows(self) -> int:

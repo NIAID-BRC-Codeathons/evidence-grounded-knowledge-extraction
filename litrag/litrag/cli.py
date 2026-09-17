@@ -220,6 +220,11 @@ def query(
     no_provenance: bool = typer.Option(False, "--no-provenance", help="Omit provenance columns."),
     keep_empty: bool = typer.Option(False, "--keep-empty", help="Keep evidence-free rows."),
     no_dedupe: bool = typer.Option(False, "--no-dedupe", help="Do not merge duplicate facts."),
+    quote_gate: bool = typer.Option(
+        False, "--quote-gate",
+        help="Cite or refuse: require a verbatim quote and drop rows whose quote "
+             "is not in the cited passage. Needs a local generator.",
+    ),
     show_sources: bool = typer.Option(False, "--show-sources", help="Print retrieved sources."),
     envelope: Optional[Path] = typer.Option(
         None, "--envelope",
@@ -242,6 +247,7 @@ def query(
         organism=organism, genes=genes, other_terms=other_terms,
         data_type=data_type, top_k=top_k,
         keep_empty=keep_empty, no_dedupe=no_dedupe,
+        quote_gate=quote_gate,
         backend=endpoint.name if endpoint else SERVER,
     )
 
