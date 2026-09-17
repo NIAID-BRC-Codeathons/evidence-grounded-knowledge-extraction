@@ -212,8 +212,11 @@ def test_local_generation_failure_propagates(registry, mutation_response):
     from litrag.llm import PRESETS, LlmClient, LlmError
 
     client = make_client(responder({"sources": mutation_response["sources"]}))
+    # 503 is retryable, so the client makes its full four attempts before giving
+    # up. backoff_s=0 keeps that behaviour while skipping the 7s of sleeping.
     llm = LlmClient(PRESETS["qwen"], client=httpx.Client(
-        transport=httpx.MockTransport(lambda r: httpx.Response(503, text="down"))))
+        transport=httpx.MockTransport(lambda r: httpx.Response(503, text="down"))),
+        backoff_s=0)
 
     with pytest.raises(LlmError):
         run_query(client, registry, QuerySpec(organism="M. tb", data_type="mutation"),
