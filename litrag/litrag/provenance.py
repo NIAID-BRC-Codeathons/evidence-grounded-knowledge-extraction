@@ -30,7 +30,12 @@ PROVENANCE_COLUMNS: List[str] = [
 ]
 
 # Columns describing the extraction itself rather than its origin.
-ANNOTATION_COLUMNS: List[str] = ["_n_support", "_flags", "_citations", "_pmids"]
+ANNOTATION_COLUMNS: List[str] = [
+    "_n_support", "_flags", "_citations", "_pmids",
+    # The passages a claim came from -- the unit of evidence a curator checks,
+    # and what /v1/chunks?ids= takes to fetch the text back.
+    "_chunk_ids", "_markers",
+]
 
 
 def utc_now() -> str:

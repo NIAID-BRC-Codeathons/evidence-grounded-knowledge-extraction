@@ -269,3 +269,116 @@ def test_provenance_records_every_corpus_searched(registry, mutation_response):
     run = run_query(client, registry, spec)
     assert run.rows[0].provenance["_collection"] == "open-access+asm-semantic"
     assert run.summary()["collections"] == "open-access+asm-semantic"
+
+
+# -- context and output budgeting ----------------------------------------
+
+def test_output_scales_with_the_number_of_sources(registry):
+    """The template's cap is sized for the hosted path's own retrieval.
+
+    On the local path we choose top_k, so at 100 sources that cap cut the table
+    off mid-row -- observed live as truncated=True with rows silently missing.
+    """
+    from litrag.pipeline import MAX_OUTPUT_TOKENS, plan_output_tokens
+    template = registry.resolve("mutation")
+    declared = template.max_output_tokens
+
+    assert plan_output_tokens(template, 10) == declared
+    assert plan_output_tokens(template, 100) > declared
+    assert plan_output_tokens(template, 100) <= MAX_OUTPUT_TOKENS
+    # Monotonic: more sources never asks for less room.
+    sizes = [plan_output_tokens(template, n) for n in (1, 10, 25, 50, 100)]
+    assert sizes == sorted(sizes)
+
+
+def test_output_budget_is_capped(registry):
+    from litrag.pipeline import MAX_OUTPUT_TOKENS, plan_output_tokens
+    assert plan_output_tokens(registry.resolve("mutation"), 10_000) == MAX_OUTPUT_TOKENS
+
+
+def test_prose_templates_keep_their_declared_cap(registry):
+    from litrag.pipeline import plan_output_tokens
+    template = registry.resolve("literature-summary")
+    assert plan_output_tokens(template, 100) == (template.max_output_tokens or 2500)
+
+
+def test_prompt_is_bounded_by_the_model_context(registry, mutation_response):
+    """Llama's window is half Qwen's, so the same top_k must truncate context
+    for one and not the other rather than overflowing."""
+    from litrag.llm import PRESETS
+
+    sources = mutation_response["sources"] * 40  # a deliberately huge retrieval
+    captured = {}
+
+    def gen(request):
+        captured["prompt"] = json.loads(request.content)["messages"][0]["content"]
+        captured["max_tokens"] = json.loads(request.content)["max_tokens"]
+        return httpx.Response(200, json={
+            "model": "m", "choices": [{"message": {"content": ""},
+                                       "finish_reason": "stop"}], "usage": {}})
+
+    from litrag.llm import LlmClient
+    client = make_client(responder({"sources": sources}))
+    llm = LlmClient(PRESETS["llama"], client=httpx.Client(transport=httpx.MockTransport(gen)))
+    run_query(client, registry, QuerySpec(organism="M. tb", data_type="mutation", top_k=100),
+              endpoint=PRESETS["llama"], llm_client=llm)
+
+    estimated = len(captured["prompt"]) / 3.5
+    assert estimated + captured["max_tokens"] < PRESETS["llama"].context_tokens
+
+
+def test_truncation_is_surfaced_in_the_summary(registry, mutation_response):
+    """A cut-off table is missing rows and must not look like a full result."""
+    from litrag.llm import PRESETS, LlmClient
+
+    def gen(request):
+        return httpx.Response(200, json={
+            "model": "m",
+            "choices": [{"message": {"content": mutation_response["answer"]},
+                         "finish_reason": "length"}],
+            "usage": {}})
+
+    client = make_client(responder({"sources": mutation_response["sources"]}))
+    llm = LlmClient(PRESETS["qwen"], client=httpx.Client(transport=httpx.MockTransport(gen)))
+    run = run_query(client, registry, QuerySpec(organism="M. tb", data_type="mutation"),
+                    endpoint=PRESETS["qwen"], llm_client=llm)
+    assert run.summary()["truncated"] is True
+
+
+def test_complete_answer_is_not_marked_truncated(registry, mutation_response):
+    client = make_client(responder(mutation_response))
+    run = run_query(client, registry, QuerySpec(organism="M. tb", data_type="mutation"))
+    assert run.summary()["truncated"] is False
+
+
+def test_dropped_sources_are_reported(registry, mutation_response):
+    """A smaller context window silently drops the tail of a large retrieval.
+
+    The caller asked for N sources; if the model only saw fewer, say so.
+    """
+    from litrag.llm import PRESETS, LlmClient
+
+    sources = mutation_response["sources"] * 40
+    def gen(request):
+        return httpx.Response(200, json={
+            "model": "m", "choices": [{"message": {"content": mutation_response["answer"]},
+                                       "finish_reason": "stop"}], "usage": {}})
+
+    client = make_client(responder({"sources": sources}))
+    llm = LlmClient(PRESETS["llama"], client=httpx.Client(transport=httpx.MockTransport(gen)))
+    run = run_query(client, registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=100),
+                    endpoint=PRESETS["llama"], llm_client=llm)
+    summary = run.summary()
+    assert summary["sources_dropped"] > 0
+    assert summary["n_sources"] < len(sources)
+    # Sources kept must be exactly those the model saw, so a citation marker
+    # can never point at a passage that was cut.
+    assert len(run.result.sources) == summary["n_sources"]
+
+
+def test_nothing_dropped_when_everything_fits(registry, mutation_response):
+    client = make_client(responder(mutation_response))
+    run = run_query(client, registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=6))
+    assert run.summary()["sources_dropped"] == 0

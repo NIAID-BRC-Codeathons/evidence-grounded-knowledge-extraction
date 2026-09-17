@@ -14,6 +14,7 @@ from .batch import BatchDefaults, load_specs, run_batch
 from .client import ApiError, RagStackClient
 from .collections import ALL, CollectionRegistry
 from .config import ConfigError, load_config
+from . import glossary as _glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmClient, LlmError,
                   resolve_endpoint)
 from .pipeline import QuerySpec, build_request, merge_runs, run_query
@@ -178,6 +179,37 @@ def templates(
 
 
 @app.command()
+def glossary(
+    term: Optional[str] = typer.Argument(None, help="Show one column or flag."),
+) -> None:
+    """Explain the output columns and the row flags."""
+    import textwrap
+
+    def show(name: str, text: str) -> None:
+        typer.secho(f"{name}", fg=typer.colors.GREEN)
+        for line in textwrap.wrap(text, width=76):
+            typer.echo(f"    {line}")
+
+    if term:
+        text = _glossary.describe_column(term) or _glossary.describe_flag(term)
+        if not text:
+            _err(f"no glossary entry for '{term}'")
+            raise typer.Exit(1)
+        show(term, text)
+        return
+
+    typer.secho("Columns", bold=True)
+    for name, text in _glossary.COLUMNS.items():
+        show(name, text)
+    typer.secho("\nAdded to every table", bold=True)
+    for name, text in _glossary.DERIVED.items():
+        show(name, text)
+    typer.secho("\nRow flags", bold=True)
+    for name, text in _glossary.FLAGS.items():
+        show(name, text)
+
+
+@app.command()
 def collections(
     api_key: Optional[str] = API_KEY,
     base_url: Optional[str] = BASE_URL,
@@ -209,7 +241,7 @@ def query(
         "summary", "--type", "-T",
         help="Data type: ppi, protein-function, mutation, summary (see `litrag templates`).",
     ),
-    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=50, help="Chunks to retrieve."),
+    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=100, help="Chunks to retrieve (1-100)."),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c",
         help=f"Collection id, comma-separated ids, or '{ALL}'. Defaults to PubMed Central.",
@@ -268,6 +300,18 @@ def query(
         f"| {summary['data_type']} v{summary['template_version']} "
         f"| {summary['elapsed_s']}s"
     )
+    if summary.get("sources_dropped"):
+        _err(
+            f"Warning: {summary['sources_dropped']} of {summary['top_k']} retrieved "
+            f"sources did not fit this model's context and were not used. "
+            f"Use --llm qwen for a larger window, or lower --top-k."
+        )
+    if summary.get("truncated"):
+        # A cut-off table is missing rows; it must not look like a full result.
+        _err(
+            "Warning: the model hit its output limit, so this table is "
+            "incomplete. Lower --top-k, or narrow the query."
+        )
 
     text = formats.render(
         run.extraction, run.rows, fmt,
@@ -297,7 +341,7 @@ def batch(
     fmt: str = typer.Option("tsv", "--format", "-f", help="table|tsv|csv|json|jsonl|md."),
     concurrency: int = typer.Option(4, "--concurrency", "-j", min=1, max=16),
     data_type: str = typer.Option("summary", "--type", "-T", help="Default data type for rows that omit one."),
-    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=50),
+    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=100),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c",
         help=f"Collection id, comma-separated ids, or '{ALL}'.",

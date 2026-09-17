@@ -68,6 +68,7 @@ Never commit a key. `.gitignore` already covers `config.toml` and `.env`.
 litrag templates            # data types this tenant offers, with their columns
 litrag collections          # searchable corpora
 litrag version              # client and server versions
+litrag glossary             # what each output column and flag means
 
 litrag query -O "SARS-CoV-2" -g "Spike,ACE2" -T ppi -f tsv -o ppi.tsv
 litrag batch examples/queries.tsv -o curated.tsv -j 4
@@ -82,7 +83,7 @@ litrag serve --port 8080
 | `-g, --genes` | Comma-separated genes/proteins |
 | `-t, --other-terms` | Extra search terms |
 | `-T, --type` | `ppi`, `protein-function`, `mutation`, `summary`, `ast` (see **Data types**) |
-| `-k, --top-k` | Chunks to retrieve (1–50, default 10) |
+| `-k, --top-k` | Chunks to retrieve (1–100, default 10) |
 | `-c, --collection` | Corpus id, comma-separated ids, or `all` (default: PubMed Central) |
 | `-f, --format` | `table`, `tsv`, `csv`, `json`, `jsonl`, `md` |
 | `-o, --output` | Write to a file instead of stdout |
@@ -136,6 +137,7 @@ One is defined by LitRAG:
 | `protein-function` | Organism, Gene Name, Function, Assertion, Reference |
 | `summary` | prose |
 | `ast` *(local)* | Organism, Strain, GenBank Accession, BioSample, Antibiotic, MIC, SIR, Reference |
+| `glycosylation` *(local)* | Organism, Protein, Site, Glycosylation Type, Glycan, Method, Effect, Assertion, Reference |
 
 ### Antimicrobial susceptibility testing (`ast`)
 
@@ -185,6 +187,39 @@ in practice.
 A row with neither an MIC nor an SIR names a strain and a drug without reporting
 a result, and is dropped as evidence-free.
 
+### Glycosylation sites (`glycosylation`)
+
+```bash
+litrag query -O "SARS-CoV-2" -g Spike -T glycosylation -k 12 \
+    -t "N-linked glycosylation site glycan shield site-specific"
+```
+
+```
+Organism    Protein  Site   Type      Glycan         Method                Effect              Assertion
+----------  -------  -----  --------  -------------  --------------------  ------------------  ---------
+SARS-CoV-2  Spike    N234   N-linked  oligomannose   mass spectrometry     antibody shielding  reported
+SARS-CoV-2  Spike    N343   N-linked  fucosylated    molecular dynamics    structural stability predicted
+SARS-CoV-2  Spike    N1194  N-linked  N-acetyl hex.  mass spectrometry                         reported
+```
+
+Aliases: `glycosylation`, `glyco`, `glycan`, `glycosite`. Local generator only,
+for the same reason as `ast`.
+
+**Site numbering is never rewritten.** It differs between isoforms, strains and
+constructs, so `N234` and `N235` stay distinct even where two papers mean the
+same residue. Notation is normalized for merging only: `N234`, `Asn234` and
+`Asn-234` are one site.
+
+Identity is organism + protein + site. Glycan, method and effect are things
+observed *about* a site, not part of what identifies it, so two papers
+characterising `N234` differently merge into one row with both glycans listed.
+`N-linked` and `N-glycosylation` are the same linkage; `N-linked` versus
+`O-linked` on one site is a real conflict and is flagged.
+
+The linkage is recorded only when the source states it — never inferred from the
+residue — and an empty Glycan means the glycan was not characterised, not that
+the site is unglycosylated.
+
 ### Adding your own
 
 Drop declarations into `~/.config/litrag/templates.toml` — no code change:
@@ -217,7 +252,16 @@ litrag query ... -c open-access,asm-semantic        # an explicit set
 |---|---|---|
 | `open-access` *(default)* | PubMed Central (open access) | 47.6M chunks |
 | `asm-semantic` | ASM journals | 6.7M chunks |
+| `Dengue`, `Influenza_2024_2025`, `Glyco` | Team-curated corpora | 382 – 3,064 chunks |
 | `all` | Every corpus in one request | 54.3M chunks |
+
+The list is read from the server, so corpora added by the team appear without a
+code change. Empty indexes are filtered out: the registry also lists a raw
+backing store with no state and no chunks, which cannot serve a query.
+
+`all` is capped by the API at five collections per request. If more than five
+are active, `all` fails and names them rather than silently searching a subset —
+a quiet gap in coverage is worse for curation than an error.
 
 `all` uses the API's `collections` array (capped at five), which stamps each
 source with the corpus it came from — shown as a badge on every source card and
@@ -288,9 +332,11 @@ Slots are validated locally, turning a server 422 into a message before the call
 finding. Rows with nothing outside their subject columns are removed and counted
 in the summary. `--keep-empty` retains them, flagged.
 
-**Citations are resolved to real papers.** `[1]` maps to the first retrieved
-source, expanded to PMID, PMCID, DOI, journal, year, and first author. Chunks of
-one paper collapse to one citation. When the model cites by name instead of by
+**Citations are resolved to real papers, and to the passage behind them.**
+`[1]` maps to the first retrieved source, expanded to PMID, PMCID, DOI, journal,
+year, and first author. Chunks of one paper collapse to one citation, but every
+supporting passage is kept: three chunks of one paper are three pieces of
+evidence, and the chunk is what the model actually read. When the model cites by name instead of by
 number, matching falls back to the **first author only** — `X et al.` means X is
 first, and a looser rule mis-attributes claims. A reference that matches nothing
 is flagged `citation_not_in_sources` rather than guessed at; in practice this
@@ -304,9 +350,53 @@ citations. Protein interactions are matched unordered, since A–B is B–A.
 Promoter positions keep their sign: `c-15t` and `c15t` stay distinct.
 
 **Disagreement stays visible.** When merged rows differ on a non-identity
-column, the fuller value is kept, the alternatives are preserved, and the row is
+column, every value is listed in the cell, separated by `; `, and the row is
 flagged `merged_variants:<column>`. Merging must not present one paper's
-qualifier as every source's finding.
+qualifier as every source's finding. Flat formats (TSV, CSV, Markdown) join the
+same way; JSON keeps the representative value and a structured `variants` list,
+since it can represent both.
+
+### What the columns mean
+
+Every column header in the web UI carries its definition: hover it, or tab to it
+and the tooltip opens. Flag chips explain themselves the same way. The
+definitions live in `litrag/glossary.py`, so the CLI serves the same text:
+
+```bash
+litrag glossary              # every column and flag
+litrag glossary mic          # one term
+litrag glossary off_target_gene
+```
+
+A column with no definition simply gets no tooltip, so a template added
+server-side never shows a wrong one.
+
+### The Assertion column
+
+Server templates publish column names but no value vocabulary, so `Assertion`
+was undefined and each generator invented its own meaning: Qwen echoed the
+instruction to report only what sources state and wrote `Stated` in every row,
+Llama wrote evidence types, and the hosted path writes confidence grades like
+`High confidence`.
+
+On a local generator the column is now constrained to one of five values,
+describing where the claim stands in its source:
+
+| Value | Meaning |
+|---|---|
+| `measured` | The source ran the experiment that shows this |
+| `inferred` | The source concludes it indirectly from its own data |
+| `predicted` | Computational or in silico only |
+| `reported` | The source attributes it to other work, not its own |
+| `disputed` | The source contradicts it or fails to confirm it |
+
+This is an evidence-provenance axis rather than a confidence one: whether a
+source measured or merely relayed a claim is checkable against its text, while a
+model's self-rated confidence is not.
+
+The rule attaches to the column, so it applies to the server's templates too —
+they carry no guidance of their own. **The hosted path is unaffected**: its
+prompt belongs to the operator, and it still emits its own wording.
 
 ### Row flags
 
@@ -321,6 +411,58 @@ qualifier as every source's finding.
 | `missing:<col>` | The column carrying the actual finding is empty (for `ast`, `missing:MIC/SIR`) |
 | `missing:<col>` | The column carrying the actual finding is empty (for `ast`, `missing:MIC/SIR`) |
 | `evidence_free` | Only present with `--keep-empty` |
+
+### Passage-level provenance
+
+Every claim links back to the passage it came from, not just the paper.
+
+In the UI, a `[3]` inside an assertion is a link: clicking it scrolls to that
+retrieved passage and highlights it. Each citation also carries `¶` links, one
+per supporting passage, so a paper cited through two different chunks shows
+`¶1 ¶2`. Source cards display their chunk id and character span.
+
+In exports, `_chunk_ids` and `_markers` accompany `_pmids`, and JSON nests the
+full references:
+
+```json
+{
+  "Mutation": "S315T",
+  "citations": [{
+    "pmid": "19578178", "journal": "J Antimicrob Chemother",
+    "chunks": [
+      {"marker": 3, "chunk_id": "e641b7e2-…", "start_char": 0,    "end_char": 2110},
+      {"marker": 5, "chunk_id": "f09b6a14-…", "start_char": 3596, "end_char": 5400}
+    ]
+  }],
+  "chunk_ids": ["e641b7e2-…", "f09b6a14-…"]
+}
+```
+
+Those ids go straight to the API's `/v1/chunks?ids=` to fetch the passage text
+back, along with its `prev_chunk_id` / `next_chunk_id` neighbours.
+
+### Retrieval depth
+
+`--top-k` goes to 100, and the slider with it. A deeper retrieval finds more,
+but the retrieved context and the answer compete for one context window, so both
+are budgeted: the answer is sized first (scaled to the number of sources, capped
+at 20k tokens), and the prompt gets what is left.
+
+Neither kind of loss is allowed to pass silently.
+
+- If the answer still hits its limit, the run is flagged **truncated** — a
+  cut-off table is missing rows and must not read as a complete result.
+- If the retrieval does not fit the model's window, the tail is dropped and the
+  run reports how many of the requested sources were actually shown. Only those
+  are kept as sources, so a citation marker can never point at a passage the
+  model never saw.
+
+Window sizes differ: Qwen holds 131k tokens and takes all 100 sources; Llama
+holds 60k and shows about 79 of them, which it now says. At `--top-k 100` expect
+roughly 20s rather than 2s.
+
+The hosted path budgets its own context and is unaffected — it accepts
+`top_k: 100` but returns about as many rows as it does at 10.
 
 ### Provenance
 
