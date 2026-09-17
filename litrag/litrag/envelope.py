@@ -112,6 +112,17 @@ def _row_record(index: int, row: Row, columns: Sequence[str]) -> Dict[str, Any]:
         record[field_name(column)] = row.get(column)
     if row.variants:
         record["variants"] = {field_name(k): v for k, v in row.variants.items()}
+
+    # The quote gate's verdict, carried into the envelope rather than left
+    # behind in the run object. Without it a downstream reader falls back to
+    # the head of the chunk -- so an SME adjudication sheet showed the opening
+    # of an abstract instead of the sentence the claim was actually drawn from,
+    # which makes the sheet worse than useless.
+    quote = (row.provenance or {}).get("quote")
+    if quote:
+        record["evidence"]["quote"] = quote
+        record["evidence"]["quote_method"] = row.provenance.get("quote_method")
+        record["evidence"]["quote_score"] = row.provenance.get("quote_score")
     return record
 
 
