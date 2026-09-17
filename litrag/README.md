@@ -403,10 +403,12 @@ prompt belongs to the operator, and it still emits its own wording.
 Papers often write a substitution out in words. A dengue vaccine paper states
 *"NS1-53 glycine to aspartate"*, which matches nothing searching for `G53D`.
 
-Such values are converted, and the cell shows the notation alone — a column is
-for comparing values, and prose is not comparable. The source's wording is not
-lost: it is on hover in the UI and in `_as_written` in exports, next to
-`_standard_notation`.
+The prompt asks for standard notation whenever the source gives a reference
+residue, a position and a variant residue, so most values arrive as `G53D`
+already. Anything still written in prose is converted, and the cell shows the
+notation alone — a column is for comparing values, and prose is not comparable.
+The source's wording is not lost: it is on hover in the UI and in `_as_written`
+in exports, next to `_standard_notation`.
 
 | Written | Standard |
 |---|---|

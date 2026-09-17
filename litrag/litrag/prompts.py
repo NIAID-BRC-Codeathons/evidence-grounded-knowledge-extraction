@@ -76,11 +76,15 @@ ASSERTION_VALUES = ("measured", "inferred", "predicted", "reported", "disputed")
 
 COLUMN_RULES = {
     "mutation": (
-        "Mutations are often written in prose rather than notation. "
-        '"NS1-53 glycine to aspartate" is a mutation, so is "position 315 '
-        'serine to threonine", and so is "the 5\'UTR-57 C to T change". Record '
-        "these as the source words them. A finding does not have to be written "
-        "as S315T to count."
+        "Write every mutation in standard notation -- reference residue, "
+        "position, variant residue, as in S315T or G53D. A source that spells "
+        'it out still counts and still gets notation: "NS1-53 glycine to '
+        'aspartate" is G53D, "position 315 serine to threonine" is S315T, '
+        '"5\'UTR-57, C to T" is c.57T. Only when the source does not give all '
+        "three parts, record the mutation as the source words it. Never write "
+        'a set of mutations as one value such as "S, W, D and T to A at '
+        'positions 114, 115, 180 and 301" -- that is four findings and needs '
+        "four rows: S114A, W115A, D180A, T301A."
     ),
     "assertion": (
         "The Assertion column must contain exactly one of: "

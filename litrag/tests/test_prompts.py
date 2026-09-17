@@ -123,16 +123,22 @@ def test_prompt_demands_a_full_sweep_of_sources(registry, mutation_response):
     assert "in passing" in prompt
 
 
-def test_mutation_column_accepts_prose_notation(registry, mutation_response):
+def test_mutation_column_asks_for_standard_notation(registry, mutation_response):
     """The missed finding was written "NS1-53 glycine to aspartate", not G53D.
 
-    A rule keyed to the column reaches the server's templates too.
+    An earlier version of this rule said to record prose "as the source words
+    them", and the model duly answered with prose -- returning "S to A, W to A,
+    D to A, T to A at positions 114, 115, 180, 301" as one value, which the
+    comma splitter then chopped into seven fragments. The rule has to ask for
+    notation and reject a set packed into one value.
     """
     from litrag.prompts import column_rules
     prompt, _, _ = build_prompt(registry.resolve("mutation"),
                                 mutation_response["sources"], "dengue virus")
-    assert "glycine to aspartate" in prompt
-    assert "does not have to be written" in prompt
+    assert "standard notation" in prompt
+    assert "glycine to aspartate" in prompt and "G53D" in prompt
+    assert "four rows" in prompt
+    assert "as the source words it" in prompt, "prose is still a fallback"
     assert column_rules(["Mutation"])
 
 
