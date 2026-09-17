@@ -444,6 +444,7 @@ non-coding region, since `C to T` is Cys→Thr as readily as cytosine→thymine.
 | `no_citation` | No reference given |
 | `unresolved_citation` | Marker points past the end of the source list |
 | `merged_variants:<col>` | Merged rows disagreed on that column; see `variants` |
+| `column_count_mismatch` | The row had the wrong number of cells; the alignment is a reconstruction |
 | `compound_row` | Several facts in one row that could not be split unambiguously |
 | `missing:<col>` | The column carrying the actual finding is empty (for `ast`, `missing:MIC/SIR`) |
 | `missing:<col>` | The column carrying the actual finding is empty (for `ast`, `missing:MIC/SIR`) |

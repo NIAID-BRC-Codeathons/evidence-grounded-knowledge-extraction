@@ -554,3 +554,80 @@ def test_neuraminidase_is_not_mistaken_for_a_null(registry, mutation_response):
     )
     row = extract(answer, template, mutation_response["sources"]).rows[0]
     assert row.get("Protein A") == "NA"
+
+
+# -- rows with the wrong number of cells ----------------------------------
+
+def _glyco():
+    from litrag.local_templates import declarations
+    from litrag.templates import TemplateRegistry
+    return TemplateRegistry.from_declarations(declarations()).resolve("glycosylation")
+
+
+def test_short_row_is_realigned_not_shifted(mutation_response):
+    """Reported as "something is mixed up between effect and assertion".
+
+    A row missing one cell was mapped positionally, so Glycan took the method,
+    Method the effect, Effect the assertion and Assertion the citation -- with
+    nothing to show anything had gone wrong.
+    """
+    template = _glyco()
+    header = "\t".join(template.columns)
+    short = ("influenza a virus\tHA\tH3N2\tAsn142\tN-linked\t"
+             "mass spectrometry\timmune evasion\tmeasured\t[1]")
+    result = extract(header + "\n" + short + "\n", template, mutation_response["sources"])
+    row = result.rows[0]
+
+    assert row.get("Organism") == "influenza a virus"
+    assert row.get("Site") == "Asn142"
+    assert row.get("Glycosylation Type") == "N-linked"
+    assert row.get("Glycan") == "", "the missing cell is the gap"
+    assert row.get("Method") == "mass spectrometry"
+    assert row.get("Effect") == "immune evasion"
+    assert row.get("Assertion") == "measured"
+    assert "column_count_mismatch" in row.flags
+    assert result.realigned == 1
+
+
+def test_gap_is_found_wherever_it_falls(mutation_response):
+    template = _glyco()
+    header = "\t".join(template.columns)
+    rows = {
+        "strain": ("influenza a virus\tHA\tAsn142\tN-linked\tN/A\t"
+                   "mass spectrometry\timmune evasion\tmeasured\t[1]"),
+        "effect": ("influenza a virus\tHA\tH3N2\tAsn142\tN-linked\tN/A\t"
+                   "mass spectrometry\tmeasured\t[1]"),
+    }
+    for missing, text in rows.items():
+        row = extract(header + "\n" + text + "\n", template,
+                      mutation_response["sources"]).rows[0]
+        assert row.get("Organism") == "influenza a virus", missing
+        assert row.get("Assertion") == "measured", missing
+        assert row.get("Site") == "Asn142", missing
+
+
+def test_complete_row_is_never_touched(mutation_response):
+    template = _glyco()
+    header = "\t".join(template.columns)
+    full = ("influenza a virus\tHA\tH3N2\tAsn142\tN-linked\tN/A\t"
+            "mass spectrometry\timmune evasion\tmeasured\t[1]")
+    result = extract(header + "\n" + full + "\n", template, mutation_response["sources"])
+    assert result.realigned == 0
+    assert result.rows[0].flags == []
+
+
+def test_overlong_row_keeps_its_citation(registry, mutation_response):
+    """A tab inside a value must not push the reference off the end."""
+    template = registry.resolve("mutation")
+    header = "\t".join(template.columns)
+    over = "M. tuberculosis\tkatG\tS315T\thigh\tlevel resistance\tmeasured\t[1]"
+    result = extract(header + "\n" + over + "\n", template, mutation_response["sources"])
+    row = result.rows[0]
+    assert row.citations and row.citations[0].pmid == "40580943"
+    assert "column_count_mismatch" in row.flags
+
+
+def test_realignment_is_reported_as_uncertain(mutation_response):
+    """The alignment is a reconstruction, so the row says so."""
+    from litrag import glossary
+    assert glossary.describe_flag("column_count_mismatch")
