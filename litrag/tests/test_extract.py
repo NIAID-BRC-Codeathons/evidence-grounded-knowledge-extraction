@@ -274,3 +274,35 @@ def test_normal_rows_carry_no_extra_cell_flag(registry, mutation_response):
     result = extract(_overlong_answer(), template, mutation_response["sources"])
     narrow = [r for r in result.rows if r.get("Gene Name") == "katG"]
     assert narrow and not any(f.startswith("extra_cells") for f in narrow[0].flags)
+
+
+# --- security: bounded parsing -----------------------------------------------
+
+def test_absurdly_long_answer_is_truncated_and_flagged(registry, mutation_response):
+    """RESOURCE EXHAUSTION. Every parsed row retains its ~2KB passage, so
+    unbounded rows means unbounded memory. A runaway generation, or a hostile
+    endpoint reached through the SSRF above, should not be able to spend the
+    host's memory. Truncation is flagged, never silent."""
+    from litrag.extract import MAX_TABLE_LINES, extract
+
+    template = registry.resolve("mutation")
+    header = "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference"
+    row = "M. tuberculosis\tkatG\tS315T\tresistance\tclaim\t[1]"
+    flood = "\n".join([header] + [row] * (MAX_TABLE_LINES + 500))
+
+    result = extract(flood, template, mutation_response["sources"])
+    assert result.truncated_answer is True
+    assert result.n_rows <= MAX_TABLE_LINES
+
+
+def test_a_normal_answer_is_not_flagged(registry, mutation_response):
+    from litrag.extract import extract
+    template = registry.resolve("mutation")
+    result = extract(mutation_response["answer"], template, mutation_response["sources"])
+    assert result.truncated_answer is False
+
+
+def test_one_pathological_line_cannot_explode_into_thousands_of_cells(registry, mutation_response):
+    from litrag.extract import MAX_CELLS_PER_ROW, _split_cells
+    cells = _split_cells("a" + "\t" * 50_000 + "b", "\t")
+    assert len(cells) <= MAX_CELLS_PER_ROW + 1

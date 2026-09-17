@@ -129,6 +129,7 @@ class RunResult:
             "dropped_empty": self.extraction.dropped_empty,
             "dropped_malformed": self.extraction.dropped_malformed,
             "dropped_cells": self.extraction.dropped_cells,
+            "truncated_answer": self.extraction.truncated_answer,
             "unresolved_citations": self.extraction.unresolved_citations,
             "model": self.result.model,
             # `generator` only says hosted or not. On a machine where the local

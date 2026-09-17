@@ -107,20 +107,33 @@ PRESETS: Dict[str, LlmEndpoint] = {
 DEFAULT_BACKEND = "qwen"
 
 
+# How far above the installed package to look for the credential helper.
+# Bounded so the search cannot reach shared or world-writable directories.
+HELPER_SEARCH_DEPTH = 6
+
+
 def argo_username() -> str:
     """The Argo credential: an Argonne collaborator username, not a password.
 
-    ARGO_USER wins. Failing that, walk up from the working directory for the
-    codeathon helper script, so a checkout inside the workspace works unconfigured.
+    ARGO_USER wins. Failing that, look for the codeathon helper script near the
+    INSTALLED PACKAGE, so a checkout inside the workspace works unconfigured.
+
+    The search deliberately does NOT start from the working directory. This
+    function executes what it finds, so searching the cwd would mean that
+    running litrag from any directory an attacker can write to would execute
+    their .claude/argo-user.sh. The working directory is chosen by whoever
+    invokes the command and is not a trust boundary; where the package is
+    installed is something the user already trusts by running it.
     """
     user = os.environ.get("ARGO_USER", "").strip()
     if user:
         return user
 
-    directory = Path.cwd().resolve()
-    for candidate in [directory, *directory.parents]:
+    origin = Path(__file__).resolve()
+    for candidate in list(origin.parents)[:HELPER_SEARCH_DEPTH]:
         helper = candidate / ".claude" / "argo-user.sh"
-        if helper.is_file() and os.access(helper, os.X_OK):
+        if (helper.is_file() and not helper.is_symlink()
+                and os.access(helper, os.X_OK)):
             try:
                 found = subprocess.run(
                     [str(helper)], capture_output=True, text=True, timeout=10
@@ -163,11 +176,20 @@ def resolve_endpoint(
     spec: Optional[str],
     model: Optional[str] = None,
     thinking: Optional[bool] = None,
+    allow_urls: bool = True,
 ) -> Optional[LlmEndpoint]:
     """Turn a --llm value into an endpoint.
 
-    Returns None for the hosted server path. Accepts a preset name or a bare
-    URL, so an endpoint that is not in PRESETS can still be used.
+    Returns None for the hosted server path. Accepts a preset name, and a bare
+    URL when `allow_urls` is set, so an endpoint not in PRESETS can still be
+    reached from the command line.
+
+    `allow_urls=False` is for callers whose input arrives over HTTP. The web
+    server passes a browser-supplied field straight in here, and this function's
+    result is somewhere the process then POSTs to -- so accepting an arbitrary
+    URL from that path lets anyone who can reach the server use it to probe
+    hosts it can see and they cannot. An operator typing --llm on their own
+    machine is a different trust level from a JSON field off the network.
     """
     choice = (spec or DEFAULT_BACKEND).strip()
     if choice.lower() in {SERVER, "hosted", "ragstack"}:
@@ -175,8 +197,13 @@ def resolve_endpoint(
 
     preset = PRESETS.get(choice.lower())
     if preset is None:
+        options = ", ".join([SERVER] + sorted(PRESETS))
+        if not allow_urls:
+            raise LlmError(
+                f"unknown backend '{choice}'. Choose from: {options}. "
+                f"Arbitrary URLs are only accepted from the command line."
+            )
         if "://" not in choice:
-            options = ", ".join([SERVER] + sorted(PRESETS))
             raise LlmError(f"unknown backend '{choice}'. Choose from: {options}, or give a URL")
         preset = LlmEndpoint(name="custom", base_url=choice.rstrip("/"))
 

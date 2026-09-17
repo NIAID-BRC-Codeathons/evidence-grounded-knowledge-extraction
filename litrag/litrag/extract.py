@@ -15,6 +15,15 @@ from typing import Any, Dict, List, Optional, Sequence
 from .normalize import clean, is_null, normalize_gene
 from .templates import Template
 
+# Caps on how much generated text will be parsed. A table is a curation result
+# a human reads, so these are far above any legitimate answer -- they exist to
+# bound a runaway generation or a hostile endpoint, not to limit real use.
+# Every parsed row also retains its ~2KB supporting passage, so unbounded rows
+# means unbounded memory.
+MAX_ANSWER_CHARS = 2_000_000
+MAX_TABLE_LINES = 5_000
+MAX_CELLS_PER_ROW = 200
+
 _FENCE = re.compile(r"```[a-zA-Z]*\n?")
 _SEPARATOR_ROW = re.compile(r"^[\s\-|=:+]+$")
 _CITATION_REF = re.compile(r"\[(\d+(?:\s*[-,–]\s*\d+)?)\]")
@@ -210,6 +219,8 @@ class Extraction:
     unresolved_citations: int = 0
     raw_answer: str = ""
     is_table: bool = True
+    # Set when generated output exceeded the parse caps and was cut short.
+    truncated_answer: bool = False
     # Rows the quote gate refused, kept rather than discarded: the refusal rate
     # is the point of cite-or-refuse, and a pipeline that only logs successes
     # cannot report an unsupported-claim rate at all.
@@ -221,7 +232,9 @@ class Extraction:
 
 
 def _split_cells(line: str, delimiter: str) -> List[str]:
-    cells = [c.strip() for c in line.split(delimiter)]
+    # maxsplit bounds a single pathological line: the surplus stays inside the
+    # last cell rather than becoming thousands of them.
+    cells = [c.strip() for c in line.split(delimiter, MAX_CELLS_PER_ROW)]
     if delimiter == "|":
         # Pipe tables have empty leading/trailing cells from the border pipes.
         if cells and not cells[0]:
@@ -509,11 +522,21 @@ def extract_table(
     columns = list(template.columns or [])
     result = Extraction(columns=columns, raw_answer=answer, is_table=True)
 
-    cleaned = _FENCE.sub("", answer or "").replace("```", "").strip()
+    # Truncate before any parsing work. Flagged, never silent: a truncated
+    # table is a partial result and the caller has to be able to know.
+    text = answer or ""
+    if len(text) > MAX_ANSWER_CHARS:
+        result.truncated_answer = True
+        text = text[:MAX_ANSWER_CHARS]
+
+    cleaned = _FENCE.sub("", text).replace("```", "").strip()
     lines = [
         line for line in cleaned.splitlines()
         if line.strip() and not _SEPARATOR_ROW.match(line.strip())
     ]
+    if len(lines) > MAX_TABLE_LINES:
+        result.truncated_answer = True
+        lines = lines[:MAX_TABLE_LINES]
     if not lines:
         return result
 

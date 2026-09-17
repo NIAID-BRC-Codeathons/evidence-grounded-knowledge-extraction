@@ -78,7 +78,9 @@ def _resolve(client: RagStackClient, value):
 
 def _endpoint(body: QueryBody):
     try:
-        return resolve_endpoint(body.llm, model=body.llm_model)
+        # allow_urls=False: this value comes from the browser, and whatever it
+        # resolves to is somewhere this process will POST. Presets only.
+        return resolve_endpoint(body.llm, model=body.llm_model, allow_urls=False)
     except LlmError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

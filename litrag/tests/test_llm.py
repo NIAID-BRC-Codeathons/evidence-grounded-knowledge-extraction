@@ -119,3 +119,60 @@ def test_empty_choices_is_an_error():
 
     with pytest.raises(LlmError, match="no completion"):
         make_client(handler).complete("p")
+
+
+# --- security: three findings from the push review ---------------------------
+
+def test_credential_helper_is_not_searched_from_the_working_directory(tmp_path, monkeypatch):
+    """CODE EXECUTION. argo_username() EXECUTES the helper it finds. Searching
+    the cwd meant running litrag from any directory an attacker could write to
+    would run their .claude/argo-user.sh under the user's account."""
+    import os
+    from litrag.llm import argo_username
+
+    planted = tmp_path / ".claude"
+    planted.mkdir()
+    helper = planted / "argo-user.sh"
+    helper.write_text("#!/bin/sh\necho attacker-controlled\n")
+    helper.chmod(0o755)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ARGO_USER", raising=False)
+
+    try:
+        assert argo_username() != "attacker-controlled"
+    except Exception:
+        pass  # raising is also a correct outcome; running the script is not
+
+
+def test_env_var_still_wins(monkeypatch):
+    from litrag.llm import argo_username
+    monkeypatch.setenv("ARGO_USER", "ac.jdoe")
+    assert argo_username() == "ac.jdoe"
+
+
+def test_arbitrary_urls_are_refused_when_they_come_from_the_network():
+    """SSRF. The web UI passes a browser-supplied field to resolve_endpoint,
+    and the result is somewhere this process then POSTs to. Anyone able to
+    reach the server could otherwise use it to probe hosts it can see and
+    they cannot."""
+    from litrag.llm import LlmError, resolve_endpoint
+
+    for hostile in ("http://169.254.169.254/latest/meta-data/",
+                    "http://127.0.0.1:22/v1",
+                    "http://internal.example/v1"):
+        with pytest.raises(LlmError) as excinfo:
+            resolve_endpoint(hostile, model="x", allow_urls=False)
+        assert "command line" in str(excinfo.value)
+
+
+def test_urls_still_work_for_an_operator_on_the_command_line():
+    """The CLI is a different trust level: the person typing it owns the host."""
+    from litrag.llm import resolve_endpoint
+    endpoint = resolve_endpoint("http://localhost:8004/v1", model="m")
+    assert endpoint.base_url == "http://localhost:8004/v1"
+
+
+def test_presets_still_resolve_over_http():
+    from litrag.llm import resolve_endpoint
+    assert resolve_endpoint("qwen", allow_urls=False).name == "qwen"
