@@ -432,3 +432,22 @@ def test_doi_reference_is_flagged_rather_than_mis_cited(registry, mutation_respo
     row = extract(answer, template, mutation_response["sources"]).rows[0]
     assert row.citations == []
     assert "citation_not_in_sources" in row.flags
+
+
+def test_bare_and_bracketed_ranges_agree(mutation_response):
+    """A bare "1-3" spans three sources exactly as "[1-3]" does.
+
+    Reading only its endpoints dropped the middle citation, so the two forms
+    disagreed about what a range meant.
+    """
+    sources = mutation_response["sources"]
+    bracketed = parse_citations("[1-3]", sources)
+    bare = parse_citations("1-3", sources, bare_numbers=True)
+    markers = lambda cs: [ch.marker for c in cs for ch in c.chunks]
+    assert markers(bracketed) == markers(bare) == [1, 2, 3]
+
+
+def test_a_bare_list_is_not_read_as_a_span(mutation_response):
+    markers = [ch.marker for c in parse_citations("1, 3", mutation_response["sources"],
+                                                  bare_numbers=True) for ch in c.chunks]
+    assert markers == [1, 3]

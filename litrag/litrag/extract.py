@@ -347,6 +347,17 @@ _BARE_NUMBERS = re.compile(r"\d+")
 _BARE_ONLY = re.compile(r"[\d\s,;–-]+")
 
 
+def _expand_span(numbers: List[int], body: str) -> Sequence[int]:
+    """Read "1-3" as a span of three and "1, 2" as a list of two.
+
+    The separator is what distinguishes them. Shared by the bracketed and bare
+    forms so they cannot disagree about what a range means.
+    """
+    if len(numbers) == 2 and re.search(r"[-–]", body):
+        return range(min(numbers), max(numbers) + 1)
+    return numbers
+
+
 def parse_citations(
     text: str,
     sources: Sequence[Dict[str, Any]],
@@ -376,11 +387,7 @@ def parse_citations(
             numbers = [int(p) for p in parts if p.strip()]
         except ValueError:
             continue
-        # "[1-3]" is a span of three papers; "[1, 2]" is two. The separator is
-        # what distinguishes them, so test it explicitly rather than relying on
-        # and/or precedence.
-        is_span = len(numbers) == 2 and re.search(r"[-–]", body) is not None
-        span = range(min(numbers), max(numbers) + 1) if is_span else numbers
+        span = _expand_span(numbers, body)
 
         for marker in span:
             if marker in seen:
@@ -388,9 +395,11 @@ def parse_citations(
             seen.add(marker)
             citations.append(_citation_for(marker, sources))
 
-    if not citations and bare_numbers and _BARE_ONLY.fullmatch((text or "").strip()):
-        for token in _BARE_NUMBERS.findall(text or ""):
-            marker = int(token)
+    if not citations and bare_numbers and _BARE_ONLY.fullmatch((text or "").strip() or "x"):
+        tokens = [int(t) for t in _BARE_NUMBERS.findall(text or "")]
+        # A bare "1-3" spans three sources exactly as "[1-3]" does; reading
+        # only its endpoints would drop the middle citation.
+        for marker in _expand_span(tokens, text or ""):
             if marker in seen or not 1 <= marker <= len(sources):
                 continue
             seen.add(marker)
