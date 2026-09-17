@@ -128,6 +128,7 @@ class RunResult:
             "n_rows": len(self.rows),
             "dropped_empty": self.extraction.dropped_empty,
             "dropped_malformed": self.extraction.dropped_malformed,
+            "dropped_cells": self.extraction.dropped_cells,
             "unresolved_citations": self.extraction.unresolved_citations,
             "model": self.result.model,
             "generator": self.result.generator,

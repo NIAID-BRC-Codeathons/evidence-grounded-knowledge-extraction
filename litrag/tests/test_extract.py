@@ -229,3 +229,48 @@ def test_single_record_table_is_not_rotated(registry, mutation_response):
     result = extract(answer, template, mutation_response["sources"])
     assert result.transposed is False
     assert result.n_rows == 1
+
+
+# --- over-long rows -----------------------------------------------------------
+
+def _overlong_answer():
+    """A mutation table where one row carries an extra, unrequested cell.
+
+    Models do this: they append a column the prompt never asked for, or a value
+    contains an unescaped tab. Either way the row arrives wider than the
+    declaration.
+    """
+    header = "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference"
+    good = "M. tuberculosis\tkatG\tS315T\tINH resistance\tCommon mutation\t[1]"
+    wide = ("M. tuberculosis\tinhA\tc-15t\tINH resistance\tPromoter variant\t[1]"
+            "\t0.87\tHIGH CONFIDENCE")
+    return "\n".join([header, good, wide])
+
+
+def test_overlong_row_is_counted(registry, mutation_response):
+    """Extra cells were dropped with no counter and no flag -- invisible loss."""
+    template = registry.resolve("mutation")
+    result = extract(_overlong_answer(), template, mutation_response["sources"])
+    assert result.dropped_cells == 2, (
+        "two cells beyond the declared columns must be counted, not discarded silently"
+    )
+
+
+def test_overlong_row_is_flagged_and_kept(registry, mutation_response):
+    """Flag rather than drop: the stated columns parsed fine, so the finding
+    is still usable -- but a reviewer must be able to see it was truncated."""
+    template = registry.resolve("mutation")
+    result = extract(_overlong_answer(), template, mutation_response["sources"])
+
+    wide = [r for r in result.rows if r.get("Gene Name") == "inhA"]
+    assert len(wide) == 1, "the row must survive, not be dropped"
+    assert any(f.startswith("extra_cells") for f in wide[0].flags)
+    # The declared columns are still correct; only the surplus was lost.
+    assert wide[0].get("Mutation") == "c-15t"
+
+
+def test_normal_rows_carry_no_extra_cell_flag(registry, mutation_response):
+    template = registry.resolve("mutation")
+    result = extract(_overlong_answer(), template, mutation_response["sources"])
+    narrow = [r for r in result.rows if r.get("Gene Name") == "katG"]
+    assert narrow and not any(f.startswith("extra_cells") for f in narrow[0].flags)
