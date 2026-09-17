@@ -21,6 +21,7 @@ from . import __version__, formats
 from .client import ApiError, RagStackClient
 from .collections import ALL, CollectionRegistry, clean_title
 from .config import ConfigError, load_config
+from . import glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmError, resolve_endpoint)
 from .pipeline import QuerySpec, build_request, run_query
 from .templates import TemplateError, TemplateRegistry
@@ -119,6 +120,8 @@ def templates() -> Dict[str, Any]:
                 # Local types need a local generator; the UI warns rather than
                 # letting the user discover it as a failed query.
                 "local": t.is_local,
+                # Per-column definitions so the table can explain itself.
+                "column_help": glossary.for_columns(t.columns or []),
                 "slots": [
                     {"name": s.name, "required": s.required,
                      "max_len": s.max_len, "label": s.label}
@@ -143,6 +146,12 @@ def backends() -> Dict[str, Any]:
             for name, preset in sorted(PRESETS.items())
         ],
     }
+
+
+@app.get("/api/glossary")
+def glossary_endpoint() -> Dict[str, Any]:
+    """Definitions for the columns the UI adds, and for flag values."""
+    return {"derived": glossary.DERIVED, "flags": glossary.FLAGS}
 
 
 @app.get("/api/collections")

@@ -68,6 +68,7 @@ Never commit a key. `.gitignore` already covers `config.toml` and `.env`.
 litrag templates            # data types this tenant offers, with their columns
 litrag collections          # searchable corpora
 litrag version              # client and server versions
+litrag glossary             # what each output column and flag means
 
 litrag query -O "SARS-CoV-2" -g "Spike,ACE2" -T ppi -f tsv -o ppi.tsv
 litrag batch examples/queries.tsv -o curated.tsv -j 4
@@ -309,6 +310,21 @@ Promoter positions keep their sign: `c-15t` and `c15t` stay distinct.
 column, the fuller value is kept, the alternatives are preserved, and the row is
 flagged `merged_variants:<column>`. Merging must not present one paper's
 qualifier as every source's finding.
+
+### What the columns mean
+
+Every column header in the web UI carries its definition: hover it, or tab to it
+and the tooltip opens. Flag chips explain themselves the same way. The
+definitions live in `litrag/glossary.py`, so the CLI serves the same text:
+
+```bash
+litrag glossary              # every column and flag
+litrag glossary mic          # one term
+litrag glossary off_target_gene
+```
+
+A column with no definition simply gets no tooltip, so a template added
+server-side never shows a wrong one.
 
 ### Row flags
 

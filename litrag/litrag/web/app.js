@@ -1,7 +1,7 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const state = { templates: [], lastBody: null, lastResult: null };
+const state = { templates: [], lastBody: null, lastResult: null, glossary: null };
 
 function escapeHtml(value) {
   if (value === null || value === undefined) return '';
@@ -43,11 +43,13 @@ async function api(path, options) {
 
 async function loadMetadata() {
   try {
-    const [templates, collections, backends] = await Promise.all([
+    const [templates, collections, backends, glossary] = await Promise.all([
       api('/api/templates'),
       api('/api/collections'),
       api('/api/backends'),
+      api('/api/glossary'),
     ]);
+    state.glossary = glossary;
 
     state.templates = templates.templates;
     const typeSelect = $('dataType');
@@ -190,8 +192,20 @@ function renderTable(result) {
   const dataColumns = result.columns.filter(
     (c) => !['reference', 'references', 'citation', 'citations', 'source'].includes(c.toLowerCase())
   );
-  const head = dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
-    + '<th>Support</th><th>Citations</th><th>Flags</th>';
+  const template = currentTemplate() || {};
+  const columnHelp = template.column_help || {};
+  const derived = (state.glossary && state.glossary.derived) || {};
+
+  const th = (label, help) => help
+    ? `<th><span class="defined" data-help="${escapeHtml(help)}"`
+      + ` tabindex="0" role="button" aria-label="${escapeHtml(label)}: ${escapeHtml(help)}">`
+      + `${escapeHtml(label)}</span></th>`
+    : `<th>${escapeHtml(label)}</th>`;
+
+  const head = dataColumns.map((c) => th(c, columnHelp[c])).join('')
+    + th('Support', derived.support)
+    + th('Citations', derived.citations)
+    + th('Flags', derived.flags);
 
   const body = result.rows.map((row) => {
     const markerSet = new Set(
@@ -213,7 +227,14 @@ function renderTable(result) {
 
     const support = `<td class="num"><span class="support">${row.n_support}</span></td>`;
     const cites = `<td>${citationHtml(row.citations)}</td>`;
-    const flags = `<td>${row.flags.map((f) => `<span class="flag">${escapeHtml(f)}</span>`).join('')}</td>`;
+    const flagHelp = (state.glossary && state.glossary.flags) || {};
+    const flags = `<td>${row.flags.map((f) => {
+      const help = flagHelp[f.split(':')[0]];
+      return help
+        ? `<span class="flag defined" data-help="${escapeHtml(help)}" tabindex="0"`
+          + ` aria-label="${escapeHtml(f)}: ${escapeHtml(help)}">${escapeHtml(f)}</span>`
+        : `<span class="flag">${escapeHtml(f)}</span>`;
+    }).join('')}</td>`;
     return `<tr>${cells}${support}${cites}${flags}</tr>`;
   }).join('');
 
@@ -391,7 +412,63 @@ function jumpToSource(marker) {
 }
 
 
+function showTip(target) {
+  const text = target.dataset.help;
+  if (!text) return;
+  let tip = document.getElementById('tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'tooltip';
+    tip.className = 'tooltip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+  }
+  tip.textContent = text;
+  tip.style.visibility = 'hidden';
+  tip.classList.add('visible');
+
+  // Positioned against the viewport rather than nested in the table, whose
+  // overflow-x container would otherwise clip it.
+  const box = target.getBoundingClientRect();
+  const tipBox = tip.getBoundingClientRect();
+  const margin = 8;
+  let left = box.left + box.width / 2 - tipBox.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tipBox.width - margin));
+  let top = box.bottom + 6;
+  if (top + tipBox.height > window.innerHeight - margin) {
+    top = box.top - tipBox.height - 6;
+  }
+  tip.style.left = `${left + window.scrollX}px`;
+  tip.style.top = `${top + window.scrollY}px`;
+  tip.style.visibility = 'visible';
+}
+
+function hideTip() {
+  const tip = document.getElementById('tooltip');
+  if (tip) tip.classList.remove('visible');
+}
+
+
 function init() {
+  // Delegated so rebuilt tables keep working; focus included for keyboard use.
+  document.addEventListener('mouseover', (e) => {
+    const target = e.target.closest('.defined');
+    if (target) showTip(target);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (e.target.closest('.defined')) hideTip();
+  });
+  document.addEventListener('focusin', (e) => {
+    const target = e.target.closest('.defined');
+    if (target) showTip(target);
+  });
+  document.addEventListener('focusout', (e) => {
+    if (e.target.closest('.defined')) hideTip();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideTip();
+  });
+  window.addEventListener('scroll', hideTip, { passive: true });
   // Delegated: the table and source list are rebuilt on every search.
   document.addEventListener('click', (e) => {
     const link = e.target.closest('a.passage, a.marker');

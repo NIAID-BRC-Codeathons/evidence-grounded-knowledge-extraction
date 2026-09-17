@@ -14,6 +14,7 @@ from .batch import BatchDefaults, load_specs, run_batch
 from .client import ApiError, RagStackClient
 from .collections import ALL, CollectionRegistry
 from .config import ConfigError, load_config
+from . import glossary as _glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmClient, LlmError,
                   resolve_endpoint)
 from .pipeline import QuerySpec, build_request, merge_runs, run_query
@@ -175,6 +176,37 @@ def templates(
         required = [s.name for s in template.slots if s.required]
         optional = [s.name for s in template.slots if not s.required]
         typer.echo(f"    slots:   required={required or '-'} optional={optional or '-'}")
+
+
+@app.command()
+def glossary(
+    term: Optional[str] = typer.Argument(None, help="Show one column or flag."),
+) -> None:
+    """Explain the output columns and the row flags."""
+    import textwrap
+
+    def show(name: str, text: str) -> None:
+        typer.secho(f"{name}", fg=typer.colors.GREEN)
+        for line in textwrap.wrap(text, width=76):
+            typer.echo(f"    {line}")
+
+    if term:
+        text = _glossary.describe_column(term) or _glossary.describe_flag(term)
+        if not text:
+            _err(f"no glossary entry for '{term}'")
+            raise typer.Exit(1)
+        show(term, text)
+        return
+
+    typer.secho("Columns", bold=True)
+    for name, text in _glossary.COLUMNS.items():
+        show(name, text)
+    typer.secho("\nAdded to every table", bold=True)
+    for name, text in _glossary.DERIVED.items():
+        show(name, text)
+    typer.secho("\nRow flags", bold=True)
+    for name, text in _glossary.FLAGS.items():
+        show(name, text)
 
 
 @app.command()
