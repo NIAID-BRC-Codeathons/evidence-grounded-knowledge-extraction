@@ -47,6 +47,43 @@ def plan_output_tokens(template: Template, n_sources: int) -> int:
     return max(declared, min(MAX_OUTPUT_TOKENS, TOKENS_PER_SOURCE * max(1, n_sources)))
 
 
+def preview_generation(spec, template, endpoint) -> Tuple[Dict[str, Any], str]:
+    """What the local generation path will send, and the instructions it builds.
+
+    Shared by the CLI's --dry-run and the API's /api/request. They used to hold
+    a copy each and had already drifted: both hardcoded the template's declared
+    cap as max_tokens, which under-reports a 100-source table sevenfold.
+
+    A preview has not retrieved anything, so top_k -- what retrieval returns at
+    standard depth -- is the honest basis for the estimate. The real run sizes
+    the budget from what actually came back, and expanding depths return more.
+    """
+    from .prompts import build_prompt
+
+    planned = spec.top_k
+    body = {
+        "retrieve": {
+            "endpoint": "/v1/retrieve", "query": spec.search_text(template),
+            "top_k": spec.top_k, "collection": spec.collection,
+        },
+        "generate": {
+            "endpoint": f"{endpoint.base_url}/chat/completions",
+            "model": endpoint.model, "thinking": endpoint.thinking,
+            "max_tokens": plan_output_tokens(template, planned),
+            "max_tokens_basis": f"planned for {planned} sources",
+        },
+    }
+
+    # Placeholder sources purely so the instructions count up to the planned
+    # total. Built against an empty list they read "Valid source numbers are 1
+    # to 0", telling the model no citation is valid -- never what a run sends.
+    prompt, _, _ = build_prompt(
+        template, [{}] * planned, organism=spec.organism, genes=spec.genes,
+        other_terms=spec.other_terms,
+    )
+    return body, prompt.split("\n\n--- LITERATURE CONTEXT ---")[0]
+
+
 @dataclass
 class QuerySpec:
     """What the user asked for, independent of how they asked."""

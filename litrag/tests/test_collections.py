@@ -148,3 +148,34 @@ def test_all_works_at_exactly_the_cap():
         "default": "corpus-0",
     }
     assert len(CollectionRegistry.from_payload(payload).resolve(ALL)) == MAX_PER_REQUEST
+
+
+def payload_with(n):
+    return {"default": "c1", "collections": [
+        {"id": f"c{i}", "state": "active", "count": 100} for i in range(1, n + 1)
+    ]}
+
+
+def test_all_is_offered_while_it_fits_in_one_request():
+    assert CollectionRegistry.from_payload(payload_with(5)).supports_all
+
+
+def test_all_is_withdrawn_once_the_tenant_outgrows_the_cap():
+    """Six searchable collections against a five-per-request API meant every
+    "all" failed. A menu entry that always errors is worse than no entry."""
+    registry = CollectionRegistry.from_payload(payload_with(6))
+    assert not registry.supports_all
+
+
+def test_a_single_collection_needs_no_all():
+    assert not CollectionRegistry.from_payload(payload_with(1)).supports_all
+
+
+def test_unknown_collection_stops_suggesting_all_when_it_cannot_work():
+    registry = CollectionRegistry.from_payload(payload_with(6))
+    try:
+        registry.resolve("nope")
+    except ValueError as exc:
+        assert "'all'" not in str(exc)
+    else:
+        raise AssertionError("an unknown collection must be rejected")

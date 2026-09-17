@@ -12,7 +12,7 @@ import typer
 from . import __version__, formats, retrieval
 from .batch import BatchDefaults, load_specs, run_batch
 from .client import ApiError, RagStackClient
-from .collections import ALL, CollectionRegistry, clean_title
+from .collections import (ALL, MAX_PER_REQUEST, CollectionRegistry, clean_title)
 from .config import ConfigError, load_config
 from . import glossary as _glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmClient, LlmError,
@@ -187,23 +187,15 @@ def _dry_run(spec, template, endpoint) -> None:
         typer.echo(json.dumps(build_request(spec, template), indent=2))
         return
 
-    from .prompts import build_prompt
-    typer.echo(json.dumps({
-        "retrieve": {
-            "endpoint": "/v1/retrieve", "query": spec.search_text(template),
-            "top_k": spec.top_k, "collection": spec.collection,
-        },
-        "generate": {
-            "endpoint": f"{endpoint.base_url}/chat/completions",
-            "model": endpoint.model, "thinking": endpoint.thinking,
-            "max_tokens": template.max_output_tokens or 2500,
-        },
-    }, indent=2))
-    prompt, digest, _ = build_prompt(
-        template, [], organism=spec.organism, genes=spec.genes,
-        other_terms=spec.other_terms,
-    )
-    typer.echo(f"\n--- prompt (hash {digest}, context omitted) ---\n{prompt}")
+    from .pipeline import preview_generation
+
+    body, instructions = preview_generation(spec, template, endpoint)
+    typer.echo(json.dumps(body, indent=2))
+    # No hash here. It would be the hash of a prompt with no literature in it,
+    # so it could never equal the _prompt_hash a real run records -- an
+    # identifier that never matches is worse than no identifier. Use
+    # _template_hash to check the template instead.
+    typer.echo(f"\n--- prompt instructions (literature context omitted) ---\n{instructions}")
 
 
 @app.command()
@@ -309,10 +301,14 @@ def collections(
         if item.label:
             typer.echo(f"    {item.label}")
 
-    if len(registry) > 1:
+    if registry.supports_all:
         typer.secho(ALL, fg=typer.colors.GREEN, nl=False)
         typer.echo(f"  Search every collection at once "
                    f"({registry.total_count / 1e6:.1f}M chunks)")
+    elif len(registry) > 1:
+        typer.echo(f"\n'{ALL}' is unavailable: {len(registry)} collections, "
+                   f"and the API accepts at most {MAX_PER_REQUEST} per request. "
+                   f"Name up to {MAX_PER_REQUEST} instead.")
 
 
 @app.command()

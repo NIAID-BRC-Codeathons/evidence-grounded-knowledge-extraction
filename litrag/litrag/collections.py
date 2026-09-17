@@ -100,6 +100,17 @@ class CollectionRegistry:
         return sum(c.count for c in self._collections)
 
     @property
+    def supports_all(self) -> bool:
+        """Whether "all" can be served at this corpus count.
+
+        The tenant grew past the API's five-per-request cap -- there are now six
+        searchable collections -- so "all" began failing every time. Offering it
+        in a menu and then rejecting it is worse than not offering it, so the
+        UI and the CLI ask here instead of assuming more than one means it works.
+        """
+        return 1 < len(self._collections) <= MAX_PER_REQUEST
+
+    @property
     def default(self) -> Optional[str]:
         """PubMed Central when present, else whatever the server prefers."""
         if PREFERRED_DEFAULT in self.ids:
@@ -141,9 +152,11 @@ class CollectionRegistry:
         known = set(self.ids)
         unknown = [part for part in raw if part not in known]
         if unknown:
+            # Only name "all" as a way out when it would actually resolve.
+            suffix = f", or '{ALL}'" if self.supports_all else ""
             raise ValueError(
                 f"unknown collection(s): {', '.join(unknown)}. "
-                f"Available: {', '.join(self.ids)}, or '{ALL}'"
+                f"Available: {', '.join(self.ids)}{suffix}"
             )
         return list(dict.fromkeys(raw))
 

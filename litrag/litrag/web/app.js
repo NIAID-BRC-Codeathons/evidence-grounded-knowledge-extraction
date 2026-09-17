@@ -75,7 +75,9 @@ async function loadMetadata() {
       const option = document.createElement('option');
       option.value = c.id;
       option.textContent = `${c.name} \u00b7 ${c.size_note}`;
-      option.title = c.label || '';
+      // An empty title is not the same as no title: it suppresses the tooltip
+      // the enclosing label would otherwise have supplied.
+      if (c.label) option.title = c.label;
       collectionSelect.appendChild(option);
     });
     if (collections.default) collectionSelect.value = collections.default;
@@ -88,7 +90,7 @@ async function loadMetadata() {
       const option = document.createElement('option');
       option.value = b.id;
       option.textContent = b.label;
-      option.title = b.note || '';
+      if (b.note) option.title = b.note;
       backendSelect.appendChild(option);
     });
     if (backends.default) backendSelect.value = backends.default;
@@ -424,9 +426,12 @@ async function viewRequest() {
     if (preview.prompt) {
       // Generating locally means LitRAG owns the prompt, so unlike the hosted
       // path it can actually be shown.
+      // No hash shown: it would have to be the hash of a prompt with no
+      // literature in it, which can never equal the _prompt_hash a real run
+      // records. Use the template hash above to check the template.
       $('modalNote').textContent =
-        'Generating locally, so this is the full prompt LitRAG sends '
-        + `(hash ${preview.prompt_hash}). Retrieved context is omitted here.`;
+        'Generating locally, so these are the instructions LitRAG sends. '
+        + 'The retrieved passages are appended below them at run time.';
       text += `\n\n--- prompt ---\n${preview.prompt}`;
     } else {
       $('modalNote').textContent =
@@ -504,7 +509,33 @@ function hideTip() {
 }
 
 
+function wireFormHints() {
+  // The "?" chips looked like they explained their control but did nothing:
+  // showTip only fires for `.defined` elements and reads `data-help`, and the
+  // chips had neither. They fell through to the label's native title, which is
+  // a different tooltip with different timing, and over the chip itself often
+  // no tooltip at all -- so the affordance pointed at nothing.
+  //
+  // The text already exists in the label's title. Copy it across rather than
+  // writing it twice and letting the two versions drift.
+  document.querySelectorAll('label .hint').forEach((hint) => {
+    const label = hint.closest('label');
+    const help = label && label.getAttribute('title');
+    if (!help) return;
+    hint.dataset.help = help;
+    hint.classList.add('defined');
+    // focusin is already wired, so this is all a keyboard user needs.
+    hint.tabIndex = 0;
+    // It carries the explanation now, so it is content rather than decoration.
+    hint.removeAttribute('aria-hidden');
+    hint.setAttribute('aria-label', help);
+  });
+}
+
+
 function init() {
+  wireFormHints();
+
   // Delegated so rebuilt tables keep working; focus included for keyboard use.
   document.addEventListener('mouseover', (e) => {
     const target = e.target.closest('.defined');

@@ -99,6 +99,20 @@ def test_unknown_backend_is_a_400(client):
     assert "unknown backend" in response.json()["detail"]
 
 
+def test_the_api_can_name_a_model_and_toggle_thinking():
+    """The CLI could always do this; the API could not, so a caller passing a
+    raw URL had no way to turn thinking off."""
+    endpoint = server._endpoint(server.QueryBody(
+        organism="M. tb", llm="qwen", llm_model="Other/Model", thinking=True,
+    ))
+    assert endpoint.model == "Other/Model" and endpoint.thinking is True
+
+
+def test_omitting_the_new_controls_changes_nothing():
+    plain = server._endpoint(server.QueryBody(organism="M. tb", llm="qwen"))
+    assert plain.model == "Qwen/Qwen3.6-35B-A3B" and plain.thinking is False
+
+
 def test_local_request_preview_shows_the_prompt(client):
     """On the local path LitRAG owns the prompt, so it can honestly show it --
     the one thing the hosted path cannot do."""
@@ -107,7 +121,20 @@ def test_local_request_preview_shows_the_prompt(client):
     }).json()
     assert payload["endpoint"].endswith("/chat/completions")
     assert "TSV" in payload["prompt"]
-    assert len(payload["prompt_hash"]) == 16
+    # No hash: it could only ever be the hash of a prompt with no literature in
+    # it, which never equals the _prompt_hash a real run records.
+    assert "prompt_hash" not in payload
+    assert "1 to 0" not in payload["prompt"]
+
+
+def test_both_previews_agree_on_the_token_budget(client):
+    """The CLI's --dry-run and this endpoint held a copy each and had drifted:
+    one reported 17000 for a hundred-source table while the other said 2500."""
+    payload = client.post("/api/request", json={
+        "organism": "M. tb", "data_type": "mutation", "llm": "qwen", "top_k": 100,
+    }).json()
+    assert payload["body"]["generate"]["max_tokens"] == 17000
+    assert payload["body"]["generate"]["max_tokens_basis"] == "planned for 100 sources"
 
 
 def test_unknown_data_type_is_a_400(client):

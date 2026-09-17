@@ -23,7 +23,7 @@ from .collections import ALL, CollectionRegistry, clean_title
 from .config import ConfigError, load_config
 from . import glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmError, resolve_endpoint)
-from .pipeline import QuerySpec, build_request, run_query
+from .pipeline import (QuerySpec, build_request, preview_generation, run_query)
 from .templates import TemplateError, TemplateRegistry
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -62,6 +62,12 @@ class QueryBody(BaseModel):
     keep_empty: bool = False
     no_dedupe: bool = False
     llm: str = DEFAULT_BACKEND
+    # The CLI has always been able to name a model and toggle thinking; the API
+    # could not, so a caller passing a raw URL had no way to turn thinking off.
+    # Both default to None, which means "whatever the resolved backend says" --
+    # so omitting them behaves exactly as before.
+    llm_model: Optional[str] = None
+    thinking: Optional[bool] = None
     # How much of the literature to read. See retrieval.plan; "standard" is the
     # original one-call behaviour and stays the default so nothing gets slower
     # or more expensive without being asked for.
@@ -78,7 +84,7 @@ def _resolve(client: RagStackClient, value):
 
 def _endpoint(body: QueryBody):
     try:
-        return resolve_endpoint(body.llm)
+        return resolve_endpoint(body.llm, model=body.llm_model, thinking=body.thinking)
     except LlmError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -204,7 +210,7 @@ def collections() -> Dict[str, Any]:
         }
         for c in registry
     ]
-    if len(registry) > 1:
+    if registry.supports_all:
         items.append({
             "id": ALL,
             "name": "All collections",
@@ -245,25 +251,15 @@ def preview_request(body: QueryBody) -> Dict[str, Any]:
                     "template": declaration,
                 }
 
-            from .prompts import build_prompt
-            prompt, digest, _ = build_prompt(
-                template, [], organism=spec.organism, genes=spec.genes,
-                other_terms=spec.other_terms,
-            )
+            body_preview, instructions = preview_generation(spec, template, endpoint)
             return {
                 "endpoint": f"{endpoint.base_url}/chat/completions",
-                "body": {
-                    "retrieve": {"endpoint": "/v1/retrieve",
-                                 "query": spec.search_text(template),
-                                 "top_k": spec.top_k,
-                                 "collection": spec.collection},
-                    "generate": {"model": endpoint.model,
-                                 "thinking": endpoint.thinking,
-                                 "max_tokens": template.max_output_tokens or 2500},
-                },
+                "body": body_preview,
                 "template": declaration,
-                "prompt": prompt,
-                "prompt_hash": digest,
+                "prompt": instructions,
+                # No prompt_hash. It hashed a prompt with no literature in it,
+                # so it could never equal the _prompt_hash a real run records.
+                # The template hash above is the identifier that does match.
             }
         except TemplateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

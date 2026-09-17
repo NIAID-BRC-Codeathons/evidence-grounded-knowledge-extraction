@@ -212,4 +212,8 @@ th .defined { border-bottom-color: #9aa8b8; }
   font-size: 10px; font-weight: 700; text-align: center;
   cursor: help;
 }
+/* The chip opts into the shared tooltip by also being `.defined`, but it is a
+   circle -- the dotted underline that marks defined words in prose would read
+   as a smudge under it. */
+.hint.defined { border-bottom: none; }
 th[title] { cursor: help; text-decoration: underline dotted 1px; text-underline-offset: 3px; }
