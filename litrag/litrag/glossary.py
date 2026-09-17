@@ -149,6 +149,12 @@ FLAGS: Dict[str, str] = {
         "shown and the alternatives are listed underneath, so a single paper's "
         "wording is never presented as every source's finding."
     ),
+    "column_count_mismatch": (
+        "The source row did not have one value per column, so the alignment "
+        "shown is a reconstruction rather than a reading. It was fitted using "
+        "the columns whose shape is known — the assertion vocabulary and the "
+        "citation — but the rest could be off by one. Worth checking by hand."
+    ),
     "compound_row": (
         "The source packed several findings into one row and they could not be "
         "split apart unambiguously. Worth reading by hand."

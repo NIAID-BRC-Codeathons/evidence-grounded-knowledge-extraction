@@ -286,6 +286,8 @@ class Extraction:
     dropped_empty: int = 0
     dropped_malformed: int = 0
     split_compound: int = 0
+    # Rows whose cell count did not match the columns.
+    realigned: int = 0
     # True when the model emitted the table rotated and it was repaired.
     transposed: bool = False
     unresolved_citations: int = 0
@@ -354,6 +356,94 @@ def _maybe_transpose(
         if any(cell.strip() for cell in record):
             rotated.append(record)
     return (rotated, True) if rotated else (rows, False)
+
+
+# A citation cell: "[3]", "3, 5", or a prose reference naming an author.
+_CITATION_SHAPED = re.compile(r"^\s*(?:\[\d+\]|[\d\s,;–-]+|.*\b(?:et al|doi|pmid)\b.*)\s*$",
+                              re.IGNORECASE)
+
+
+def _alignment_score(cells: Sequence[str], columns: Sequence[str]) -> int:
+    """How well a candidate alignment fits the columns whose shape we know.
+
+    Assertion has a closed vocabulary and Reference holds a citation, so those
+    two anchor the tail of a row. Everything else is free text and cannot
+    vouch for its own position.
+    """
+    from .normalize import LINKAGE_RESIDUE, normalize_glyco_type, normalize_sir
+    from .prompts import ASSERTION_VALUES
+
+    linkages = set(LINKAGE_RESIDUE) | {"O-linked"}
+    score = 0
+    for index, column in enumerate(columns):
+        if index >= len(cells):
+            continue
+        value = cells[index].strip()
+        key = column.strip().lower()
+        if not value:
+            continue
+        if key == "assertion":
+            score += 2 if value.lower() in ASSERTION_VALUES else -2
+        elif key in _REFERENCE_COLUMNS:
+            score += 2 if _CITATION_SHAPED.match(value) else -2
+        elif key in _LINKAGE_COLUMNS:
+            score += 2 if normalize_glyco_type(value) in linkages else -2
+        elif key == "sir":
+            score += 2 if normalize_sir(value) in {"S", "I", "R"} else -2
+        elif key in _SITE_COLUMNS:
+            score += 1 if re.fullmatch(r"(?:[A-Za-z]{1,3})?-?\d+", value) else -1
+        elif key == "mic":
+            score += 1 if re.search(r"\d", value) else -1
+
+    # Every row names an organism, so an alignment that leaves that column
+    # empty has almost certainly shifted. Without this, a gap at the front
+    # scores the same as the real one whenever both fix the tail.
+    for index, column in enumerate(columns):
+        if column.strip().lower() in {"organism", "pathogen", "species"}:
+            if index >= len(cells) or not cells[index].strip():
+                score -= 2
+            break
+    return score
+
+
+def _realign_row(
+    cells: List[str], columns: Sequence[str]
+) -> "tuple[List[str], bool]":
+    """Fit a row that has the wrong number of cells.
+
+    Positional mapping assumes every cell is present. A row missing one in the
+    middle shifts everything after it -- observed as a glycosylation table whose
+    Glycan held the method, Method the effect, Effect the assertion, and
+    Assertion the citation, with nothing to show anything was wrong.
+
+    Which cell went missing cannot be read off the row, so each possible gap is
+    tried and scored against the two columns with a known shape. A gap is used
+    only when it beats plain left-alignment; otherwise the row is left as it is
+    and flagged, because guessing an alignment is worse than admitting to one.
+    """
+    if len(cells) == len(columns):
+        return cells, False
+
+    if len(cells) > len(columns):
+        # A tab inside a value. Fold the overflow back into the last data
+        # column rather than losing the citation off the end.
+        head = list(cells[: len(columns) - 1])
+        head.append(" ".join(cells[len(columns) - 1:]))
+        return head, True
+
+    best = list(cells) + [""] * (len(columns) - len(cells))
+    best_score = _alignment_score(best, columns)
+
+    for gap in range(len(columns)):
+        candidate = list(cells)
+        candidate.insert(gap, "")
+        candidate = candidate[: len(columns)]
+        candidate += [""] * (len(columns) - len(candidate))
+        score = _alignment_score(candidate, columns)
+        if score > best_score:
+            best, best_score = candidate, score
+
+    return best, True
 
 
 def _looks_like_header(cells: Sequence[str], columns: Sequence[str]) -> bool:
@@ -743,6 +833,10 @@ def extract_table(
         if len(cells) < 2:
             result.dropped_malformed += 1
             continue
+
+        cells, misaligned = _realign_row(list(cells), columns)
+        if misaligned:
+            result.realigned += 1
         line = delimiter.join(cells)
 
         parsed = {
@@ -760,6 +854,10 @@ def extract_table(
 
         for values in expanded:
             flags: List[str] = []
+            if misaligned:
+                # The row did not have one cell per column, so which value
+                # belongs in which column is a reconstruction, not a reading.
+                flags.append("column_count_mismatch")
             if ambiguous:
                 flags.append("compound_row")
             if _is_evidence_free(values, columns):
