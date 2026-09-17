@@ -158,3 +158,21 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Full-coverage marker: distinguishable from the amber warning chips without
+   relying on colour alone, since "read in full" is a claim worth reading. */
+.chip.ok { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+
+/* The "?" after a label. Signals that hovering explains the control -- a
+   title attribute with nothing to point at is a tooltip nobody discovers. */
+.hint {
+  display: inline-block;
+  width: 13px; height: 13px; line-height: 13px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: var(--border, #d8dee6);
+  color: #55606e;
+  font-size: 10px; font-weight: 700; text-align: center;
+  cursor: help;
+}
+th[title] { cursor: help; text-decoration: underline dotted 1px; text-underline-offset: 3px; }

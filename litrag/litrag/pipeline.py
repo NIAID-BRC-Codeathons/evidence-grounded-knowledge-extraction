@@ -128,6 +128,12 @@ class RunResult:
             "n_papers": len({s.get("doc_id") for s in self.result.sources
                              if s.get("doc_id")}),
             "n_expanded": sum(1 for s in self.result.sources if s.get("expanded")),
+            # Of the papers read, how many were read END TO END. A passage count
+            # says nothing about whether any paper was finished, and a fact
+            # buried mid-paper is invisible to a window however wide.
+            "n_papers_complete": retrieval.summarise(
+                self.result.sources)["n_papers_complete"],
+            "collection_chunks": self.spec.collection_count,
             "depth": self.spec.depth,
             "n_batches": self.extraction.n_batches,
             "n_batches_failed": self.extraction.n_batches_failed,
@@ -415,7 +421,8 @@ def _generate_locally(
         if on_gather:
             # Before any generation, so a caller can say how much is about to be
             # read while the user waits for it.
-            on_gather(retrieval.summarise(sources), len(batches))
+            on_gather(retrieval.summarise(sources, spec.collection_count),
+                      len(batches))
 
         outcomes = _run_batches(llm, spec, template, batches, on_batch)
     finally:

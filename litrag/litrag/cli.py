@@ -112,6 +112,20 @@ def _report_gather(counts: dict, n_batches: int) -> None:
         bits.append(f"in {n_batches} parallel batches")
     _info(" ".join(bits))
 
+    # The honest coverage line. A passage count sounds thorough and says nothing
+    # about whether any paper was finished.
+    complete, papers = counts.get("n_papers_complete", 0), counts["n_papers"]
+    corpus = counts.get("collection_chunks") or 0
+    line = f"  {complete} of {papers} papers read end to end"
+    if complete == 0:
+        line += " -- every paper is a partial window, so a finding buried " \
+                "mid-paper can still be missed (try --depth full)"
+    if corpus:
+        share = 100.0 * counts["n_passages"] / corpus
+        line += (f" | {counts['n_passages']:,} of {corpus:,} chunks in this "
+                 f"collection ({share:.4g}%)")
+    _info(line)
+
 
 def _report_batch(done: int, total: int) -> None:
     if total > 1:

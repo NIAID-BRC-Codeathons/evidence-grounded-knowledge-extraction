@@ -120,8 +120,11 @@ function renderSummary(summary, rowCount) {
     `<span class="chip"><strong>${rowCount}</strong> rows</span>`,
     // Passages and papers are different numbers and the difference is the
     // whole point: ten "sources" was ten fragments of eight papers.
-    `<span class="chip"><strong>${summary.n_sources}</strong> passages</span>`,
-    `<span class="chip"><strong>${summary.n_papers}</strong> papers</span>`,
+    `<span class="chip" title="Passages (chunks) put in front of the model. A passage is a fragment of a paper, not a paper.">` +
+      `<strong>${summary.n_sources}</strong> passages</span>`,
+    `<span class="chip" title="Distinct papers those passages came from. Always fewer than the passage count, because one paper contributes several passages.">` +
+      `<strong>${summary.n_papers}</strong> papers</span>`,
+    coverageChip(summary),
     `<span class="chip">${escapeHtml(summary.data_type)} v${summary.template_version}</span>`,
     `<span class="chip">${escapeHtml(summary.model || '')}</span>`,
     `<span class="chip">${escapeHtml(summary.generator || '')}</span>`,
@@ -165,12 +168,66 @@ function citationHtml(citations) {
   }).join('');
 }
 
+// Which columns are the data type's, and which LitRAG adds. Worth being
+// explicit: a curator reading a table cannot otherwise tell what the model
+// produced from what the tool computed about it.
+function coverageChip(summary) {
+  // The question a passage count cannot answer: was any paper actually read
+  // all the way through? A finding in the middle of a paper is invisible to a
+  // window, however many windows there are.
+  const done = summary.n_papers_complete || 0;
+  const papers = summary.n_papers || 0;
+  const corpus = summary.collection_chunks || 0;
+  let note = `${done} of ${papers} papers were read from start to finish. `;
+  note += done === papers && papers > 0
+    ? 'Nothing in these papers was skipped.'
+    : 'The rest are partial windows, so a finding buried mid-paper can still '
+      + 'be missed. "Full" reading depth reads whole papers.';
+  if (corpus) {
+    const share = 100 * summary.n_sources / corpus;
+    note += ` Across the whole collection: ${summary.n_sources.toLocaleString()}`
+      + ` of ${corpus.toLocaleString()} passages (${share.toPrecision(3)}%).`;
+  }
+  const cls = (papers > 0 && done === papers) ? 'chip ok' : 'chip warn';
+  return `<span class="${cls}" title="${escapeHtml(note)}">`
+    + `<strong>${done}/${papers}</strong> papers read in full</span>`;
+}
+
+const COLUMN_HELP = {
+  // --- Declared by the data-type template on the server; the model fills them.
+  'Organism': 'From the data type. The pathogen this finding is about, as the paper states it.',
+  'Pathogen': 'From the data type. The pathogen this finding is about, as the paper states it.',
+  'Gene Name': 'From the data type. The gene or protein the finding concerns.',
+  'Gene': 'From the data type. The gene or protein the finding concerns.',
+  'Mutation': 'From the data type. The variant, in whatever notation the paper used. Merging is notation-aware, so S315T and Ser315Thr collapse into one row.',
+  'Phenotype': 'From the data type. The observed effect.',
+  'Function': 'From the data type. The function attributed to the gene or protein.',
+  'Assertion': 'From the data type. What the paper claims about this finding.',
+  'Protein A': 'From the data type. One partner in the interaction; A/B order is not meaningful and is merged symmetrically.',
+  'Protein B': 'From the data type. The other partner; A/B order is not meaningful and is merged symmetrically.',
+  'Interaction Type': 'From the data type. The kind of interaction reported.',
+  'Reference': 'From the data type, then rewritten by LitRAG. The model writes a marker like [3], which is only meaningful inside one batch; for multi-batch runs this shows the resolved PMID or DOI instead, because the same [3] means a different paper in each batch.',
+
+  // --- Added by LitRAG, computed after extraction.
+  'Support': 'ADDED BY LITRAG. How many extracted rows merged into this one. Higher means several passages, often several papers, said the same thing. This is the triage signal: rows with support of 1 rest on a single passage and deserve checking first.',
+  'Citations': 'ADDED BY LITRAG. The papers this row resolved to, with PMID or DOI. Resolved per batch against the passages that batch actually saw, so a marker can never point at the wrong paper.',
+  'Flags': 'ADDED BY LITRAG. Problems found while parsing. "citation_not_in_sources" means the model cited something it was not given; "merged_variants" means merged rows disagreed on a non-identity column and both values were kept; "off_target_gene" means the row is about a gene you did not ask for.',
+};
+
+function columnHelp(name) {
+  return COLUMN_HELP[name]
+    || 'Declared by the data type (the server-side template); filled in by the model.';
+}
+
 function renderTable(result) {
   const dataColumns = result.columns.filter(
     (c) => !['reference', 'references', 'citation', 'citations', 'source'].includes(c.toLowerCase())
   );
-  const head = dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
-    + '<th>Support</th><th>Citations</th><th>Flags</th>';
+  const head = dataColumns.map((c) =>
+      `<th title="${escapeHtml(columnHelp(c))}">${escapeHtml(c)}</th>`).join('')
+    + `<th title="${escapeHtml(COLUMN_HELP.Support)}">Support</th>`
+    + `<th title="${escapeHtml(COLUMN_HELP.Citations)}">Citations</th>`
+    + `<th title="${escapeHtml(COLUMN_HELP.Flags)}">Flags</th>`;
 
   const body = result.rows.map((row) => {
     const cells = dataColumns.map((column) => {

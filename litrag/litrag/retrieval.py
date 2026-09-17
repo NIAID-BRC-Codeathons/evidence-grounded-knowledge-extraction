@@ -50,6 +50,18 @@ MAX_CONCURRENCY = 8
 # should be silently spending this much of a shared GPU.
 MAX_BATCHES = 30
 
+# Chunks one document may contribute in "full" mode. Set from measurement, not
+# taste: the two papers in the Dengue collection are ~191 chunks each, and an
+# earlier cap of 120 stopped mid-paper on both -- so "full" completed nothing
+# and the coverage line said so. A cap that silently prevents completion is
+# worse than no completion mode at all.
+MAX_CHUNKS_PER_DOC = 250
+
+# Ceiling across all documents in one run, so "full" on PubMed Central cannot
+# fetch 8 x 250 chunks and spend twenty generation calls. Small curated corpora
+# (Dengue at 382 chunks) still fit entirely underneath it.
+MAX_COMPLETION_CHUNKS = 500
+
 # Measured against both mango models on real prompts: 3.98 chars/token on
 # Qwen3.6, 4.40 on Llama-4-Scout. prompts.CHARS_PER_TOKEN is 3.5, which
 # understates chars per token and therefore OVERstates the token cost -- the
@@ -231,7 +243,9 @@ def expand(client: Any, sources: Sequence[Dict[str, Any]],
 
 def complete_documents(client: Any, sources: Sequence[Dict[str, Any]],
                        collection: Optional[str], max_docs: int = 8,
-                       max_chunks_per_doc: int = 120) -> List[Dict[str, Any]]:
+                       max_chunks_per_doc: int = MAX_CHUNKS_PER_DOC,
+                       max_total: int = MAX_COMPLETION_CHUNKS
+                       ) -> List[Dict[str, Any]]:
     """Read the best-ranked papers end to end, instead of widening every paper.
 
     `expand` walks outward from every hit at once, which spreads a fixed budget
@@ -259,9 +273,13 @@ def complete_documents(client: Any, sources: Sequence[Dict[str, Any]],
     collected = list(sources)
 
     for _, group in ranked:
+        if len(collected) - len(sources) >= max_total:
+            break
         frontier = list(group)
         gathered = len(group)
         while frontier and gathered < max_chunks_per_doc:
+            if len(collected) - len(sources) >= max_total:
+                break
             wanted = _neighbour_ids(frontier, held)[:max_chunks_per_doc]
             if not wanted:
                 break
@@ -392,11 +410,59 @@ def _split(group: Sequence[Dict[str, Any]], max_chars: int) -> List[List[Dict[st
     return pieces
 
 
-def summarise(sources: Sequence[Dict[str, Any]]) -> Dict[str, int]:
-    """Counts worth showing a user: how much was actually read."""
+def is_complete(chunks: Sequence[Dict[str, Any]]) -> bool:
+    """True when these chunks are a whole document, with nothing missing.
+
+    Answers "did we actually read the whole paper, or a window out of it?" --
+    which a passage count alone cannot. Two conditions, both necessary:
+
+    - Both ends are present: the lowest chunk records no `prev_chunk_id` and the
+      highest records no `next_chunk_id`. That is how the corpus marks the start
+      and end of a document.
+    - No gap in between: the chunk_index values form an unbroken run. A window
+      that happens to include the first and last chunk but nothing in the middle
+      is not a complete read.
+
+    Unknown rather than optimistic: a document whose chunks carry no
+    `chunk_index` cannot be verified, so it is reported incomplete.
+    """
+    indexed = [c for c in chunks
+               if isinstance((c.get("metadata") or {}).get("chunk_index"), int)]
+    if not indexed or len(indexed) != len(chunks):
+        return False
+
+    ordered = sorted(indexed, key=lambda c: c["metadata"]["chunk_index"])
+    first, last = ordered[0].get("metadata") or {}, ordered[-1].get("metadata") or {}
+    if first.get("prev_chunk_id") or last.get("next_chunk_id"):
+        return False
+
+    span = ordered[-1]["metadata"]["chunk_index"] - ordered[0]["metadata"]["chunk_index"]
+    return span + 1 == len(ordered)
+
+
+def summarise(sources: Sequence[Dict[str, Any]],
+              collection_count: int = 0) -> Dict[str, int]:
+    """Counts worth showing a user: how much was actually read.
+
+    `n_papers_complete` is the honest one. "199 passages" sounds thorough and
+    says nothing about whether any single paper was read end to end -- and a
+    fact buried mid-paper is invisible to a window, however many windows there
+    are.
+    """
+    by_doc: Dict[Any, List[Dict[str, Any]]] = {}
+    for source in sources:
+        by_doc.setdefault(source.get("doc_id"), []).append(source)
+
+    complete = sum(1 for doc, group in by_doc.items()
+                   if doc is not None and is_complete(group))
     return {
         "n_passages": len(sources),
-        "n_papers": len({s.get("doc_id") for s in sources if s.get("doc_id")}),
+        "n_papers": len([d for d in by_doc if d is not None]),
+        "n_papers_complete": complete,
         "n_expanded": sum(1 for s in sources if s.get("expanded")),
         "n_chars": sum(len(s.get("content") or "") for s in sources),
+        # Share of the whole corpus seen. Meaningful for a small curated
+        # collection, vanishingly small for PubMed Central -- which is itself
+        # worth showing rather than hiding.
+        "collection_chunks": collection_count,
     }
