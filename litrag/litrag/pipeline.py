@@ -41,6 +41,9 @@ class QuerySpec:
     # Cite or refuse: ask for a verbatim quote and drop rows whose quote is not
     # in the cited passage. Opt-in, so an ungated baseline stays comparable.
     quote_gate: bool = False
+    # An optional system role. Empty keeps the original single-user-message
+    # shape, so an untuned run stays byte-comparable with earlier ones.
+    system_prompt: str = ""
     query_id: str = ""
     # Backend name recorded in the identity hash so switching models
     # invalidates a resume rather than silently reusing the old answer.
@@ -90,6 +93,10 @@ class QuerySpec:
             # The gate changes both the prompt and which rows survive, so a
             # gated and an ungated run are not interchangeable on resume.
             "quoted" if self.quote_gate else "",
+            # Two system prompts are two different experiments; resume must not
+            # hand back the other one's rows.
+            hashlib.sha256(self.system_prompt.encode("utf-8")).hexdigest()[:8]
+            if self.system_prompt else "",
         ])
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
@@ -182,11 +189,21 @@ def _generate_locally(
         max_context_tokens=spec.max_context_tokens,
     )
 
+    if spec.system_prompt:
+        # build_prompt only sees the user message, but the system role is just
+        # as much a part of "what was sent". Two prompt-tuning variants that
+        # differ only in system text would otherwise record an identical hash
+        # and become indistinguishable in the experiment ledger.
+        prompt_hash = hashlib.sha256(
+            f"{prompt_hash}|{spec.system_prompt}".encode("utf-8")
+        ).hexdigest()[:16]
+
     owns = llm_client is None
     llm = llm_client or LlmClient(endpoint)
     try:
         completion = llm.complete(
-            prompt, max_tokens=template.max_output_tokens or 2500
+            prompt, max_tokens=template.max_output_tokens or 2500,
+            system=spec.system_prompt or None,
         )
     finally:
         if owns:

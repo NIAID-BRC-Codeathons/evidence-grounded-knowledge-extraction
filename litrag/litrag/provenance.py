@@ -64,8 +64,14 @@ def build(
 
 
 def stamp(rows: Iterable[Any], record: Dict[str, Any], query_id: str) -> None:
-    """Attach a provenance record to each row, in place."""
+    """Attach a provenance record to each row, in place.
+
+    Merges rather than replaces. Earlier stages record their own provenance --
+    the quote gate writes the matched quote and how it matched -- and a plain
+    assignment silently discarded all of it, leaving the UI and the envelope
+    with no evidence that the gate had run at all.
+    """
     for row in rows:
-        row.provenance = dict(record)
+        row.provenance = {**(row.provenance or {}), **record}
         if query_id and query_id not in row.query_ids:
             row.query_ids.append(query_id)

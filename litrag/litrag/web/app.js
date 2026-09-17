@@ -151,14 +151,79 @@ function citationHtml(citations) {
   }).join('');
 }
 
+// Find `quote` inside `passage` and wrap it in <mark>, tolerating the
+// whitespace and case drift a model introduces when copying. Returns escaped
+// HTML. Falls back to the plain passage rather than guessing at a match.
+function highlightQuote(passage, quote) {
+  const safe = escapeHtml(passage);
+  if (!quote) return safe;
+
+  const escapedQuote = escapeHtml(quote).trim();
+  const index = safe.indexOf(escapedQuote);
+  if (index !== -1) {
+    return safe.slice(0, index)
+      + `<mark>${escapedQuote}</mark>`
+      + safe.slice(index + escapedQuote.length);
+  }
+
+  // Whitespace-insensitive second pass: build a regex from the quote's words.
+  const words = escapedQuote.split(/\s+/).filter(Boolean)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!words.length) return safe;
+  try {
+    const pattern = new RegExp(words.join('\\s+'), 'i');
+    return safe.replace(pattern, (m) => `<mark>${m}</mark>`);
+  } catch (err) {
+    return safe;
+  }
+}
+
+// The evidence panel: the passages this row was actually drawn from. This is
+// the "evidence-grounded" claim made checkable -- a reader can see the source
+// text rather than trusting the citation.
+function evidenceHtml(row) {
+  const withPassage = (row.citations || []).filter((c) => c.passage);
+  const quote = (row.provenance && row.provenance.quote) || '';
+
+  if (!withPassage.length) {
+    return '<div class="evidenceEmpty">No passage recorded for this row. '
+      + 'Runs made before passage provenance, or through the hosted path, '
+      + 'carry citations without the supporting text.</div>';
+  }
+
+  const method = row.provenance && row.provenance.quote_method;
+  const score = row.provenance && row.provenance.quote_score;
+  const gate = method
+    ? `<div class="gateNote">quote gate: <strong>${escapeHtml(method)}</strong>`
+      + (score !== undefined && score !== null ? ` (score ${escapeHtml(String(score))})` : '')
+      + '</div>'
+    : '';
+
+  return gate + withPassage.map((c) => {
+    const ident = [
+      c.pmid ? `PMID ${c.pmid}` : null,
+      c.doi ? `DOI ${c.doi}` : null,
+      c.chunk_id ? `chunk ${String(c.chunk_id).slice(0, 8)}` : null,
+    ].filter(Boolean).join(' · ');
+    return `<figure class="passage">
+      <figcaption>
+        <span class="passageTitle">${escapeHtml(c.title || 'Untitled')}</span>
+        <span class="passageIds">${escapeHtml(ident)}</span>
+      </figcaption>
+      <blockquote>${highlightQuote(c.passage, quote)}</blockquote>
+    </figure>`;
+  }).join('');
+}
+
 function renderTable(result) {
   const dataColumns = result.columns.filter(
     (c) => !['reference', 'references', 'citation', 'citations', 'source'].includes(c.toLowerCase())
   );
-  const head = dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
+  const head = '<th class="evCol"><span class="srOnly">Evidence</span></th>'
+    + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
     + '<th>Support</th><th>Citations</th><th>Flags</th>';
 
-  const body = result.rows.map((row) => {
+  const body = result.rows.map((row, rowIndex) => {
     const cells = dataColumns.map((column) => {
       let cell = escapeHtml(row.values[column] || '');
       if (row.variants && row.variants[column]) {
@@ -173,7 +238,20 @@ function renderTable(result) {
     const support = `<td class="num"><span class="support">${row.n_support}</span></td>`;
     const cites = `<td>${citationHtml(row.citations)}</td>`;
     const flags = `<td>${row.flags.map((f) => `<span class="flag">${escapeHtml(f)}</span>`).join('')}</td>`;
-    return `<tr>${cells}${support}${cites}${flags}</tr>`;
+
+    const hasEvidence = (row.citations || []).some((c) => c.passage);
+    const toggle = `<td class="evCol">
+      <button type="button" class="evToggle" data-row="${rowIndex}"
+              aria-expanded="false" aria-controls="ev-${rowIndex}"
+              title="${hasEvidence ? 'Show the supporting passage' : 'No passage recorded'}">
+        <span aria-hidden="true">${hasEvidence ? '▸' : '·'}</span>
+        <span class="srOnly">Show evidence for row ${rowIndex + 1}</span>
+      </button></td>`;
+
+    const span = dataColumns.length + 4;
+    return `<tr class="dataRow">${toggle}${cells}${support}${cites}${flags}</tr>`
+      + `<tr class="evidenceRow hidden" id="ev-${rowIndex}">`
+      + `<td colspan="${span}">${evidenceHtml(row)}</td></tr>`;
   }).join('');
 
   return `<div class="tableWrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
@@ -352,6 +430,19 @@ function init() {
     button.addEventListener('click', () => download(button.dataset.fmt));
   });
   // Source cards are rebuilt on every search, so delegate instead of rebinding.
+  // Evidence drill-down. Delegated, because the table is re-rendered wholesale
+  // on every search and per-row listeners would be rebound each time.
+  $('answerBody').addEventListener('click', (e) => {
+    const button = e.target.closest('.evToggle');
+    if (!button) return;
+    const panel = document.getElementById(`ev-${button.dataset.row}`);
+    if (!panel) return;
+    const open = !panel.classList.toggle('hidden');
+    button.setAttribute('aria-expanded', String(open));
+    const caret = button.querySelector('[aria-hidden]');
+    if (caret && caret.textContent !== '·') caret.textContent = open ? '▾' : '▸';
+  });
+
   $('sourcesBody').addEventListener('click', (e) => {
     if (!e.target.classList.contains('expandBtn')) return;
     const content = e.target.previousElementSibling;

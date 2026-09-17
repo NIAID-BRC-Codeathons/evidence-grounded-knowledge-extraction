@@ -100,6 +100,11 @@ class Citation:
             "url": self.url,
             "resolved": self.resolved,
             "matched_by": self.matched_by,
+            # Passage-level provenance, so a reader can check the claim against
+            # the text it came from instead of taking the citation on trust.
+            "chunk_id": self.chunk_id,
+            "doc_id": self.doc_id,
+            "passage": self.passage,
         }
 
 

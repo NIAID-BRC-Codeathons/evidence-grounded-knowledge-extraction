@@ -59,6 +59,13 @@ class QueryBody(BaseModel):
     keep_empty: bool = False
     no_dedupe: bool = False
     llm: str = DEFAULT_BACKEND
+    # Without this the UI cannot reach Argo at all: the argo backend refuses to
+    # guess a model, since the gateway serves 30+ and none is a safe default.
+    llm_model: Optional[str] = None
+    quote_gate: bool = False
+    # The prompt playground edits this and compares runs. None keeps the
+    # original single-user-message shape, so recorded hashes stay comparable.
+    system_prompt: Optional[str] = None
 
 
 def _resolve(client: RagStackClient, value):
@@ -71,7 +78,7 @@ def _resolve(client: RagStackClient, value):
 
 def _endpoint(body: QueryBody):
     try:
-        return resolve_endpoint(body.llm)
+        return resolve_endpoint(body.llm, model=body.llm_model)
     except LlmError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -93,6 +100,8 @@ def _spec(body: QueryBody, endpoint=None, collections=None) -> QuerySpec:
         collection=body.collection or None,
         keep_empty=body.keep_empty,
         no_dedupe=body.no_dedupe,
+        quote_gate=body.quote_gate,
+        system_prompt=body.system_prompt or "",
         backend=endpoint.name if endpoint is not None else SERVER,
         collections=list(collections or []),
     )

@@ -143,3 +143,21 @@ def test_strip_quote_column_removes_it_from_rows_and_columns():
     columns = strip_quote_column(["Gene Name", "Mutation", QUOTE_COLUMN], [row])
     assert QUOTE_COLUMN not in columns
     assert QUOTE_COLUMN not in row.values
+
+
+# --- regression: provenance stamping must not erase the gate's record --------
+
+def test_stamping_provenance_preserves_the_quote_gate_record():
+    """prov.stamp() replaced row.provenance wholesale and silently dropped the
+    quote, so the UI and the envelope saw no evidence the gate had ever run."""
+    from litrag import provenance as prov
+
+    row = row_with("is the most common cause of isoniazid resistance")
+    apply_gate([row])
+    assert row.provenance["quote_method"] == "exact"
+
+    prov.stamp([row], {"model": "gpt56sol", "collection": "open-access"}, "q1")
+
+    assert row.provenance["model"] == "gpt56sol", "the run record must land"
+    assert row.provenance["quote_method"] == "exact", "the gate record must survive"
+    assert row.provenance["quote"]
