@@ -1,0 +1,9 @@
+# uv creates the workspace virtualenv here; uv.lock is committed.
+.venv/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/

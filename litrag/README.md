@@ -29,12 +29,26 @@ Exact output varies between runs; the underlying models are nondeterministic.
 
 ## Install
 
+With [uv](https://docs.astral.sh/uv/) (recommended) — no manual venv, no
+activation step:
+
+```bash
+uv sync                 # creates .venv at the repo root from uv.lock
+uv run litrag --help
+```
+
+`uv run` works from the repo root or from `litrag/`; it re-syncs the
+environment first, so an edit to the source or to `pyproject.toml` is picked up
+on the next invocation.
+
+With pip, if you prefer:
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-Requires Python 3.9+.
+Requires Python 3.9+. The repo pins 3.12 for development in `.python-version`.
 
 ## Configure
 
@@ -332,8 +346,18 @@ that generated it. Use `--no-provenance` for a clean table.
 ## Development
 
 ```bash
+uv run pytest       # no network required
+```
+
+`uv sync` installs the `dev` dependency group, so pytest is already present.
+To add or change a dependency, edit `pyproject.toml` (or use `uv add <pkg>` /
+`uv add --dev <pkg>`) and commit the updated `uv.lock`.
+
+With pip:
+
+```bash
 pip install -e ".[dev]"
-pytest              # 99 tests, no network required
+pytest
 ```
 
 Tests run against recorded API responses in `tests/fixtures/`. Every
