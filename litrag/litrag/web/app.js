@@ -88,14 +88,21 @@ async function loadMetadata() {
     // no choice. Addressing the vLLM servers directly makes it real.
     const backendSelect = $('backend');
     backendSelect.innerHTML = '';
-    (backends.backends || []).forEach((b) => {
+    state.backends = backends.backends || [];
+    state.backends.forEach((b) => {
       const option = document.createElement('option');
       option.value = b.id;
       option.textContent = b.label;
       option.title = b.note || '';
       backendSelect.appendChild(option);
     });
-    if (backends.default) backendSelect.value = backends.default;
+    // Prefer the gateway over the server default. The default is a vLLM host on
+    // an internal network that is frequently unreachable, and a first click
+    // that fails teaches the user the tool is broken.
+    const preferred = state.backends.find((b) => b.id === 'argo');
+    backendSelect.value = preferred ? preferred.id
+      : (backends.default || backendSelect.value);
+    checkBackendSupport();
   } catch (err) {
     showError(`Could not reach the API: ${err.message}`);
   }
@@ -206,18 +213,28 @@ function evidenceHtml(row) {
       + '</div>'
     : '';
 
-  return gate + withPassage.map((c) => {
+  // A row can cite several chunks but the quote came from one of them. Put that
+  // one first and label it: otherwise the reader has to scan three thousand-word
+  // passages to find the sentence the claim actually rests on.
+  const rendered = withPassage.map((c) => {
+    const html = highlightQuote(c.passage, quote);
+    return { citation: c, html, matched: html.includes('<mark>') };
+  });
+  rendered.sort((a, b) => Number(b.matched) - Number(a.matched));
+
+  return gate + rendered.map(({ citation: c, html, matched }) => {
     const ident = [
       c.pmid ? `PMID ${c.pmid}` : null,
       c.doi ? `DOI ${c.doi}` : null,
       c.chunk_id ? `chunk ${String(c.chunk_id).slice(0, 8)}` : null,
     ].filter(Boolean).join(' · ');
-    return `<figure class="passage">
+    return `<figure class="passage${matched ? ' matched' : ''}">
       <figcaption>
+        ${matched ? '<span class="quotedBadge">quoted</span>' : ''}
         <span class="passageTitle">${escapeHtml(c.title || 'Untitled')}</span>
         <span class="passageIds">${escapeHtml(ident)}</span>
       </figcaption>
-      <blockquote>${highlightQuote(c.passage, quote)}</blockquote>
+      <blockquote>${html}</blockquote>
     </figure>`;
   }).join('');
 }
@@ -527,7 +544,21 @@ async function viewRequest() {
 
 function checkBackendSupport() {
   const template = currentTemplate();
-  const isServer = $('backend').value === 'server';
+  const backendId = $('backend').value;
+  const isServer = backendId === 'server';
+
+  // Only the gateway needs a model named, so only then is the field relevant.
+  const backend = (state.backends || []).find((b) => b.id === backendId);
+  const needsModel = Boolean(backend && backend.needs_model);
+  $('modelGroup').classList.toggle('hidden', !needsModel);
+
+  if (needsModel && !$('llmModel').value.trim()) {
+    showError('Pick a gateway model (for example gpt56sol). '
+      + 'The gateway serves many and will not choose one for you.');
+    $('searchBtn').disabled = true;
+    return;
+  }
+
   if (template && template.local && isServer) {
     showError(`"${template.label}" is defined by LitRAG, not the server, `
       + 'so it needs a local model. Pick Qwen or Llama.');
@@ -548,6 +579,7 @@ function init() {
   $('topK').addEventListener('input', (e) => { $('topKValue').textContent = e.target.value; });
   $('searchForm').addEventListener('submit', search);
   $('compareBtn').addEventListener('click', compare);
+  $('llmModel').addEventListener('input', checkBackendSupport);
   $('viewRequestBtn').addEventListener('click', viewRequest);
   $('modalClose').addEventListener('click', () => $('modal').classList.add('hidden'));
   $('modal').addEventListener('click', (e) => {

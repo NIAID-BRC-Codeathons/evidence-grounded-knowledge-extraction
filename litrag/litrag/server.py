@@ -141,14 +141,21 @@ def templates() -> Dict[str, Any]:
 
 @app.get("/api/backends")
 def backends() -> Dict[str, Any]:
-    """Generators the UI can offer."""
+    """Generators the UI can offer.
+
+    `needs_model` tells the UI which backends refuse to guess: the gateway
+    serves many models, so a request without one is rejected. The UI uses it to
+    show the model field and to block a submit that would 400.
+    """
     return {
         "default": DEFAULT_BACKEND,
         "backends": [
             {"id": SERVER, "label": "Hosted RAGStack (Llama-4-Scout)",
-             "note": "Server-side versioned prompt template"},
+             "note": "Server-side versioned prompt template",
+             "needs_model": False},
         ] + [
-            {"id": name, "label": preset.described(), "note": preset.model}
+            {"id": name, "label": preset.described(), "note": preset.model or "",
+             "needs_model": preset.model is None}
             for name, preset in sorted(PRESETS.items())
         ],
     }
