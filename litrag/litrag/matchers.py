@@ -1,7 +1,15 @@
 """Gold matchers for the three charter relation types.
 
-MERGE NOTE. This is a drop-in for `experiment-01/evaluate.py`, kept in this
-worktree so two agents cannot corrupt that file concurrently. To land it:
+MERGED, 2026-09-17. This logic now ALSO lives in experiment-01/evaluate.py and
+experiment-01/schemas.py. Two copies exist on purpose -- this one is the tested
+one (experiment-01 has a self-test, not a pytest suite), and evaluate.py needs
+its own because it must run standalone and stdlib-only.
+
+Duplication that nothing checks is duplication that diverges, so
+tests/test_matchers.py compares the two copies on identical inputs and fails if
+either is edited alone. If you change a matcher here, change it there.
+
+The original merge instructions, kept for reference:
 
   1. Copy everything below the MERGE LINE into evaluate.py, after `ppi_match`.
   2. Delete the local `_ppi_token` here -- evaluate.py already defines an

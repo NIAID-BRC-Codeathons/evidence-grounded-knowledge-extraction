@@ -181,3 +181,59 @@ def test_schema_ids_match_the_local_template_ids():
         assert type_id in builtin_ids
         assert type_id in IDENTITY_COLUMNS
         assert type_id in CHARTER_MATCHERS
+
+
+# --- the copies must not drift ------------------------------------------------
+
+def _sibling_evaluate():
+    """experiment-01/evaluate.py, if this checkout sits in the codeathon tree."""
+    import importlib.util
+    from pathlib import Path
+
+    for parent in [Path(__file__).resolve(), *Path(__file__).resolve().parents]:
+        candidate = parent / "experiment-01" / "evaluate.py"
+        if candidate.is_file():
+            spec = importlib.util.spec_from_file_location("sibling_evaluate", candidate)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    return None
+
+
+def test_the_merged_copy_in_evaluate_py_still_agrees_with_this_one():
+    """These matchers were merged into experiment-01/evaluate.py, so the logic
+    now exists twice. Duplication that nothing checks is duplication that
+    silently diverges -- this fails the moment one copy is edited alone.
+
+    Skipped rather than failed when the sibling project is absent: this package
+    must remain installable on its own.
+    """
+    evaluate = _sibling_evaluate()
+    if evaluate is None:
+        pytest.skip("experiment-01/evaluate.py not present in this checkout")
+
+    cases = [
+        ("phenotype", pheno(), pheno(phenotype="reduced weight gain")),
+        ("phenotype", pheno(phenotype="no weight loss"), pheno(phenotype="weight loss")),
+        ("phenotype", pheno(host="ferret"), pheno()),
+        ("mechanism", mech(), mech(mechanism="disrupts epithelial tight junctions")),
+        ("mechanism", mech(), mech(mechanism="inhibits interferon signalling")),
+        ("biomarker", bio(association="elevated"), bio(association="increased")),
+        ("biomarker", bio(association="increased"), bio(association="decreased")),
+        ("biomarker", bio(biomarker="IL-6"), bio(biomarker="interleukin-6")),
+    ]
+
+    for data_type, left, right in cases:
+        mine = CHARTER_MATCHERS[data_type](left, right)
+        theirs = evaluate.MATCHERS[data_type](left, right)
+        assert mine == theirs, (
+            f"{data_type} matchers disagree on {left} vs {right}: "
+            f"litrag says {mine}, evaluate.py says {theirs}"
+        )
+
+
+def test_the_registries_cover_the_same_charter_types():
+    evaluate = _sibling_evaluate()
+    if evaluate is None:
+        pytest.skip("experiment-01/evaluate.py not present in this checkout")
+    assert set(CHARTER_MATCHERS) <= set(evaluate.MATCHERS)
