@@ -29,6 +29,9 @@ _SUBJECT_COLUMNS = {
     # identifiers that pin the strain down. The evidence is the MIC or SIR.
     "strain", "isolate", "antibiotic", "drug", "antimicrobial", "agent",
     "genbank accession", "accession", "biosample",
+    # For a host-virus row the subject is which viral protein acts on which
+    # host target; the consequence and the method are what is reported.
+    "viral protein", "host protein", "host organism",
     # A glycosylation row is about a site on a protein; the glycan, method and
     # effect are what is reported about it.
     "site", "position", "residue",
@@ -40,6 +43,11 @@ _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "sourc
 _STATUS_COLUMNS = {"assertion", "confidence", "evidence"}
 # The column that carries the actual finding for each table type.
 _KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type", "site"}
+_SYMBOL_EXTRA = {"viral protein", "host protein"}
+_METHOD_COLUMNS = {"method", "methods", "technique", "assay"}
+# Evidence categories that are not techniques. "predicted" is excluded on
+# purpose -- prediction genuinely is a method, as NetNGlyc or a docking run.
+_NOT_A_METHOD = {"measured", "reported", "inferred", "disputed"}
 # Columns whose value may be written in prose and has a standard notation.
 _NOTATION_COLUMNS = {"mutation", "variant", "allele"}
 _SITE_COLUMNS = {"site", "position", "residue"}
@@ -388,6 +396,9 @@ def _alignment_score(cells: Sequence[str], columns: Sequence[str]) -> int:
             score += 2 if _CITATION_SHAPED.match(value) else -2
         elif key in _LINKAGE_COLUMNS:
             score += 2 if normalize_glyco_type(value) in linkages else -2
+        elif key in {"interaction type", "interaction"}:
+            from .normalize import INTERACTION_TYPES, normalize_interaction
+            score += 2 if normalize_interaction(value) in INTERACTION_TYPES else -1
         elif key == "sir":
             score += 2 if normalize_sir(value) in {"S", "I", "R"} else -2
         elif key in _SITE_COLUMNS:
@@ -676,6 +687,7 @@ _SPLITTABLE_COLUMNS = {
     "gene name", "gene", "mutation", "variant", "allele", "protein",
     "antibiotic", "drug", "antimicrobial", "mic", "sir",
     "site", "position", "residue",
+    "viral protein", "host protein",
 }
 _LIST_SEPARATOR = re.compile(r"\s*[,;]\s*|\s+and\s+")
 
@@ -755,7 +767,11 @@ def _split_compound(
 
 # Columns whose value is a symbol, where "NA" is neuraminidase rather than
 # not-available.
-_SYMBOL_COLUMNS = {"gene name", "gene", "protein", "protein a", "protein b"}
+_SYMBOL_COLUMNS = {
+    "gene name", "gene", "protein", "protein a", "protein b",
+    # NA is neuraminidase here too, and NS is a real viral protein prefix.
+    "viral protein", "host protein",
+}
 
 
 def _clean_for(column: str, value: str) -> str:
@@ -788,7 +804,12 @@ def _gene_keys(requested: Optional[Sequence[str]]) -> set:
 def _gene_columns(columns: Sequence[str]) -> List[str]:
     return [
         c for c in columns
-        if c.strip().lower() in {"gene name", "gene", "protein a", "protein b", "protein"}
+        if c.strip().lower() in {
+            "gene name", "gene", "protein a", "protein b", "protein",
+            # The gene the user asked for is the viral one; a host protein is
+            # the target and is never off-target.
+            "viral protein",
+        }
     ]
 
 
@@ -890,6 +911,18 @@ def extract_table(
             for column in columns:
                 if column.strip().lower() in _KEY_VALUE_COLUMNS and not values.get(column):
                     flags.append(f"missing:{column}")
+
+            # A prompt rule alone does not hold here: told plainly that
+            # Method is a technique and never an evidence category, the model
+            # still filled all 40 rows of one query with "reported". The value
+            # is checkable, so it is checked -- a cell naming a method that was
+            # never stated is worse than an empty one.
+            for column in columns:
+                if column.strip().lower() not in _METHOD_COLUMNS:
+                    continue
+                if values.get(column, "").strip().lower() in _NOT_A_METHOD:
+                    values[column] = ""
+                    flags.append("method_not_a_technique")
 
             for group in _EITHER_OR_COLUMNS:
                 present = [c for c in columns if c.strip().lower() in group]

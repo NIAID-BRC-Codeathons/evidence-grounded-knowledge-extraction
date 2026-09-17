@@ -60,8 +60,27 @@ COLUMNS: Dict[str, str] = {
     "phenotype": "The observable effect attributed to the finding.",
     "function": "The molecular or biological function attributed to the gene or protein.",
     "interaction type": (
-        "How the two partners relate — physical binding, inhibition, and so on — "
-        "in the source's own terms."
+        "How the two partners relate. For host-virus rows this is one of six "
+        "verbs — binds, cleaves, inhibits, activates, degrades, relocalizes — "
+        "with the source's own verb kept when none of them fits. For "
+        "protein-protein rows it is the source's own wording."
+    ),
+    "viral protein": (
+        "The viral protein doing the acting. The direction is always viral "
+        "protein onto host target, so a host protein never appears here."
+    ),
+    "host protein": (
+        "What the viral protein acts on, named as the source names it — STAT1, "
+        "TBK1, or a pathway such as type I interferon signalling."
+    ),
+    "host organism": (
+        "The host the work was done in — human, mouse, or the cell line where "
+        "that is all the source gives. Never assumed."
+    ),
+    "biological consequence": (
+        "What follows for the host or the infection: reduced interferon "
+        "signalling, blocked apoptosis, enhanced replication. N/A means the "
+        "source reported the interaction without a consequence."
     ),
     "method": "The experimental method the source used to establish the finding.",
     "antibiotic": (
@@ -148,6 +167,12 @@ FLAGS: Dict[str, str] = {
         "Rows merged into this one disagreed on this column. The fuller value is "
         "shown and the alternatives are listed underneath, so a single paper's "
         "wording is never presented as every source's finding."
+    ),
+    "method_not_a_technique": (
+        "The Method cell held an evidence category rather than a technique — "
+        '"reported" or "measured" instead of co-immunoprecipitation or mass '
+        "spectrometry. It was cleared, since a method that was never stated is "
+        "worse than none. The evidence category is in Assertion."
     ),
     "column_count_mismatch": (
         "The source row did not have one value per column, so the alignment "
