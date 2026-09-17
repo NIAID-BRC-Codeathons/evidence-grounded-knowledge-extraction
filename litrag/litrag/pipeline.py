@@ -385,25 +385,33 @@ def _generate_locally(
     real PMIDs and doc ids before anything merges.
     """
     started = time.monotonic()
-    sources, plan = gather(client, spec, template)
-    batches = retrieval.pack(sources, plan.batch_chars) or [[]]
-    if len(batches) > retrieval.MAX_BATCHES:
-        # Refuse loudly. Silently trimming would report a smaller corpus as
-        # though it were everything, which is the failure mode this whole
-        # change exists to remove.
-        raise LlmError(
-            f"{len(sources)} passages would need {len(batches)} generation "
-            f"calls, over the limit of {retrieval.MAX_BATCHES}. Narrow the "
-            f"query, pick a smaller collection, or lower --top-k."
-        )
-    if on_gather:
-        # Fired before any generation, so a caller can tell the user how much is
-        # about to be read while they wait for it.
-        on_gather(retrieval.summarise(sources), len(batches))
-
     owns = llm_client is None
     llm = llm_client or LlmClient(endpoint)
     try:
+        sources, plan = gather(client, spec, template)
+        # Ask the model how much it can take rather than assuming. Context
+        # windows differ by more than 2x between the two models on one host, so
+        # a fixed budget is a guess that happens to be safe. Cached on the
+        # client: one lookup before the fan-out, not one per batch.
+        budget = plan.batch_chars
+        if budget:
+            budget = retrieval.batch_chars_for(llm.context_limit(), budget)
+        batches = retrieval.pack(sources, budget) or [[]]
+
+        if len(batches) > retrieval.MAX_BATCHES:
+            # Refuse loudly. Silently trimming would report a smaller corpus as
+            # though it were everything, which is the failure mode this whole
+            # change exists to remove.
+            raise LlmError(
+                f"{len(sources)} passages would need {len(batches)} generation "
+                f"calls, over the limit of {retrieval.MAX_BATCHES}. Narrow the "
+                f"query, pick a smaller collection, or lower --top-k."
+            )
+        if on_gather:
+            # Before any generation, so a caller can say how much is about to be
+            # read while the user waits for it.
+            on_gather(retrieval.summarise(sources), len(batches))
+
         outcomes = _run_batches(llm, spec, template, batches, on_batch)
     finally:
         if owns:

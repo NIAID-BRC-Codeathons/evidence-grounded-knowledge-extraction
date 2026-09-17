@@ -44,6 +44,9 @@ class LlmEndpoint:
 
 
 # `server` is the hosted RAGStack path and has no endpoint of its own.
+# Distinguishes "not looked up yet" from "looked up, server did not say".
+_UNSET = object()
+
 SERVER = "server"
 
 PRESETS: Dict[str, LlmEndpoint] = {
@@ -126,6 +129,10 @@ class LlmClient:
         self.endpoint = endpoint
         self._owns_client = client is None
         self._client = client or httpx.Client(timeout=timeout)
+        # Written once, before the fan-out starts, then only read. Assigning a
+        # cached value from several worker threads would be a data race in
+        # spirit even where CPython makes it harmless.
+        self._context_limit: Any = _UNSET
 
     def close(self) -> None:
         if self._owns_client:
@@ -153,6 +160,40 @@ class LlmClient:
         if not models:
             raise LlmError(f"no models served at {self.endpoint.base_url}")
         return models[0]
+
+    def context_limit(self) -> Optional[int]:
+        """Tokens this model will accept, from the server, or None if unstated.
+
+        Worth asking rather than assuming: the two models on mango differ by
+        more than 2x -- Llama-4-Scout declares 60,000 and Qwen3.6 131,072 -- so a
+        batch size that is comfortable on one can be impossible on the other.
+        vLLM publishes `max_model_len` in /v1/models; an OpenAI-compatible
+        server that does not is treated as unknown, and the caller keeps its own
+        conservative default rather than guessing high.
+
+        Cached: this is asked once per run to size batches, and at eight
+        concurrent batches an uncached lookup would be eight redundant calls.
+        """
+        if self._context_limit is _UNSET:
+            self._context_limit = self._fetch_context_limit()
+        return self._context_limit
+
+    def _fetch_context_limit(self) -> Optional[int]:
+        try:
+            response = self._client.get(f"{self.endpoint.base_url}/models")
+            response.raise_for_status()
+            entries = response.json().get("data", [])
+        except (httpx.HTTPError, ValueError):
+            # Never fail a run over a capability probe.
+            return None
+        wanted = self.endpoint.model
+        for entry in entries:
+            if wanted and entry.get("id") != wanted:
+                continue
+            limit = entry.get("max_model_len")
+            if isinstance(limit, int) and limit > 0:
+                return limit
+        return None
 
     def complete(
         self,

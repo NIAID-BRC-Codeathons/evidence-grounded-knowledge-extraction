@@ -119,3 +119,57 @@ def test_empty_choices_is_an_error():
 
     with pytest.raises(LlmError, match="no completion"):
         make_client(handler).complete("p")
+
+
+def test_context_limit_read_from_the_server():
+    """Models on one host differ by more than 2x, so ask rather than assume."""
+    from litrag.llm import LlmClient, LlmEndpoint
+
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"data": [
+            {"id": "other-model", "max_model_len": 8192},
+            {"id": "wanted", "max_model_len": 60000},
+        ]})
+
+    llm = LlmClient(LlmEndpoint(name="t", base_url="http://x/v1", model="wanted"),
+                    client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert llm.context_limit() == 60000
+    # Cached: eight concurrent batches must not mean eight probes.
+    assert llm.context_limit() == 60000
+    assert len(calls) == 1
+
+
+def test_context_limit_is_none_when_the_server_does_not_say():
+    from litrag.llm import LlmClient, LlmEndpoint
+
+    llm = LlmClient(LlmEndpoint(name="t", base_url="http://x/v1", model="m"),
+                    client=httpx.Client(transport=httpx.MockTransport(
+                        lambda r: httpx.Response(200, json={"data": [{"id": "m"}]}))))
+    assert llm.context_limit() is None
+
+
+def test_context_probe_failure_never_breaks_a_run():
+    """A capability probe must not be able to fail the query it was helping."""
+    from litrag.llm import LlmClient, LlmEndpoint
+
+    llm = LlmClient(LlmEndpoint(name="t", base_url="http://x/v1", model="m"),
+                    client=httpx.Client(transport=httpx.MockTransport(
+                        lambda r: httpx.Response(500, text="nope"))))
+    assert llm.context_limit() is None
+
+
+def test_batch_size_shrinks_to_fit_a_small_context():
+    from litrag.retrieval import DEFAULT_BATCH_CHARS, batch_chars_for
+
+    # Llama-4-Scout: 60k tokens. Comfortably fits the default budget.
+    assert batch_chars_for(60_000) == DEFAULT_BATCH_CHARS
+    # Qwen3.6: 131k. Never grows past the default -- fewer, bigger batches
+    # measurably lose findings, because output tokens are capped per call.
+    assert batch_chars_for(131_072) == DEFAULT_BATCH_CHARS
+    # An 8k-context model must get a smaller batch, not a failed request.
+    assert batch_chars_for(8_192) < DEFAULT_BATCH_CHARS
+    # Unknown limit keeps the caller's conservative default.
+    assert batch_chars_for(None) == DEFAULT_BATCH_CHARS

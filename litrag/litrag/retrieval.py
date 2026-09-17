@@ -50,6 +50,34 @@ MAX_CONCURRENCY = 8
 # should be silently spending this much of a shared GPU.
 MAX_BATCHES = 30
 
+# Measured against both mango models on real prompts: 3.98 chars/token on
+# Qwen3.6, 4.40 on Llama-4-Scout. prompts.CHARS_PER_TOKEN is 3.5, which
+# understates chars per token and therefore OVERstates the token cost -- the
+# safe direction, and kept deliberately.
+MEASURED_CHARS_PER_TOKEN = 3.5
+
+# Share of a model's context a batch of passages may occupy. The rest is for
+# the instruction block and the model's own table, which for a full batch runs
+# to several thousand tokens.
+CONTEXT_SHARE = 0.6
+
+
+def batch_chars_for(context_limit: Optional[int],
+                    default: int = DEFAULT_BATCH_CHARS) -> int:
+    """Largest batch that fits this model, in characters.
+
+    Context windows differ by more than 2x across the two models on one host
+    (Llama-4-Scout 60,000 tokens, Qwen3.6 131,072), so a fixed character budget
+    is a guess that happens to be safe today. Sizing from the server's declared
+    limit makes it a check. Never grows past `default`: bigger batches also mean
+    fewer of them, and fewer batches measurably LOSES findings, because output
+    tokens are capped per call.
+    """
+    if not context_limit:
+        return default
+    usable = int(context_limit * CONTEXT_SHARE * MEASURED_CHARS_PER_TOKEN)
+    return max(4_000, min(default, usable))
+
 # Depth presets. "standard" is today's behaviour and must stay that way: it is
 # the control arm for any comparison, so it may not acquire expansion by
 # accident.
