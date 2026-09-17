@@ -15,7 +15,7 @@ from litrag.prompts import build_prompt
 from litrag.templates import TemplateRegistry
 
 COLUMNS = [
-    "Organism", "Protein", "Site", "Glycosylation Type",
+    "Organism", "Protein", "Strain", "Site", "Glycosylation Type",
     "Glycan", "Method", "Effect", "Assertion", "Reference",
 ]
 
@@ -129,8 +129,7 @@ def test_wording_of_linkage_is_not_a_conflict(glyco):
 def test_row_without_a_site_is_flagged(glyco, mutation_response):
     """A glycosylation row with no site identifies nothing."""
     answer = _answer(
-        ["SARS-CoV-2", "Spike", "N/A", "N-linked", "N/A",
-         "LC-MS", "N/A", "reported", "[1]"],
+        ["SARS-CoV-2", "Spike", "A/test/1/2020", "N/A", "N-linked", "N/A", "LC-MS", "N/A", "reported", "[1]"],
     )
     result = extract(answer, glyco, mutation_response["sources"])
     assert "missing:Site" in result.rows[0].flags
@@ -139,8 +138,7 @@ def test_row_without_a_site_is_flagged(glyco, mutation_response):
 def test_row_with_only_a_site_survives(glyco, mutation_response):
     """That a site is glycosylated at all is a finding, even uncharacterised."""
     answer = _answer(
-        ["SARS-CoV-2", "Spike", "N234", "N-linked", "N/A",
-         "N/A", "N/A", "reported", "[1]"],
+        ["SARS-CoV-2", "Spike", "A/test/1/2020", "N234", "N-linked", "N/A", "N/A", "N/A", "reported", "[1]"],
     )
     result = extract(answer, glyco, mutation_response["sources"])
     assert result.n_rows == 1 and result.dropped_empty == 0
@@ -148,7 +146,7 @@ def test_row_with_only_a_site_survives(glyco, mutation_response):
 
 def test_empty_row_is_still_dropped(glyco, mutation_response):
     answer = _answer(
-        ["SARS-CoV-2", "Spike", "N/A", "N/A", "N/A", "N/A", "N/A", "reported", "N/A"],
+        ["SARS-CoV-2", "Spike", "A/test/1/2020", "N/A", "N/A", "N/A", "N/A", "N/A", "reported", "N/A"],
     )
     result = extract(answer, glyco, mutation_response["sources"])
     assert result.n_rows == 0 and result.dropped_empty == 1
@@ -156,8 +154,7 @@ def test_empty_row_is_still_dropped(glyco, mutation_response):
 
 def test_multiple_sites_in_one_row_are_split(glyco, mutation_response):
     answer = _answer(
-        ["SARS-CoV-2", "Spike", "N234, N343", "N-linked", "oligomannose, complex",
-         "LC-MS", "shielding", "reported", "[1]"],
+        ["SARS-CoV-2", "Spike", "A/test/1/2020", "N234, N343", "N-linked", "oligomannose, complex", "LC-MS", "shielding", "reported", "[1]"],
     )
     result = extract(answer, glyco, mutation_response["sources"])
     assert result.split_compound == 1
@@ -189,3 +186,55 @@ def test_aliases_resolve(alias):
     """Every shorthand the README advertises has to actually work."""
     registry = TemplateRegistry.from_declarations(declarations())
     assert registry.resolve(alias).id == "glycosylation"
+
+
+# -- strain and protein --------------------------------------------------
+
+def test_strain_is_a_column(glyco):
+    assert "Strain" in glyco.columns
+
+
+def test_prompt_asks_for_protein_and_strain(glyco, mutation_response):
+    prompt, _, _ = build_prompt(glyco, mutation_response["sources"], "Influenza A virus")
+    assert "Always name the protein" in prompt
+    assert "A/California/07/2009" in prompt
+    assert "Do not infer a strain from the organism" in prompt
+
+
+def test_strain_is_part_of_identity(glyco):
+    """Glycosite numbering is strain-dependent, so position 146 on H3N2 HA is
+    not the same site as position 146 on H1N1 HA."""
+    h3 = Row(values={"Organism": "IAV", "Protein": "HA", "Strain": "H3N2", "Site": "N146"})
+    h1 = Row(values={"Organism": "IAV", "Protein": "HA", "Strain": "H1N1", "Site": "N146"})
+    assert len(dedupe([h3, h1], "glycosylation", glyco.columns)) == 2
+
+
+def test_same_strain_and_site_merges(glyco):
+    a = Row(values={"Organism": "IAV", "Protein": "HA", "Strain": "H3N2", "Site": "N146"})
+    b = Row(values={"Organism": "IAV", "Protein": "HA", "Strain": "H3N2", "Site": "Asn146"})
+    assert len(dedupe([a, b], "glycosylation", glyco.columns)) == 1
+
+
+# -- bare positions ------------------------------------------------------
+
+def test_bare_position_gains_its_residue(glyco, mutation_response):
+    """Papers list influenza HA glycosites as "42, 44, 50". Under an N-linked
+    heading the residue is asparagine by definition, so it can be supplied.
+    """
+    answer = _answer(
+        ["Influenza A virus", "HA", "H3N2", "42", "N-linked", "N/A",
+         "sequence analysis", "N/A", "reported", "[1]"],
+    )
+    row = extract(answer, glyco, mutation_response["sources"]).rows[0]
+    assert row.get("Site") == "42", "source wording kept"
+    assert row.display("Site") == "N42"
+
+
+def test_o_linked_bare_position_is_left_alone(glyco, mutation_response):
+    """O-linked sits on serine or threonine, so the residue is not derivable."""
+    answer = _answer(
+        ["Influenza A virus", "HA", "H3N2", "325", "O-linked", "N/A",
+         "mass spectrometry", "N/A", "reported", "[1]"],
+    )
+    row = extract(answer, glyco, mutation_response["sources"]).rows[0]
+    assert row.display("Site") == "325"
