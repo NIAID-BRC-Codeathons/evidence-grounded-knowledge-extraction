@@ -156,3 +156,32 @@ def test_json_keeps_alternatives_structured(registry, mutation_response):
     payload = json.loads(formats.render(result, [row], "json"))
     assert payload["rows"][0]["Phenotype"] == "a"
     assert payload["rows"][0]["variants"]["Phenotype"] == ["a", "b"]
+
+
+def test_standard_notation_is_exported(registry, mutation_response):
+    """So a curated table can be matched against one that used notation."""
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.standard["Mutation"] = "G53D"
+    text = formats.render(result, [row], "tsv", provenance=False)
+    assert "_standard_notation" in text.splitlines()[0]
+    assert list(csv.DictReader(io.StringIO(text), delimiter="\t"))[0]["_standard_notation"] == "G53D"
+
+
+def test_json_carries_the_derived_notation(registry, mutation_response):
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.standard["Mutation"] = "G53D"
+    payload = json.loads(formats.render(result, [row], "json"))
+    assert payload["rows"][0]["standard"] == {"Mutation": "G53D"}
+
+
+def test_flat_export_uses_the_notation_and_keeps_the_wording(registry, mutation_response):
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.values["Mutation"] = "NS1-53 glycine to aspartate"
+    row.standard["Mutation"] = "G53D"
+    text = formats.render(result, [row], "tsv", provenance=False)
+    record = list(csv.DictReader(io.StringIO(text), delimiter="\t"))[0]
+    assert record["Mutation"] == "G53D"
+    assert record["_as_written"] == "NS1-53 glycine to aspartate"

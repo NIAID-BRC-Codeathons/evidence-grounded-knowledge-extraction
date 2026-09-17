@@ -297,6 +297,7 @@ def run(body: QueryBody) -> Dict[str, Any]:
                 "citations": [c.to_dict() for c in row.citations],
                 "flags": row.flags,
                 "variants": row.variants,
+                "standard": row.standard,
                 "n_support": row.n_support,
                 "provenance": row.provenance,
             }

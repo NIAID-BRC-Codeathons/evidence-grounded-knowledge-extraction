@@ -398,6 +398,36 @@ The rule attaches to the column, so it applies to the server's templates too —
 they carry no guidance of their own. **The hosted path is unaffected**: its
 prompt belongs to the operator, and it still emits its own wording.
 
+### Mutations written in prose
+
+Papers often write a substitution out in words. A dengue vaccine paper states
+*"NS1-53 glycine to aspartate"*, which matches nothing searching for `G53D`.
+
+The prompt asks for standard notation whenever the source gives a reference
+residue, a position and a variant residue, so most values arrive as `G53D`
+already. Anything still written in prose is converted, and the cell shows the
+notation alone — a column is for comparing values, and prose is not comparable.
+The source's wording is not lost: it is on hover in the UI and in `_as_written`
+in exports, next to `_standard_notation`.
+
+| Written | Standard |
+|---|---|
+| `NS1-53 glycine to aspartate` | `G53D` |
+| `NS1-53 Gly-to-Asp` | `G53D` |
+| `NS3-250 glutamate to valine` | `E250V` |
+| `5' UTR-57, C to T` | `n57T` |
+| `position 315 serine to threonine` | `S315T` |
+| `serine to threonine at position 315` | `S315T` |
+
+The converted form is also the dedup identity, so a row written in prose merges
+with one that used notation instead of sitting beside it as a separate fact.
+
+Only a genuine conversion is reported: a value already in notation gets no
+badge, and anything that is not a recognisable mutation (`katG deletion`,
+`Multiple mutations (codons 315, 316)`) is left alone rather than guessed at.
+A bare `C to T` is read as a base change only where the qualifier names a
+non-coding region, since `C to T` is Cys→Thr as readily as cytosine→thymine.
+
 ### Row flags
 
 | Flag | Meaning |
@@ -440,6 +470,31 @@ full references:
 
 Those ids go straight to the API's `/v1/chunks?ids=` to fetch the passage text
 back, along with its `prev_chunk_id` / `next_chunk_id` neighbours.
+
+### How retrieval works
+
+Retrieval defaults to `fused`: the query runs under both `hybrid` and `bm25` and
+the two rankings are merged with reciprocal rank fusion. `--retrieval-mode`
+takes `fused`, `hybrid`, `vector` or `bm25`.
+
+Dense retrieval ranks a chunk by what it is *about*, which loses passages that
+mention an identifier in passing. Measured on the Dengue corpus, searching
+`dengue virus NS1 Mutation`:
+
+| Mode | Rank of a chunk stating "NS1-53 glycine to aspartate" |
+|---|---|
+| `hybrid` (was the default) | absent from the top 100 |
+| `vector` | absent from the top 100 |
+| `bm25` | **12** |
+| `fused` | **69** |
+
+Gene names, mutation codes and accessions are exactly the literal tokens BM25
+matches and dense similarity does not, so a curation tool should not rely on
+either alone. Fusion costs one extra retrieval call, around 0.3s, and leaves the
+top of a good ranking unchanged.
+
+Only the local path fuses. `/v1/query` retrieves server-side under a single
+mode, and is sent `hybrid`.
 
 ### Retrieval depth
 

@@ -113,6 +113,33 @@ def _apply_collections(
         body["collection"] = collection
 
 
+# Retrieval modes combined by the default "fused" strategy.
+FUSED_MODES = ("hybrid", "bm25")
+# Reciprocal rank fusion constant. 60 is the value from the original paper and
+# damps the influence of any single list's top ranks.
+RRF_K = 60
+
+
+def fuse_rankings(
+    rankings: Sequence[Sequence[Dict[str, Any]]], k: int = RRF_K
+) -> List[Dict[str, Any]]:
+    """Merge ranked source lists by reciprocal rank fusion.
+
+    A chunk scores 1/(k + rank) in each list it appears in. Chunks found by
+    both modes rise; a chunk found by only one still places, which is the point
+    -- that is how a BM25-only hit survives into the final set.
+    """
+    scores: Dict[str, float] = {}
+    first_seen: Dict[str, Dict[str, Any]] = {}
+    for ranking in rankings:
+        for rank, source in enumerate(ranking, start=1):
+            key = source.get("chunk_id") or source.get("doc_id") or repr(source)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
+            first_seen.setdefault(key, source)
+    ordered = sorted(scores, key=lambda key: (-scores[key], key))
+    return [first_seen[key] for key in ordered]
+
+
 class RagStackClient:
     """Thin wrapper over the RAGStack HTTP API with retry and error shaping."""
 
@@ -246,6 +273,38 @@ class RagStackClient:
             body["filters"] = filters
         payload, _, _ = self._request("POST", "/v1/retrieve", json_body=body)
         return payload.get("sources", [])
+
+    def retrieve_fused(
+        self,
+        query: str,
+        top_k: int = 5,
+        modes: Sequence[str] = FUSED_MODES,
+        collection: Optional[str] = None,
+        collections: Optional[Sequence[str]] = None,
+        retrieval_mode: str = "hybrid",
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve under several modes and fuse the rankings.
+
+        Dense retrieval ranks a chunk by what it is *about*, so a passage that
+        mentions NS1-53 while being about vaccine stability sinks below the top
+        100 -- measured on the Dengue corpus, where BM25 ranked that same chunk
+        12th and hybrid missed it entirely. Gene names, mutation codes and
+        accessions are exactly the literal tokens BM25 is good at and dense
+        similarity is not, so a curation tool should not rely on either alone.
+
+        Fused with reciprocal rank fusion, which needs only the rankings and so
+        does not care that the two modes score on different scales.
+        """
+        rankings = [
+            self.retrieve(
+                query=query, top_k=top_k, collection=collection,
+                collections=collections, use_graph=False,
+                retrieval_mode=mode, filters=filters,
+            )
+            for mode in modes
+        ]
+        return fuse_rankings(rankings)[:top_k]
 
     def query(
         self,

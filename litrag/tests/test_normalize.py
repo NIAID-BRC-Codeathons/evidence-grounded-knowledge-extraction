@@ -71,3 +71,80 @@ def test_null_spellings(value):
 
 def test_real_value_is_not_null():
     assert not is_null("isoniazid resistance")
+
+
+# -- prose written out in words ------------------------------------------
+
+@pytest.mark.parametrize("value,expected", [
+    # The three from the dengue vaccine paper that prompted this.
+    ("NS1-53 glycine to aspartate", "G53D"),
+    ("NS3-250 glutamate to valine", "E250V"),
+    ("5' UTR-57, C to T", "n57T"),
+    # Other phrasings papers use.
+    ("position 315 serine to threonine", "S315T"),
+    ("codon 315, serine to threonine", "S315T"),
+    ("glycine 53 to aspartate", "G53D"),
+    ("glycine-53 to aspartate", "G53D"),
+    ("serine to threonine at position 315", "S315T"),
+    ("57 cytosine to thymine", "n57T"),
+    ("aspartic acid 180 to alanine", "D180A"),
+])
+def test_prose_converts_to_standard_notation(value, expected):
+    from litrag.normalize import standard_notation
+    assert standard_notation(value) == expected
+
+
+def test_already_standard_values_return_themselves():
+    """Lets a caller compare written against standard instead of special-casing."""
+    from litrag.normalize import standard_notation
+    assert standard_notation("S315T", "katG") == "S315T"
+    assert standard_notation("Ser315Thr", "katG") == "S315T"
+    assert standard_notation("c-15t", "inhA") == "n-15T"
+
+
+@pytest.mark.parametrize("value", [
+    "katG deletion", "Multiple mutations (codons 315, 316)",
+    "high-level resistance", "N/A", "", "the N-terminal region",
+])
+def test_non_mutations_are_not_converted(value):
+    """An empty result lets a caller tell a real conversion from a guess."""
+    from litrag.normalize import standard_notation
+    assert standard_notation(value) == ""
+
+
+def test_prose_and_notation_share_an_identity():
+    """The point of the conversion: these must merge rather than sit apart."""
+    forms = ["NS1-53 glycine to aspartate", "G53D", "Gly53Asp", "glycine 53 to aspartate"]
+    assert len({normalize_mutation(f) for f in forms}) == 1
+
+
+def test_ambiguous_single_letters_need_a_non_coding_qualifier():
+    """"C to T" is Cys->Thr as readily as cytosine->thymine, so a bare one is
+    only read as a base change where the qualifier names a non-coding region."""
+    from litrag.normalize import standard_notation
+    assert standard_notation("5'UTR-57 C to T") == "n57T"
+    # "<word>-<digits>" reads the hyphen as a separator, matching 5'UTR-57.
+    # A genuinely negative position is written without a word prefix.
+    assert standard_notation("promoter-15 C to T") == "n15T"
+    assert standard_notation("c.-15C>T") == "n-15T"
+    # Spelled out, there is no ambiguity to resolve.
+    assert standard_notation("57 cytosine to thymine") == "n57T"
+
+
+@pytest.mark.parametrize("value,expected", [
+    # Butrapet et al. write the same substitution with three-letter codes.
+    ("NS1-53 Gly-to-Asp", "G53D"),
+    ("NS1-53 Gly to Asp", "G53D"),
+    ("NS3-250 Glu-to-Val", "E250V"),
+    ("Ser315 to Thr", "S315T"),
+    ("position 315 Ser to Thr", "S315T"),
+])
+def test_three_letter_codes_convert(value, expected):
+    from litrag.normalize import standard_notation
+    assert standard_notation(value) == expected
+
+
+def test_full_names_and_codes_agree():
+    """Two papers writing one substitution differently must merge."""
+    forms = ["NS1-53 glycine to aspartate", "NS1-53 Gly-to-Asp", "G53D", "Gly53Asp"]
+    assert len({normalize_mutation(f) for f in forms}) == 1

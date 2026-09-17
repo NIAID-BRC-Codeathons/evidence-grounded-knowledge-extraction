@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-from .normalize import clean, is_null, normalize_gene
+from .normalize import clean, is_null, normalize_gene, standard_notation
 from .templates import Template
 
 _FENCE = re.compile(r"```[a-zA-Z]*\n?")
@@ -47,6 +47,8 @@ _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "sourc
 _STATUS_COLUMNS = {"assertion", "confidence", "evidence"}
 # The column that carries the actual finding for each table type.
 _KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type", "site"}
+# Columns whose value may be written in prose and has a standard notation.
+_NOTATION_COLUMNS = {"mutation", "variant", "allele"}
 # Columns where at least one of a group must be present for the row to say
 # anything. An AST row needs an MIC or an SIR; neither alone is required.
 _EITHER_OR_COLUMNS = [{"mic", "sir"}]
@@ -214,17 +216,33 @@ class Row:
     # Differing values seen for a non-identity column across merged rows,
     # kept so a merge never hides disagreement between sources.
     variants: Dict[str, List[str]] = field(default_factory=dict)
+    # Standard notation derived from a value written in prose, by column. The
+    # source wording is never overwritten -- this sits beside it, so a row
+    # written "NS1-53 glycine to aspartate" is still findable as G53D.
+    standard: Dict[str, str] = field(default_factory=dict)
 
     def get(self, column: str) -> str:
+        return self.values.get(column, "")
+
+    def as_written(self, column: str) -> str:
+        """Exactly what the source wrote, before any canonicalisation."""
         return self.values.get(column, "")
 
     def display(self, column: str) -> str:
         """The cell value, with every merged alternative joined by "; ".
 
-        When rows merge, the representative value alone hides that the sources
-        said different things. Listing them all inline keeps a flat table
-        honest without needing a second line per cell.
+        A value converted to standard notation is shown in that form alone:
+        "NS1-53 glycine to aspartate" reads as G53D, because a table column is
+        for comparing values and the prose is not comparable. The original
+        wording stays in `values` and is exported as _as_written.
+
+        Otherwise, when rows merge, the representative value alone hides that
+        the sources said different things, so every alternative is listed.
         """
+        canonical = self.standard.get(column)
+        if canonical:
+            return canonical
+
         primary = self.values.get(column, "")
         alternatives = self.variants.get(column)
         if not alternatives:
@@ -271,6 +289,7 @@ class Row:
             "query_ids": self.query_ids,
             "provenance": self.provenance,
             "variants": self.variants,
+            "standard": self.standard,
         }
 
     @classmethod
@@ -283,6 +302,7 @@ class Row:
             query_ids=list(data.get("query_ids", [])),
             provenance=dict(data.get("provenance", {})),
             variants={k: list(v) for k, v in (data.get("variants") or {}).items()},
+            standard=dict(data.get("standard") or {}),
         )
 
 
@@ -389,6 +409,34 @@ _BARE_NUMBERS = re.compile(r"\d+")
 _BARE_ONLY = re.compile(r"[\d\s,;–-]+")
 
 
+def _expand_span(numbers: List[int], body: str) -> Sequence[int]:
+    """Read "1-3" as a span of three and "1, 2" as a list of two.
+
+    The separator is what distinguishes them. Shared by the bracketed and bare
+    forms so they cannot disagree about what a range means.
+
+    One bracket can hold both at once. "[1-3, 7]" is a span and a singleton, and
+    testing the whole body for a dash cannot express that: with three numbers
+    parsed it read as a flat list and citation 2 was dropped without a trace.
+    So the list separators are split first and each item expanded on its own.
+    """
+    found: List[int] = []
+    for part in re.split(r"\s*[,;]\s*", body):
+        part = part.strip()
+        ends = re.fullmatch(r"(\d+)\s*[-–]\s*(\d+)", part)
+        if ends:
+            low, high = sorted((int(ends.group(1)), int(ends.group(2))))
+            # A span wider than this is a parsing artefact, not a citation:
+            # unbounded, a hallucinated "[1-99999]" allocates that many rows.
+            if high - low < MAX_CITATION_SPAN:
+                found.extend(range(low, high + 1))
+        elif part.isdigit():
+            found.append(int(part))
+    # Anything that is not a plain list of numbers falls back to what the caller
+    # already parsed, so the bare form keeps whatever it filtered for.
+    return found or numbers
+
+
 def parse_citations(
     text: str,
     sources: Sequence[Dict[str, Any]],
@@ -412,34 +460,27 @@ def parse_citations(
     seen: set = set()
 
     for match in _CITATION_REF.finditer(text or ""):
-        # Split on list separators first, then decide span-or-single per item.
-        # "[1-3]" is a span of three papers, "[1,3]" is two, and "[1-3, 7]" is
-        # both at once -- which the old single-shot test for a dash could not
-        # express.
-        for part in re.split(r"\s*[,;]\s*", match.group(1)):
-            part = part.strip()
-            if not part:
-                continue
-            span = _CITATION_SPAN.fullmatch(part)
-            if span:
-                low, high = sorted((int(span.group(1)), int(span.group(2))))
-                if high - low >= MAX_CITATION_SPAN:
-                    continue
-                markers = range(low, high + 1)
-            elif part.isdigit():
-                markers = [int(part)]
-            else:
-                continue
+        body = match.group(1)
+        parts = re.split(r"\s*[-,;–]\s*", body)
+        try:
+            numbers = [int(p) for p in parts if p.strip()]
+        except ValueError:
+            # Only the fallback for a body _expand_span cannot read itself;
+            # bailing here would discard "[2; 4]" entirely.
+            numbers = []
+        span = _expand_span(numbers, body)
 
-            for marker in markers:
-                if marker in seen:
-                    continue
-                seen.add(marker)
-                citations.append(_citation_for(marker, sources))
+        for marker in span:
+            if marker in seen:
+                continue
+            seen.add(marker)
+            citations.append(_citation_for(marker, sources))
 
-    if not citations and bare_numbers and _BARE_ONLY.fullmatch((text or "").strip()):
-        for token in _BARE_NUMBERS.findall(text or ""):
-            marker = int(token)
+    if not citations and bare_numbers and _BARE_ONLY.fullmatch((text or "").strip() or "x"):
+        tokens = [int(t) for t in _BARE_NUMBERS.findall(text or "")]
+        # A bare "1-3" spans three sources exactly as "[1-3]" does; reading
+        # only its endpoints would drop the middle citation.
+        for marker in _expand_span(tokens, text or ""):
             if marker in seen or not 1 <= marker <= len(sources):
                 continue
             seen.add(marker)
@@ -789,7 +830,18 @@ def extract_table(
                 if row_genes and not (row_genes & gene_keys):
                     flags.append("off_target_gene")
 
-            result.rows.append(Row(values=values, citations=citations, flags=flags))
+            row = Row(values=values, citations=citations, flags=flags)
+            for column in columns:
+                if column.strip().lower() not in _NOTATION_COLUMNS:
+                    continue
+                written = values.get(column, "")
+                gene_hint = next(
+                    (values.get(c) for c in gene_cols if values.get(c)), ""
+                )
+                canonical = standard_notation(written, gene_hint)
+                if canonical and canonical.lower() != written.strip().lower():
+                    row.standard[column] = canonical
+            result.rows.append(row)
 
     return result
 
