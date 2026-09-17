@@ -178,3 +178,44 @@ def test_unknown_collection_is_a_400(client):
     })
     assert response.status_code == 400
     assert "unknown collection" in response.json()["detail"]
+
+
+# --- prompt lab plumbing ------------------------------------------------------
+
+def test_query_body_accepts_the_prompt_lab_fields():
+    """The UI cannot reach the gateway without llm_model, and cannot run an A/B
+    without system_prompt. Both were missing from QueryBody until E7b."""
+    body = server.QueryBody(
+        organism="M. tuberculosis", llm="argo", llm_model="gpt56sol",
+        system_prompt="You are a careful curator.", quote_gate=True,
+    )
+    assert body.llm_model == "gpt56sol"
+    assert body.quote_gate is True
+    assert body.system_prompt.startswith("You are")
+
+
+def test_query_body_defaults_keep_the_original_behaviour():
+    body = server.QueryBody(organism="M. tuberculosis")
+    assert body.llm_model is None
+    assert body.system_prompt is None
+    assert body.quote_gate is False
+
+
+def test_spec_carries_the_system_prompt_through():
+    body = server.QueryBody(organism="M. tb", system_prompt="be careful")
+    assert server._spec(body).system_prompt == "be careful"
+
+
+def test_two_system_prompts_give_two_identities():
+    """Resume must not hand one variant's rows back for the other."""
+    a = server._spec(server.QueryBody(organism="M. tb", system_prompt="prompt one"))
+    b = server._spec(server.QueryBody(organism="M. tb", system_prompt="prompt two"))
+    plain = server._spec(server.QueryBody(organism="M. tb"))
+    assert len({a.identity(), b.identity(), plain.identity()}) == 3
+
+
+def test_argo_without_a_model_is_rejected_before_the_query_runs():
+    """Failing here beats failing inside a worker pool half way through a batch."""
+    with pytest.raises(Exception) as excinfo:
+        server._endpoint(server.QueryBody(organism="M. tb", llm="argo"))
+    assert "model" in str(excinfo.value).lower()

@@ -226,3 +226,72 @@ th.evCol, td.evCol { width: 2rem; padding-right: 0; text-align: center; }
   }
   .passage mark { background: #5a4b00; color: #ffe9a3; }
 }
+
+/* --- Prompt lab: A/B system-prompt comparison ---------------------------- */
+
+.promptLab {
+  margin-top: 0.75rem; border-top: 1px solid #dde5ec; padding-top: 0.6rem;
+}
+.promptLab > summary {
+  cursor: pointer; font-weight: 600; font-size: 0.9rem; color: #1a6fb5;
+  list-style: revert;
+}
+.promptLab > summary:focus-visible { outline: 2px solid #1a6fb5; outline-offset: 2px; }
+.labHint { font-weight: 400; color: #5d6b78; font-size: 0.8rem; margin-left: 0.5rem; }
+.labBody { padding: 0.75rem 0 0.25rem; }
+.labNote, .labWarn, .diffNote {
+  font-size: 0.8rem; color: #5d6b78; margin: 0 0 0.6rem;
+}
+.labGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+.labSide label { display: block; font-size: 0.82rem; margin-bottom: 0.25rem; }
+.labSide textarea {
+  width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.8rem; line-height: 1.45; padding: 0.5rem;
+  border: 1px solid #c3d4e2; border-radius: 4px; resize: vertical; background: #fff;
+}
+.labSide textarea:focus-visible { outline: 2px solid #1a6fb5; outline-offset: 0; }
+
+.labTag {
+  display: inline-block; min-width: 1.15rem; text-align: center;
+  font-size: 0.72rem; font-weight: 700; border-radius: 3px;
+  padding: 0.05rem 0.3rem; margin-right: 0.3rem; color: #fff;
+}
+.tagA { background: #4a5a68; }
+.tagB { background: #1a6fb5; }
+
+.labActions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.7rem; }
+.labActions .labWarn { margin: 0; }
+
+.diffSummary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.9rem; }
+.diffBox {
+  border: 1px solid #dde5ec; border-radius: 5px; padding: 0.6rem 0.75rem;
+  background: #fbfcfd;
+}
+.diffBox h3 { margin: 0 0 0.4rem; font-size: 0.83rem; color: #23313d; }
+.diffBox ul { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; line-height: 1.5; }
+.diffNone { list-style: none; margin-left: -1.1rem; color: #8a97a3; font-style: italic; }
+
+.diffWarn {
+  border-left: 3px solid #d08b00; background: #fff8e8;
+  padding: 0.55rem 0.8rem; font-size: 0.83rem; margin-bottom: 0.8rem; color: #5a4300;
+}
+
+.runGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem; }
+.runCol { min-width: 0; }
+.runHead { display: flex; align-items: center; gap: 0.25rem; margin-bottom: 0.2rem; }
+.runLabel { font-weight: 600; font-size: 0.88rem; }
+.runMeta { font-size: 0.78rem; color: #5d6b78; margin-bottom: 0.4rem; }
+.runMeta code { font-size: 0.75rem; }
+
+@media (max-width: 900px) {
+  .labGrid, .runGrid, .diffSummary { grid-template-columns: 1fr; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .promptLab { border-top-color: #2b3642; }
+  .labSide textarea { background: #121820; border-color: #3a4a5a; color: #cdd7e0; }
+  .diffBox { background: #161d25; border-color: #2b3642; }
+  .diffBox h3 { color: #dbe4ec; }
+  .labNote, .labWarn, .diffNote, .runMeta, .labHint { color: #9aa9b6; }
+  .diffWarn { background: #2a2310; border-left-color: #b8860b; color: #e8d49a; }
+}

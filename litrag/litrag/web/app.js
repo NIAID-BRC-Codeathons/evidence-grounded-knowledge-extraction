@@ -14,7 +14,7 @@ function currentTemplate() {
   return state.templates.find((t) => t.id === $('dataType').value) || null;
 }
 
-function requestBody() {
+function requestBody(systemPrompt) {
   return {
     organism: $('organism').value.trim(),
     genes: $('genes').value.trim(),
@@ -23,8 +23,15 @@ function requestBody() {
     top_k: parseInt($('topK').value, 10),
     collection: $('collection').value || null,
     llm: $('backend').value,
+    // The gateway serves many models and refuses to guess, so this is required
+    // whenever the argo backend is selected.
+    llm_model: $('llmModel').value.trim() || null,
     keep_empty: $('keepEmpty').checked,
     no_dedupe: !$('dedupe').checked,
+    quote_gate: $('quoteGate').checked,
+    system_prompt: (systemPrompt === undefined
+      ? $('systemA').value.trim()
+      : systemPrompt) || null,
   };
 }
 
@@ -317,6 +324,128 @@ function renderResult(result) {
   $('viewRequestBtn').disabled = false;
 }
 
+// --- A/B prompt comparison ---------------------------------------------------
+
+// A row's identity for diffing: its data cells, normalised. Citations and
+// support counts are excluded -- the same finding backed by a different paper
+// is still the same finding, and counting it as changed would drown the diff.
+function rowKey(row, columns) {
+  return columns
+    .map((c) => String(row.values[c] || '').toLowerCase().replace(/[^a-z0-9]/g, ''))
+    .join('|');
+}
+
+function diffRuns(a, b) {
+  const columns = (a.columns || []).filter(
+    (c) => !['reference', 'references', 'citation', 'citations', 'source'].includes(c.toLowerCase())
+  );
+  const keysA = new Set(a.rows.map((r) => rowKey(r, columns)));
+  const keysB = new Set(b.rows.map((r) => rowKey(r, columns)));
+
+  return {
+    columns,
+    onlyA: a.rows.filter((r) => !keysB.has(rowKey(r, columns))),
+    onlyB: b.rows.filter((r) => !keysA.has(rowKey(r, columns))),
+    shared: a.rows.filter((r) => keysB.has(rowKey(r, columns))),
+  };
+}
+
+function runColumnHtml(label, tag, result) {
+  const summary = result.summary || {};
+  return `<div class="runCol">
+    <div class="runHead">
+      <span class="labTag tag${tag}">${tag}</span>
+      <span class="runLabel">${escapeHtml(label)}</span>
+    </div>
+    <div class="runMeta">
+      ${result.rows.length} rows ·
+      <code title="prompt hash: the experiment key this run is recorded under">${escapeHtml(summary.prompt_hash || 'n/a')}</code>
+      · ${escapeHtml(String(summary.elapsed_s || '?'))}s
+    </div>
+    ${result.rows.length
+      ? renderTable(result)
+      : '<div class="status">No rows extracted.</div>'}
+  </div>`;
+}
+
+function rowListHtml(rows, columns) {
+  if (!rows.length) return '<li class="diffNone">none</li>';
+  return rows.map((r) => {
+    const text = columns.map((c) => r.values[c]).filter(Boolean).join(' · ');
+    return `<li>${escapeHtml(text)}</li>`;
+  }).join('');
+}
+
+function renderCompare(resultA, resultB) {
+  const d = diffRuns(resultA, resultB);
+  const same = resultA.summary.prompt_hash === resultB.summary.prompt_hash;
+
+  const warning = same
+    ? `<div class="diffWarn">Both runs recorded the same prompt hash, so the
+       system prompts were identical. Any difference below is model
+       nondeterminism, not an effect of the prompt.</div>`
+    : '';
+
+  $('compareBody').innerHTML = `
+    ${warning}
+    <div class="diffSummary">
+      <div class="diffBox"><h3>Only in A (${d.onlyA.length})</h3>
+        <ul>${rowListHtml(d.onlyA, d.columns)}</ul></div>
+      <div class="diffBox"><h3>In both (${d.shared.length})</h3>
+        <ul>${rowListHtml(d.shared, d.columns)}</ul></div>
+      <div class="diffBox"><h3>Only in B (${d.onlyB.length})</h3>
+        <ul>${rowListHtml(d.onlyB, d.columns)}</ul></div>
+    </div>
+    <p class="diffNote">
+      Rows are matched on their data cells only, ignoring citations and support
+      counts. A run-to-run difference is not by itself evidence that one prompt
+      is better: these models are nondeterministic, and only a scored gold set
+      can settle which variant wins.
+    </p>
+    <div class="runGrid">
+      ${runColumnHtml('System prompt A', 'A', resultA)}
+      ${runColumnHtml('System prompt B', 'B', resultB)}
+    </div>`;
+  $('compareSection').classList.remove('hidden');
+}
+
+async function compare() {
+  const organism = $('organism').value.trim();
+  if (!organism) { $('organism').focus(); return; }
+
+  setBusy(true);
+  $('status').className = 'status';
+  $('answerSection').classList.add('hidden');
+  $('compareSection').classList.add('hidden');
+  $('summary').classList.add('hidden');
+  $('status').classList.remove('hidden');
+
+  const post = (body) => api('/api/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  try {
+    // Sequential, not parallel: the gateway is shared and a codeathon is not
+    // the place to double the concurrent load for a two-second saving.
+    $('status').innerHTML = '<span class="spinner"></span>Running prompt A…';
+    const resultA = await post(requestBody($('systemA').value.trim()));
+    $('status').innerHTML = '<span class="spinner"></span>Running prompt B…';
+    const resultB = await post(requestBody($('systemB').value.trim()));
+
+    renderCompare(resultA, resultB);
+    $('sourcesTitle').textContent = `Sources (${resultA.sources.length})`;
+    $('sourcesBody').innerHTML = renderSources(resultA.sources);
+    $('sourcesSection').classList.remove('hidden');
+    $('status').classList.add('hidden');
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function search(event) {
   event.preventDefault();
   const body = requestBody();
@@ -418,6 +547,7 @@ function init() {
   $('backend').addEventListener('change', checkBackendSupport);
   $('topK').addEventListener('input', (e) => { $('topKValue').textContent = e.target.value; });
   $('searchForm').addEventListener('submit', search);
+  $('compareBtn').addEventListener('click', compare);
   $('viewRequestBtn').addEventListener('click', viewRequest);
   $('modalClose').addEventListener('click', () => $('modal').classList.add('hidden'));
   $('modal').addEventListener('click', (e) => {

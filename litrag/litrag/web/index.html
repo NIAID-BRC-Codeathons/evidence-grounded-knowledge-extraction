@@ -54,12 +54,25 @@
         <label for="topK">RAG Results <span id="topKValue" class="topKValue">10</span></label>
         <input type="range" id="topK" min="1" max="25" value="10">
       </div>
+      <div class="formGroup" id="modelGroup">
+        <label for="llmModel">Gateway model</label>
+        <input type="text" id="llmModel" list="argoModels" placeholder="gpt56sol">
+        <datalist id="argoModels">
+          <option value="gpt56sol"></option>
+          <option value="claudeopus5"></option>
+          <option value="gemini25pro"></option>
+          <option value="gpto3"></option>
+        </datalist>
+      </div>
       <div class="formGroup check">
         <label class="checkLabel">
           <input type="checkbox" id="dedupe" checked> Merge duplicates
         </label>
         <label class="checkLabel">
           <input type="checkbox" id="keepEmpty"> Keep empty rows
+        </label>
+        <label class="checkLabel">
+          <input type="checkbox" id="quoteGate"> Cite or refuse
         </label>
       </div>
       <div class="formGroup buttons">
@@ -68,6 +81,34 @@
       </div>
     </div>
   </form>
+
+  <details id="promptLab" class="promptLab">
+    <summary>
+      Prompt lab
+      <span class="labHint">run the same query under two system prompts and diff the results</span>
+    </summary>
+    <div class="labBody">
+      <p class="labNote">
+        LitRAG sends no system prompt by default. Leave A empty to keep that
+        baseline, and put a variant in B to see what it changes.
+      </p>
+      <div class="labGrid">
+        <div class="labSide">
+          <label for="systemA">System prompt A <span class="labTag tagA">A</span></label>
+          <textarea id="systemA" rows="5" placeholder="(empty — the current default)"></textarea>
+        </div>
+        <div class="labSide">
+          <label for="systemB">System prompt B <span class="labTag tagB">B</span></label>
+          <textarea id="systemB" rows="5"
+            placeholder="e.g. You are a careful curator. Prefer omitting a finding over asserting one the passage does not state."></textarea>
+        </div>
+      </div>
+      <div class="labActions">
+        <button type="button" id="compareBtn" class="primary">Run A/B comparison</button>
+        <span class="labWarn">Two full queries — twice the gateway cost and twice the wait.</span>
+      </div>
+    </div>
+  </details>
 </section>
 
 <main class="results">
@@ -86,6 +127,11 @@
       </div>
     </div>
     <div id="answerBody"></div>
+  </section>
+
+  <section id="compareSection" class="compareSection hidden">
+    <div class="sectionHeader"><h2>A/B comparison</h2></div>
+    <div id="compareBody"></div>
   </section>
 
   <section id="sourcesSection" class="sourcesSection hidden">
