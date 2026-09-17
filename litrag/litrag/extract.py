@@ -340,6 +340,11 @@ def _looks_like_header(cells: Sequence[str], columns: Sequence[str]) -> bool:
 
 
 _BARE_NUMBERS = re.compile(r"\d+")
+# A cell that is nothing but source numbers: "3", "3, 5", "1-3". Anything else
+# in it -- a letter, a dot, a slash -- means the digits belong to something
+# that is not a marker, and a DOI is the common case: every DOI starts "10.",
+# so harvesting its digits attributes the row to source 10.
+_BARE_ONLY = re.compile(r"[\d\s,;–-]+")
 
 
 def parse_citations(
@@ -355,7 +360,11 @@ def parse_citations(
 
     ``bare_numbers`` allows "3" to mean "[3]". Only pass it for text taken from
     a reference column, where a lone integer can only be a source number --
-    elsewhere it would turn a position or a dose into a citation.
+    elsewhere it would turn a position or a dose into a citation. Even there it
+    applies only when the cell holds nothing but numbers and separators: a
+    reference written as a DOI or an "Author Year, Journal 5:231" string must
+    fall through to ``_match_by_text`` and be flagged, not be resolved from
+    whichever of its digits happen to be in range.
     """
     citations: List[Citation] = []
     seen: set = set()
@@ -379,7 +388,7 @@ def parse_citations(
             seen.add(marker)
             citations.append(_citation_for(marker, sources))
 
-    if not citations and bare_numbers:
+    if not citations and bare_numbers and _BARE_ONLY.fullmatch((text or "").strip()):
         for token in _BARE_NUMBERS.findall(text or ""):
             marker = int(token)
             if marker in seen or not 1 <= marker <= len(sources):

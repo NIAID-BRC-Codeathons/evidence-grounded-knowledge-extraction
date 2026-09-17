@@ -380,3 +380,55 @@ def test_bare_numbers_are_not_read_as_citations_elsewhere(mutation_response):
 
 def test_out_of_range_bare_number_is_ignored(mutation_response):
     assert parse_citations("99", mutation_response["sources"], bare_numbers=True) == []
+
+
+def test_doi_in_reference_column_is_not_resolved_by_its_digits(mutation_response):
+    """A DOI is a reference, but not one of ours.
+
+    Every DOI starts "10.", and the rest is full of small integers, so
+    harvesting its digits resolved the row to whichever sources happened to be
+    in range -- reported as a real paper, with no flag to warn the curator.
+    """
+    sources = mutation_response["sources"]
+    assert parse_citations("10.1038/s41598-018-21378-x", sources, bare_numbers=True) == []
+    assert parse_citations("doi:10.1016/j.cell.2020.02.001", sources, bare_numbers=True) == []
+
+
+def test_prose_reference_with_a_number_is_not_resolved_by_it(mutation_response):
+    """A bibliography-style reference must reach the author matcher.
+
+    "Nature 5:231" is a volume and a page. Reading the 5 as a marker is the
+    exact bibliography leak `citation_not_in_sources` exists to report.
+    """
+    assert parse_citations(
+        "Zhang 2019, Nature 5:231", mutation_response["sources"], bare_numbers=True
+    ) == []
+
+
+def test_bare_marker_lists_still_resolve(mutation_response):
+    """The case the bare-number path was added for keeps working."""
+    sources = mutation_response["sources"]
+    assert [c.marker for c in parse_citations("3", sources, bare_numbers=True)] == [3]
+    assert [c.marker for c in parse_citations("1, 3", sources, bare_numbers=True)] == [1, 3]
+    assert [c.marker for c in parse_citations(" 2 ", sources, bare_numbers=True)] == [2]
+
+
+def test_doi_reference_is_flagged_rather_than_mis_cited(registry, mutation_response):
+    """End to end: the row carries a flag, not a confident wrong citation.
+
+    This DOI is chosen so its digits land in range for the fixture: "10.1016
+    /j.cell.2020.02.001" offers 2 and 1, both real markers here. Picking one
+    whose numbers all fall outside the source list would pass either way.
+    """
+    template = registry.resolve("mutation")
+    answer = (
+        "\t".join(template.columns) + "\n"
+        + "\t".join([
+            "Mycobacterium tuberculosis", "katG", "S315T",
+            "isoniazid resistance", "measured",
+            "doi:10.1016/j.cell.2020.02.001",
+        ])
+    )
+    row = extract(answer, template, mutation_response["sources"]).rows[0]
+    assert row.citations == []
+    assert "citation_not_in_sources" in row.flags
