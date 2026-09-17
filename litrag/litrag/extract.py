@@ -179,6 +179,23 @@ class Row:
     def get(self, column: str) -> str:
         return self.values.get(column, "")
 
+    def display(self, column: str) -> str:
+        """The cell value, with every merged alternative joined by "; ".
+
+        When rows merge, the representative value alone hides that the sources
+        said different things. Listing them all inline keeps a flat table
+        honest without needing a second line per cell.
+        """
+        primary = self.values.get(column, "")
+        alternatives = self.variants.get(column)
+        if not alternatives:
+            return primary
+        ordered = [primary] if primary else []
+        for value in alternatives:
+            if value and value not in ordered:
+                ordered.append(value)
+        return "; ".join(ordered)
+
     @property
     def citation_text(self) -> str:
         return "; ".join(c.short() for c in self.citations)

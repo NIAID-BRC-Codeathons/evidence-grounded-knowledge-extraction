@@ -315,3 +315,30 @@ def test_genuine_list_still_splits_alongside_a_parenthetical(registry, mutation_
     result = extract(answer, template, mutation_response["sources"])
     assert result.split_compound == 1
     assert [r.get("Mutation") for r in result.rows] == ["Ser315Thr (S315T)", "c-15t"]
+
+
+def test_display_joins_merged_alternatives():
+    from litrag.extract import Row
+    row = Row(values={"Phenotype": "antigenic change"},
+              variants={"Phenotype": ["antigenic change", "enhanced replication"]})
+    assert row.display("Phenotype") == "antigenic change; enhanced replication"
+    # get() still returns the representative value on its own.
+    assert row.get("Phenotype") == "antigenic change"
+
+
+def test_display_puts_the_representative_value_first():
+    from litrag.extract import Row
+    row = Row(values={"A": "chosen"}, variants={"A": ["other", "chosen"]})
+    assert row.display("A") == "chosen; other"
+
+
+def test_display_does_not_repeat_a_value():
+    from litrag.extract import Row
+    row = Row(values={"A": "x"}, variants={"A": ["x", "x", "y"]})
+    assert row.display("A") == "x; y"
+
+
+def test_display_without_variants_is_the_plain_value():
+    from litrag.extract import Row
+    assert Row(values={"A": "x"}).display("A") == "x"
+    assert Row(values={}).display("A") == ""

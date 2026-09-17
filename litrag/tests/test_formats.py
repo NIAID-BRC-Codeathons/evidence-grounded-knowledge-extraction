@@ -117,3 +117,42 @@ def test_source_summary_exposes_the_span(registry, mutation_response):
         result, result.rows, "json", sources=mutation_response["sources"]))
     source = payload["sources"][0]
     assert source["chunk_id"] and "start_char" in source
+
+
+def test_merged_alternatives_are_joined_in_flat_formats(registry, mutation_response):
+    """A flat table has nowhere to put alternatives except the cell.
+
+    Exporting only the representative value silently dropped the fact that the
+    sources disagreed.
+    """
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.values["Phenotype"] = "isoniazid resistance"
+    row.variants["Phenotype"] = [
+        "isoniazid resistance", "moderate-level isoniazid resistance",
+    ]
+
+    text = formats.render(result, [row], "tsv", provenance=False)
+    cell = list(csv.DictReader(io.StringIO(text), delimiter="\t"))[0]["Phenotype"]
+    assert cell == "isoniazid resistance; moderate-level isoniazid resistance"
+
+
+def test_unmerged_cell_is_unchanged(registry, mutation_response):
+    """No variants means no separator -- a plain row must look plain."""
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.variants.clear()
+    text = formats.render(result, [row], "tsv", provenance=False)
+    cell = list(csv.DictReader(io.StringIO(text), delimiter="\t"))[0]["Gene Name"]
+    assert cell == row.get("Gene Name") and ";" not in cell
+
+
+def test_json_keeps_alternatives_structured(registry, mutation_response):
+    """Flat formats join; JSON should not, since it can represent both."""
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.values["Phenotype"] = "a"
+    row.variants["Phenotype"] = ["a", "b"]
+    payload = json.loads(formats.render(result, [row], "json"))
+    assert payload["rows"][0]["Phenotype"] == "a"
+    assert payload["rows"][0]["variants"]["Phenotype"] == ["a", "b"]

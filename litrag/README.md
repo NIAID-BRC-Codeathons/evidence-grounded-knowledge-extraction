@@ -307,9 +307,11 @@ citations. Protein interactions are matched unordered, since A–B is B–A.
 Promoter positions keep their sign: `c-15t` and `c15t` stay distinct.
 
 **Disagreement stays visible.** When merged rows differ on a non-identity
-column, the fuller value is kept, the alternatives are preserved, and the row is
+column, every value is listed in the cell, separated by `; `, and the row is
 flagged `merged_variants:<column>`. Merging must not present one paper's
-qualifier as every source's finding.
+qualifier as every source's finding. Flat formats (TSV, CSV, Markdown) join the
+same way; JSON keeps the representative value and a structured `variants` list,
+since it can represent both.
 
 ### What the columns mean
 

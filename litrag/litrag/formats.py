@@ -40,7 +40,9 @@ def row_to_dict(
     columns: Sequence[str],
     provenance: bool = True,
 ) -> Dict[str, Any]:
-    record: Dict[str, Any] = {c: row.get(c) for c in columns}
+    # Flat formats have nowhere to put the alternatives except the cell, so
+    # they are joined inline. JSON keeps them structured instead.
+    record: Dict[str, Any] = {c: row.display(c) for c in columns}
     record.update(_annotations(row))
     if provenance:
         for column in PROVENANCE_COLUMNS:
@@ -136,7 +138,7 @@ def to_pretty_table(rows: Sequence[Row], columns: Sequence[str], max_width: int 
             return str(row.n_support)
         if column == "flags":
             return ",".join(f.split(":")[0] for f in row.flags)
-        return row.get(column)
+        return row.display(column)
 
     def truncate(text: str) -> str:
         text = str(text).replace("\n", " ")

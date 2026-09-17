@@ -212,17 +212,16 @@ function renderTable(result) {
       (row.citations || []).flatMap((c) => (c.chunks || []).map((ch) => ch.marker)));
 
     const cells = dataColumns.map((column) => {
-      const raw = row.values[column] || '';
-      // Any cell may carry a [n]; the Assertion usually does.
-      let cell = linkMarkers(raw, markerSet);
-      if (row.variants && row.variants[column]) {
-        const others = row.variants[column].filter((v) => v !== row.values[column]);
-        if (others.length) {
-          cell += `<div class="variants">also reported: `
-            + `${linkMarkers(others.join('; '), markerSet)}</div>`;
-        }
+      const primary = row.values[column] || '';
+      // Merged rows list every alternative inline, separated by "; ", rather
+      // than hiding the disagreement behind a representative value.
+      const alternatives = (row.variants && row.variants[column]) || [];
+      const ordered = [];
+      for (const value of [primary, ...alternatives]) {
+        if (value && !ordered.includes(value)) ordered.push(value);
       }
-      return `<td>${cell}</td>`;
+      // Any cell may carry a [n]; the Assertion usually does.
+      return `<td>${linkMarkers(ordered.join('; '), markerSet)}</td>`;
     }).join('');
 
     const support = `<td class="num"><span class="support">${row.n_support}</span></td>`;
