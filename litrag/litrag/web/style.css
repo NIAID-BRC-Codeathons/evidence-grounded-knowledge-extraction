@@ -105,6 +105,24 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cite { display: block; font-size: 12px; margin-bottom: 2px; }
 .cite a { color: var(--accent); text-decoration: none; }
 .cite a:hover { text-decoration: underline; }
+a.passage, a.marker {
+  color: var(--accent); text-decoration: none; font-weight: 600;
+  border-bottom: 1px dotted var(--accent);
+}
+a.passage {
+  font-size: 11px; margin-left: 3px; padding: 0 2px;
+  border-bottom: none; background: #eef2f7; border-radius: 3px;
+}
+a.passage:hover, a.marker:hover { background: var(--accent); color: #fff; }
+
+.chunkMeta { margin-top: 3px; }
+.chunkId { font-family: ui-monospace, Menlo, monospace; font-size: 10px; opacity: 0.75; }
+
+.sourceCard.highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(26, 111, 181, 0.18);
+}
+
 .variants { font-size: 11px; color: var(--muted); margin-top: 3px; font-style: italic; }
 
 .answerText {

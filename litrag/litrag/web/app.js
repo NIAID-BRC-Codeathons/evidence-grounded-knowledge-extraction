@@ -135,6 +135,20 @@ function renderSummary(summary, rowCount) {
   summaryEl.classList.remove('hidden');
 }
 
+function passageLinks(chunks) {
+  // One link per retrieved passage. The chunk, not the paper, is what the
+  // model actually read, so this is the evidence a curator needs to check.
+  if (!chunks || !chunks.length) return '';
+  return ' ' + chunks.map((ch) => {
+    const span = (ch.start_char != null && ch.end_char != null)
+      ? ` chars ${ch.start_char}\u2013${ch.end_char}` : '';
+    const title = `Jump to retrieved passage [${ch.marker}]${span}`
+      + (ch.chunk_id ? `\nchunk ${ch.chunk_id}` : '');
+    return `<a class="passage" href="#source-${ch.marker}"`
+      + ` data-marker="${ch.marker}" title="${escapeHtml(title)}">\u00b6${ch.marker}</a>`;
+  }).join('');
+}
+
 function citationHtml(citations) {
   if (!citations.length) return '<span class="flag">no citation</span>';
   return citations.map((c) => {
@@ -145,10 +159,31 @@ function citationHtml(citations) {
     ].filter(Boolean).join(' ');
     const id = c.pmid ? `PMID ${c.pmid}` : (c.doi ? `DOI ${c.doi}` : '');
     const text = escapeHtml(`${label} ${id}`.trim()) || `[${c.marker}]`;
-    return c.url
-      ? `<span class="cite"><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${text}</a></span>`
-      : `<span class="cite">${text}</span>`;
+    const paper = c.url
+      ? `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${text}</a>`
+      : text;
+    return `<span class="cite">${paper}${passageLinks(c.chunks)}</span>`;
   }).join('');
+}
+
+function linkMarkers(text, markerSet) {
+  // Turn the "[3]" the model wrote inside an assertion into a jump to that
+  // passage, so a claim can be checked against its source in one click.
+  return escapeHtml(text).replace(/\[(\d+(?:\s*[,\u2013-]\s*\d+)?)\]/g, (whole, body) => {
+    const parts = body.split(/[,\u2013-]/).map((n) => parseInt(n.trim(), 10))
+      .filter((n) => !Number.isNaN(n));
+    // "[1-3]" spans three passages; "[1, 2]" names two. Match how the
+    // extractor reads them so the links agree with the resolved citations.
+    const isSpan = parts.length === 2 && /[\u2013-]/.test(body);
+    const expanded = isSpan
+      ? Array.from({ length: Math.max(...parts) - Math.min(...parts) + 1 },
+                   (_, i) => Math.min(...parts) + i)
+      : parts;
+    const nums = expanded.filter((n) => markerSet.has(n));
+    if (!nums.length) return whole;
+    return nums.map((n) => `<a class="marker" href="#source-${n}" data-marker="${n}"`
+      + ` title="Jump to retrieved passage [${n}]">[${n}]</a>`).join('');
+  });
 }
 
 function renderTable(result) {
@@ -159,12 +194,18 @@ function renderTable(result) {
     + '<th>Support</th><th>Citations</th><th>Flags</th>';
 
   const body = result.rows.map((row) => {
+    const markerSet = new Set(
+      (row.citations || []).flatMap((c) => (c.chunks || []).map((ch) => ch.marker)));
+
     const cells = dataColumns.map((column) => {
-      let cell = escapeHtml(row.values[column] || '');
+      const raw = row.values[column] || '';
+      // Any cell may carry a [n]; the Assertion usually does.
+      let cell = linkMarkers(raw, markerSet);
       if (row.variants && row.variants[column]) {
         const others = row.variants[column].filter((v) => v !== row.values[column]);
         if (others.length) {
-          cell += `<div class="variants">also reported: ${escapeHtml(others.join('; '))}</div>`;
+          cell += `<div class="variants">also reported: `
+            + `${linkMarkers(others.join('; '), markerSet)}</div>`;
         }
       }
       return `<td>${cell}</td>`;
@@ -205,7 +246,10 @@ function renderSources(sources) {
     const corpus = source.collection
       ? `<span class="corpusTag">${escapeHtml(source.collection)}</span>` : '';
 
-    return `<div class="sourceCard">
+    const span = (source.start_char != null && source.end_char != null)
+      ? `<span class="metaTag">chars ${source.start_char}\u2013${source.end_char}</span>` : '';
+
+    return `<div class="sourceCard" id="source-${index + 1}">
       <div class="sourceHead">
         <span class="rank">#${index + 1}</span>
         <span class="score">score ${Number(source.score).toFixed(3)}</span>
@@ -214,6 +258,8 @@ function renderSources(sources) {
       <div class="sourceTitle">${link}</div>
       <div>${meta}</div>
       ${authors ? `<div class="metaTag">${escapeHtml(authors)}</div>` : ''}
+      <div class="chunkMeta">${span}<span class="metaTag chunkId" title="chunk id">`
+        + `${escapeHtml(source.chunk_id || '')}</span></div>
       <div class="sourceContent" data-full="${escapeHtml(content)}" data-preview="${escapeHtml(preview)}">${escapeHtml(preview)}</div>
       ${isLong ? '<button type="button" class="expandBtn">Show more</button>' : ''}
     </div>`;
@@ -335,7 +381,24 @@ function checkBackendSupport() {
 }
 
 
+function jumpToSource(marker) {
+  const card = document.getElementById(`source-${marker}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.querySelectorAll('.sourceCard.highlight')
+    .forEach((el) => el.classList.remove('highlight'));
+  card.classList.add('highlight');
+}
+
+
 function init() {
+  // Delegated: the table and source list are rebuilt on every search.
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a.passage, a.marker');
+    if (!link) return;
+    e.preventDefault();
+    jumpToSource(link.dataset.marker);
+  });
   $('dataType').addEventListener('change', checkBackendSupport);
   $('backend').addEventListener('change', checkBackendSupport);
   $('topK').addEventListener('input', (e) => { $('topKValue').textContent = e.target.value; });

@@ -86,15 +86,33 @@ def identity_key(row: Row, template_id: str, columns: Sequence[str]) -> Tuple:
     )
 
 
+def _citation_key(citation: Citation) -> str:
+    return citation.pmid or citation.doi or citation.pmcid or f"marker:{citation.marker}"
+
+
 def _merge_citations(existing: List[Citation], incoming: Iterable[Citation]) -> List[Citation]:
-    seen = {c.pmid or c.doi or c.pmcid or f"marker:{c.marker}" for c in existing}
+    """Union two citation lists, keeping every supporting passage.
+
+    When two merged rows cite the same paper through different chunks, both
+    chunks are evidence for the combined row -- discarding one would hide where
+    half the support came from.
+    """
     merged = list(existing)
+    by_key = {_citation_key(c): c for c in merged}
+
     for citation in incoming:
-        key = citation.pmid or citation.doi or citation.pmcid or f"marker:{citation.marker}"
-        if key in seen:
+        key = _citation_key(citation)
+        current = by_key.get(key)
+        if current is None:
+            by_key[key] = citation
+            merged.append(citation)
             continue
-        seen.add(key)
-        merged.append(citation)
+        seen = {c.chunk_id or c.marker for c in current.chunks}
+        for chunk in citation.chunks:
+            if (chunk.chunk_id or chunk.marker) not in seen:
+                seen.add(chunk.chunk_id or chunk.marker)
+                current.chunks.append(chunk)
+        current.chunks.sort(key=lambda c: c.marker)
     return merged
 
 

@@ -23,6 +23,8 @@ def _annotations(row: Row) -> Dict[str, Any]:
         "_flags": ";".join(row.flags),
         "_citations": row.citation_text,
         "_pmids": ";".join(row.pmids),
+        "_chunk_ids": ";".join(row.chunk_ids),
+        "_markers": ";".join(str(m) for m in row.markers),
     }
 
 
@@ -78,6 +80,7 @@ def to_json(
             {
                 **{c: row.get(c) for c in columns},
                 "citations": [c.to_dict() for c in row.citations],
+                "chunk_ids": row.chunk_ids,
                 "flags": row.flags,
                 "variants": row.variants,
                 "n_support": row.n_support,
@@ -99,6 +102,7 @@ def to_jsonl(rows: Sequence[Row], columns: Sequence[str], provenance: bool = Tru
     for row in rows:
         record = {c: row.get(c) for c in columns}
         record["citations"] = [c.to_dict() for c in row.citations]
+        record["chunk_ids"] = row.chunk_ids
         record["flags"] = row.flags
         record["n_support"] = row.n_support
         if provenance:
@@ -156,6 +160,8 @@ def _source_summary(source: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "doc_id": source.get("doc_id"),
         "chunk_id": source.get("chunk_id"),
+        "start_char": meta.get("start_char"),
+        "end_char": meta.get("end_char"),
         "score": source.get("score"),
         "title": meta.get("title"),
         "journal": meta.get("journal"),

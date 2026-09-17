@@ -93,3 +93,23 @@ def test_support_count_accumulates(registry):
     ]
     merged = dedupe(rows, template.id, columns)
     assert len(merged) == 1 and merged[0].n_support == 4
+
+
+def test_merging_unions_supporting_passages(registry, mutation_response):
+    """Two rows citing one paper through different chunks give the merged row
+    both passages -- discarding one hides where half its support came from."""
+    from litrag.extract import parse_citations
+    template = registry.resolve("mutation")
+    columns = template.columns
+    sources = mutation_response["sources"]
+
+    a = Row(values={"Organism": "M. tb", "Gene Name": "katG", "Mutation": "S315T"},
+            citations=parse_citations("[3]", sources))
+    b = Row(values={"Organism": "M. tb", "Gene Name": "katG", "Mutation": "Ser315Thr"},
+            citations=parse_citations("[5]", sources))
+
+    merged = dedupe([a, b], template.id, columns)
+    assert len(merged) == 1
+    assert len(merged[0].citations) == 1, "same paper stays one citation"
+    assert [c.marker for c in merged[0].citations[0].chunks] == [3, 5]
+    assert len(merged[0].chunk_ids) == 2

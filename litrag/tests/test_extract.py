@@ -229,3 +229,89 @@ def test_single_record_table_is_not_rotated(registry, mutation_response):
     result = extract(answer, template, mutation_response["sources"])
     assert result.transposed is False
     assert result.n_rows == 1
+
+
+# -- passage-level provenance --------------------------------------------
+
+def test_citation_records_the_chunk_it_came_from(mutation_response):
+    """The chunk is the text the model actually read, so it is the evidence."""
+    sources = mutation_response["sources"]
+    citation = parse_citations("[1]", sources)[0]
+    assert len(citation.chunks) == 1
+    chunk = citation.chunks[0]
+    assert chunk.chunk_id == sources[0]["chunk_id"]
+    assert chunk.doc_id == sources[0]["doc_id"]
+    assert chunk.marker == 1
+    assert chunk.score == sources[0]["score"]
+
+
+def test_every_passage_of_one_paper_survives(mutation_response):
+    """Sources 3, 5 and 6 are three chunks of PMID 19578178.
+
+    They collapse to one citation, but all three passages are kept: dropping
+    two would discard exactly the provenance a curator needs to verify.
+    """
+    citations = parse_citations("[3][5][6]", mutation_response["sources"])
+    assert len(citations) == 1
+    assert [c.marker for c in citations[0].chunks] == [3, 5, 6]
+    assert len(set(citations[0].chunk_ids)) == 3
+
+
+def test_chunk_spans_are_captured(mutation_response):
+    citation = parse_citations("[1]", mutation_response["sources"])[0]
+    chunk = citation.chunks[0]
+    meta = mutation_response["sources"][0]["metadata"]
+    assert chunk.start_char == meta.get("start_char")
+    assert chunk.end_char == meta.get("end_char")
+    assert chunk.span == f"{chunk.start_char}-{chunk.end_char}"
+
+
+def test_row_exposes_all_supporting_chunks(registry, mutation_response):
+    template = registry.resolve("mutation")
+    result = extract(mutation_response["answer"], template, mutation_response["sources"])
+    row = result.rows[0]
+    assert row.chunk_ids and all(row.chunk_ids)
+    assert row.markers == sorted(row.markers)
+
+
+def test_unresolved_citation_has_no_chunk(mutation_response):
+    citation = parse_citations("[99]", mutation_response["sources"])[0]
+    assert not citation.resolved and citation.chunks == []
+
+
+def test_citation_round_trips_with_its_chunks(mutation_response):
+    """Resume rebuilds rows from the sidecar; passages must come back too."""
+    from litrag.extract import Citation
+    original = parse_citations("[3][5][6]", mutation_response["sources"])[0]
+    restored = Citation.from_dict(original.to_dict())
+    assert [c.marker for c in restored.chunks] == [3, 5, 6]
+    assert restored.chunk_ids == original.chunk_ids
+
+
+# -- bracket-aware list splitting ----------------------------------------
+
+def test_parenthetical_list_is_not_split(registry, mutation_response):
+    """Live regression: "Multiple mutations (codons 315, 316, 309)" was split
+    into the three rows "Multiple mutations (codons 315", "316" and "309)"."""
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "M. tuberculosis\tkatG\tMultiple mutations (codons 315, 316, 309)\t"
+        "High-level resistance\tTrue\t[1]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    assert result.split_compound == 0
+    assert result.n_rows == 1
+    assert result.rows[0].get("Mutation") == "Multiple mutations (codons 315, 316, 309)"
+
+
+def test_genuine_list_still_splits_alongside_a_parenthetical(registry, mutation_response):
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "M. tuberculosis\tkatG, inhA\tSer315Thr (S315T), c-15t\t"
+        "INH resistance\tTrue\t[1]\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    assert result.split_compound == 1
+    assert [r.get("Mutation") for r in result.rows] == ["Ser315Thr (S315T)", "c-15t"]

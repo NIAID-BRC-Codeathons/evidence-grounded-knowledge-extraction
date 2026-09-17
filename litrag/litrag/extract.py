@@ -38,8 +38,50 @@ _EITHER_OR_COLUMNS = [{"mic", "sir"}]
 
 
 @dataclass
+class ChunkRef:
+    """One retrieved passage supporting a claim.
+
+    The chunk, not the paper, is the real unit of evidence: it is the text the
+    model actually read. Two chunks of one paper are two pieces of support and
+    must both survive, which is why a Citation carries a list of these rather
+    than a single marker.
+    """
+
+    marker: int
+    chunk_id: str = ""
+    doc_id: str = ""
+    start_char: Optional[int] = None
+    end_char: Optional[int] = None
+    score: Optional[float] = None
+
+    @property
+    def span(self) -> str:
+        if self.start_char is None or self.end_char is None:
+            return ""
+        return f"{self.start_char}-{self.end_char}"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "marker": self.marker, "chunk_id": self.chunk_id,
+            "doc_id": self.doc_id, "start_char": self.start_char,
+            "end_char": self.end_char, "score": self.score,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ChunkRef":
+        return cls(
+            marker=int(data.get("marker", 0)),
+            chunk_id=data.get("chunk_id", "") or "",
+            doc_id=data.get("doc_id", "") or "",
+            start_char=data.get("start_char"),
+            end_char=data.get("end_char"),
+            score=data.get("score"),
+        )
+
+
+@dataclass
 class Citation:
-    """A resolved literature reference."""
+    """A resolved literature reference, with the passages that support it."""
 
     marker: int
     pmid: Optional[str] = None
@@ -52,6 +94,8 @@ class Citation:
     resolved: bool = True
     # "marker" for a [n] reference, "author" for a prose name match.
     matched_by: str = "marker"
+    # Every retrieved passage backing this citation, in marker order.
+    chunks: List[ChunkRef] = field(default_factory=list)
 
     @property
     def url(self) -> Optional[str]:
@@ -62,6 +106,14 @@ class Citation:
         if self.pmcid:
             return f"https://www.ncbi.nlm.nih.gov/pmc/articles/{self.pmcid}/"
         return None
+
+    @property
+    def markers(self) -> List[int]:
+        return [c.marker for c in self.chunks] or [self.marker]
+
+    @property
+    def chunk_ids(self) -> List[str]:
+        return [c.chunk_id for c in self.chunks if c.chunk_id]
 
     def short(self) -> str:
         """A compact human-readable citation."""
@@ -93,6 +145,7 @@ class Citation:
             "url": self.url,
             "resolved": self.resolved,
             "matched_by": self.matched_by,
+            "chunks": [c.to_dict() for c in self.chunks],
         }
 
 
@@ -105,6 +158,7 @@ class Citation:
             title=data.get("title"), first_author=data.get("first_author"),
             resolved=bool(data.get("resolved", True)),
             matched_by=data.get("matched_by", "marker"),
+            chunks=[ChunkRef.from_dict(c) for c in data.get("chunks", [])],
         )
 
 
@@ -132,6 +186,25 @@ class Row:
     @property
     def pmids(self) -> List[str]:
         return [c.pmid for c in self.citations if c.pmid]
+
+    @property
+    def chunk_ids(self) -> List[str]:
+        """Every passage backing this row, across all its citations."""
+        ids: List[str] = []
+        for citation in self.citations:
+            for chunk_id in citation.chunk_ids:
+                if chunk_id not in ids:
+                    ids.append(chunk_id)
+        return ids
+
+    @property
+    def markers(self) -> List[int]:
+        seen: List[int] = []
+        for citation in self.citations:
+            for marker in citation.markers:
+                if marker not in seen:
+                    seen.append(marker)
+        return sorted(seen)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -274,15 +347,25 @@ def parse_citations(text: str, sources: Sequence[Dict[str, Any]]) -> List[Citati
     if not citations:
         citations = _match_by_text(text, sources)
 
-    # Collapse chunks of the same document into one citation.
+    # One citation per document, but every supporting passage is kept: three
+    # chunks of one paper are three pieces of evidence, and dropping two of
+    # them would throw away exactly the provenance a curator needs.
     deduped: List[Citation] = []
-    doc_seen: set = set()
+    by_document: Dict[str, Citation] = {}
     for citation in citations:
-        key = citation.pmid or citation.doi or citation.pmcid or f"marker:{citation.marker}"
-        if key in doc_seen:
+        key = (citation.pmid or citation.doi or citation.pmcid
+               or f"marker:{citation.marker}")
+        existing = by_document.get(key)
+        if existing is None:
+            by_document[key] = citation
+            deduped.append(citation)
             continue
-        doc_seen.add(key)
-        deduped.append(citation)
+        seen = {c.chunk_id or c.marker for c in existing.chunks}
+        for chunk in citation.chunks:
+            if (chunk.chunk_id or chunk.marker) not in seen:
+                existing.chunks.append(chunk)
+    for citation in deduped:
+        citation.chunks.sort(key=lambda c: c.marker)
     return deduped
 
 
@@ -341,7 +424,16 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
     if index < 0 or index >= len(sources):
         return Citation(marker=marker, resolved=False)
 
-    meta = sources[index].get("metadata", {}) or {}
+    source = sources[index]
+    meta = source.get("metadata", {}) or {}
+    chunk = ChunkRef(
+        marker=marker,
+        chunk_id=source.get("chunk_id", "") or "",
+        doc_id=source.get("doc_id", "") or "",
+        start_char=meta.get("start_char"),
+        end_char=meta.get("end_char"),
+        score=source.get("score"),
+    )
     authors = meta.get("authors") or []
     first_author = None
     if isinstance(authors, list) and authors:
@@ -360,6 +452,7 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
         title=_as_str(meta.get("title")),
         first_author=first_author,
         resolved=True,
+        chunks=[chunk],
     )
 
 
@@ -407,6 +500,42 @@ _SPLITTABLE_COLUMNS = {
 _LIST_SEPARATOR = re.compile(r"\s*[,;]\s*|\s+and\s+")
 
 
+def _split_list(value: str) -> List[str]:
+    """Split "a, b and c" into parts, ignoring separators inside brackets.
+
+    "Multiple mutations (codons 315, 316, 309)" is one value, not three: the
+    commas belong to the parenthetical. Splitting blindly produced the rows
+    "Multiple mutations (codons 315", "316" and "309)".
+    """
+    parts: List[str] = []
+    depth = 0
+    current: List[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char in "([{":
+            depth += 1
+            current.append(char)
+            index += 1
+            continue
+        if char in ")]}":
+            depth = max(0, depth - 1)
+            current.append(char)
+            index += 1
+            continue
+        if depth == 0:
+            match = _LIST_SEPARATOR.match(value, index)
+            if match and match.end() > index:
+                parts.append("".join(current))
+                current = []
+                index = match.end()
+                continue
+        current.append(char)
+        index += 1
+    parts.append("".join(current))
+    return [p.strip() for p in parts if p.strip()]
+
+
 def _split_compound(
     values: Dict[str, str], columns: Sequence[str]
 ) -> "tuple[List[Dict[str, str]], bool]":
@@ -423,7 +552,7 @@ def _split_compound(
         value = values.get(column, "")
         if not value:
             continue
-        parts = [p.strip() for p in _LIST_SEPARATOR.split(value) if p.strip()]
+        parts = _split_list(value)
         if len(parts) > 1:
             parts_by_column[column] = parts
 
