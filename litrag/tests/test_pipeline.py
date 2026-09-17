@@ -525,3 +525,42 @@ def test_expand_ignores_chunks_it_did_not_ask_for(registry):
     ids = {s["chunk_id"] for s in out}
     assert "SMUGGLED" not in ids
     assert ids == {"c-1", "c-2"}
+
+
+def test_batched_run_shows_papers_not_batch_local_markers(registry):
+    """A marker means a different paper in each batch, so it cannot be displayed.
+
+    Measured on a live run: the marker text "[17]" covered three distinct PMIDs
+    across three batches. The resolved citations were right, but the Reference
+    cell still held the model's raw text, so an exported table labelled three
+    different papers identically.
+    """
+    from litrag.llm import PRESETS
+
+    sources = big_sources(40, per_doc=1, chars=4000)
+    llm = batching_client(None, one_row_per_source)
+    run = run_query(make_client(retrieve_only(sources)), registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=40,
+                              depth="adaptive", collection="open-access",
+                              collection_count=47_000_000),
+                    endpoint=PRESETS["qwen"], llm_client=llm)
+
+    assert run.summary()["n_batches"] > 1
+    refs = [r.get("Reference") for r in run.rows]
+    assert all(r.startswith("PMID:") for r in refs if r), refs[:5]
+    # Distinct papers must carry distinct labels.
+    assert len(set(refs)) == len(refs)
+
+
+def test_single_batch_leaves_the_reference_cell_alone(registry):
+    """Standard depth stays byte-exact: one source list, markers still index it."""
+    from litrag.llm import PRESETS
+
+    sources = big_sources(5, per_doc=1, chars=100)
+    llm = batching_client(None, one_row_per_source)
+    run = run_query(make_client(retrieve_only(sources)), registry,
+                    QuerySpec(organism="M. tb", data_type="mutation", top_k=5),
+                    endpoint=PRESETS["qwen"], llm_client=llm)
+
+    assert run.summary()["n_batches"] == 1
+    assert run.rows[0].get("Reference").startswith("[")

@@ -9,10 +9,10 @@ from typing import Optional
 
 import typer
 
-from . import __version__, formats
+from . import __version__, formats, retrieval
 from .batch import BatchDefaults, load_specs, run_batch
 from .client import ApiError, RagStackClient
-from .collections import ALL, CollectionRegistry
+from .collections import ALL, CollectionRegistry, clean_title
 from .config import ConfigError, load_config
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmClient, LlmError,
                   resolve_endpoint)
@@ -57,6 +57,75 @@ def _resolve_collections(registry: CollectionRegistry, value):
     except ValueError as exc:
         _err(str(exc))
         raise typer.Exit(2)
+
+
+def _print_sources(sources) -> None:
+    """One entry per PAPER, not per passage.
+
+    This used to print a numbered block per source, which was fine at ten and is
+    a wall of near-identical text at several hundred. The number was also
+    actively misleading: it looked like the [n] citation marker, but markers are
+    now assigned per batch, so the two have nothing to do with each other.
+    """
+    papers: dict = {}
+    for source in sources:
+        meta = source.get("metadata") or {}
+        key = meta.get("pmid") or meta.get("doi") or source.get("doc_id")
+        entry = papers.setdefault(key, {
+            "title": clean_title(meta.get("title")) or "Untitled",
+            "journal": meta.get("journal") or "?", "year": meta.get("year") or "",
+            "pmid": meta.get("pmid") or "-", "doi": meta.get("doi") or "-",
+            "passages": 0, "expanded": 0, "best": None,
+        })
+        entry["passages"] += 1
+        entry["expanded"] += 1 if source.get("expanded") else 0
+        score = source.get("score")
+        if isinstance(score, (int, float)):
+            entry["best"] = score if entry["best"] is None else max(entry["best"], score)
+
+    typer.echo(f"\nSources: {len(papers)} papers, {len(sources)} passages", err=True)
+    for entry in sorted(papers.values(), key=lambda e: -(e["best"] or 0)):
+        best = f"{entry['best']:.3f}" if entry["best"] is not None else "-"
+        note = f"{entry['passages']} passage" + ("s" if entry["passages"] != 1 else "")
+        if entry["expanded"]:
+            note += f", {entry['expanded']} expanded"
+        typer.echo(
+            f"  {entry['title'][:78]}\n"
+            f"      {entry['journal']} {entry['year']} "
+            f"PMID:{entry['pmid']} DOI:{entry['doi']} "
+            f"| {note}, best score {best}",
+            err=True,
+        )
+
+
+def _report_gather(counts: dict, n_batches: int) -> None:
+    """Say how much literature is about to be read, before the waiting starts.
+
+    Worth printing even for one batch: "10 passages from 8 papers" is the single
+    most surprising fact about how this tool works, and it was invisible.
+    """
+    bits = [f"reviewing {counts['n_passages']} passages "
+            f"from {counts['n_papers']} papers"]
+    if counts.get("n_expanded"):
+        bits.append(f"({counts['n_expanded']} read around the search hits)")
+    if n_batches > 1:
+        bits.append(f"in {n_batches} parallel batches")
+    _info(" ".join(bits))
+
+
+def _report_batch(done: int, total: int) -> None:
+    if total > 1:
+        _info(f"  [{done}/{total}] batch complete")
+
+
+def _collection_count(registry: CollectionRegistry, ids) -> int:
+    """Chunks in the corpus being searched -- what depth adapts to.
+
+    Several collections at once: take the largest, since the depth chosen for
+    the biggest corpus is the one that keeps the run affordable.
+    """
+    counts = [c.count for c in registry if c.id in set(ids or [])]
+    return max(counts) if counts else 0
 
 
 def _registry(client: RagStackClient) -> TemplateRegistry:
@@ -221,6 +290,16 @@ def query(
     no_dedupe: bool = typer.Option(False, "--no-dedupe", help="Do not merge duplicate facts."),
     show_sources: bool = typer.Option(False, "--show-sources", help="Print retrieved sources."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the request body and exit."),
+    depth: str = typer.Option(
+        retrieval.STANDARD, "--depth", "-d",
+        help="standard (top_k chunks, one call) | adaptive (read around each hit, "
+             "batched in parallel; depth set by corpus size) | full (read the "
+             "retrieved papers as completely as possible -- small corpora only).",
+    ),
+    concurrency: int = typer.Option(
+        4, "--concurrency", "-j", min=1, max=16,
+        help="Batches generated at once when --depth is not standard.",
+    ),
     llm: str = LLM,
     llm_model: Optional[str] = LLM_MODEL,
     thinking: Optional[bool] = THINKING,
@@ -232,23 +311,38 @@ def query(
         _err(f"unknown format '{fmt}'. Choose from: {', '.join(formats.FORMATS)}")
         raise typer.Exit(2)
 
+    if depth not in retrieval.DEPTHS:
+        _err(f"unknown depth '{depth}'. Choose from: {', '.join(retrieval.DEPTHS)}")
+        raise typer.Exit(2)
+
     endpoint = _endpoint(llm, llm_model, thinking)
+    if depth != retrieval.STANDARD and endpoint is None:
+        # The hosted endpoint owns its prompt, so it cannot be handed a batch of
+        # passages. Saying so beats silently ignoring the flag.
+        _err(f"--depth {depth} needs a directly-addressed model; the hosted "
+             f"backend builds its own prompt and cannot be given a batch of "
+             f"passages. Pass --llm qwen (or another model) alongside it.")
+        raise typer.Exit(2)
     spec = QuerySpec(
         organism=organism, genes=genes, other_terms=other_terms,
         data_type=data_type, top_k=top_k,
         keep_empty=keep_empty, no_dedupe=no_dedupe,
         backend=endpoint.name if endpoint else SERVER,
+        depth=depth, concurrency=concurrency,
     )
 
     with _connect(api_key, base_url) as client:
-        spec.collections = _resolve_collections(_collections(client), collection)
+        collection_registry = _collections(client)
+        spec.collections = _resolve_collections(collection_registry, collection)
+        spec.collection_count = _collection_count(collection_registry, spec.collections)
         registry = _registry(client)
         try:
             template = registry.resolve(spec.data_type)
             if dry_run:
                 _dry_run(spec, template, endpoint)
                 return
-            run = run_query(client, registry, spec, endpoint=endpoint)
+            run = run_query(client, registry, spec, endpoint=endpoint,
+                            on_gather=_report_gather, on_batch=_report_batch)
         except LlmError as exc:
             _err(str(exc))
             raise typer.Exit(1)
@@ -261,13 +355,19 @@ def query(
 
     summary = run.summary()
     _info(
-        f"{summary['n_sources']} sources from {summary['collections']} "
+        f"{summary['n_sources']} passages from {summary['n_papers']} papers "
+        f"in {summary['collections']} "
         f"-> {summary['n_rows']} rows "
         f"({summary['dropped_empty']} evidence-free dropped) "
         f"| {summary['model']} ({summary['generator']}) "
         f"| {summary['data_type']} v{summary['template_version']} "
         f"| {summary['elapsed_s']}s"
     )
+    if summary["n_batches_failed"]:
+        # A partial answer that looks complete is worse than a failure.
+        _err(f"WARNING: {summary['n_batches_failed']} of {summary['n_batches']} "
+             f"batches failed. These rows are drawn from part of the retrieved "
+             f"literature, not all of it.")
 
     text = formats.render(
         run.extraction, run.rows, fmt,
@@ -278,16 +378,7 @@ def query(
     _write(text, output)
 
     if show_sources and fmt not in ("json", "jsonl"):
-        typer.echo("\nSources:", err=True)
-        for index, source in enumerate(run.result.sources, start=1):
-            meta = source.get("metadata", {}) or {}
-            typer.echo(
-                f"  [{index}] {meta.get('title', 'Untitled')[:80]}\n"
-                f"      {meta.get('journal', '?')} {meta.get('year', '')} "
-                f"PMID:{meta.get('pmid', '-')} DOI:{meta.get('doi', '-')} "
-                f"score={source.get('score', 0):.3f}",
-                err=True,
-            )
+        _print_sources(run.result.sources)
 
 
 @app.command()

@@ -110,10 +110,17 @@ class Completion:
 class LlmClient:
     """Minimal OpenAI-compatible chat client."""
 
+    # 600s made sense when a query was one call and waiting beat failing. With
+    # a query fanned out over several concurrent calls it is a hazard: one
+    # wedged batch would hold the whole run for ten minutes while the others sat
+    # finished. A batch that has not answered in two minutes is not coming back
+    # usefully, and the caller now survives losing one.
+    DEFAULT_TIMEOUT = 120.0
+
     def __init__(
         self,
         endpoint: LlmEndpoint,
-        timeout: float = 600.0,
+        timeout: float = DEFAULT_TIMEOUT,
         client: Optional[httpx.Client] = None,
     ) -> None:
         self.endpoint = endpoint

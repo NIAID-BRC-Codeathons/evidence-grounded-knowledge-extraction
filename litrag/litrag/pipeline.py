@@ -51,7 +51,7 @@ class QuerySpec:
     # The registry knows it before the query runs; 0 means "unknown", which
     # plan() treats as a large corpus -- the conservative direction.
     collection_count: int = 0
-    concurrency: int = 4
+    concurrency: int = retrieval.MAX_CONCURRENCY
 
     @property
     def gene_list(self) -> List[str]:
@@ -225,7 +225,9 @@ def _run_batches(
         return outcomes
 
     outcomes: List[_BatchOutcome] = []
-    workers = max(1, min(spec.concurrency, total))
+    # Never more workers than batches (idle threads help nobody), and never
+    # more than the server rewards -- see retrieval.MAX_CONCURRENCY.
+    workers = max(1, min(spec.concurrency, total, retrieval.MAX_CONCURRENCY))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(work, i): i for i in range(total)}
         for future in as_completed(futures):
@@ -275,6 +277,40 @@ def _merge_extractions(done: Sequence[_BatchOutcome], total: int) -> Extraction:
     merged.n_batches = total
     merged.n_batches_failed = total - len(done)
     return merged
+
+
+def rewrite_reference_cells(rows: Sequence[Row], columns: Sequence[str]) -> None:
+    """Replace per-batch `[n]` markers with the papers they resolved to.
+
+    Markers are assigned per prompt, so once a query runs as several batches the
+    same `[17]` means a different paper in each one -- measured on a live run,
+    one marker text covered three distinct PMIDs. The resolved citations on the
+    row are correct, but the Reference CELL still held the model's raw text, so
+    an exported table showed three different papers under one identical label
+    and gave a reader no way to tell them apart.
+
+    Only applied to batched runs: with a single batch the markers still index
+    the one source list, and leaving them untouched keeps that path byte-exact.
+    """
+    from .extract import _REFERENCE_COLUMNS
+
+    targets = [c for c in columns if c.strip().lower() in _REFERENCE_COLUMNS]
+    if not targets:
+        return
+    for row in rows:
+        if not row.citations:
+            continue
+        labels = []
+        for citation in row.citations:
+            if citation.pmid:
+                labels.append(f"PMID:{citation.pmid}")
+            elif citation.doi:
+                labels.append(f"DOI:{citation.doi}")
+            elif citation.pmcid:
+                labels.append(citation.pmcid)
+        if labels:
+            for column in targets:
+                row.values[column] = "; ".join(dict.fromkeys(labels))
 
 
 def _combined_hash(hashes: Sequence[str]) -> str:
@@ -331,6 +367,7 @@ def _generate_locally(
     endpoint: LlmEndpoint,
     llm_client: Optional[LlmClient] = None,
     on_batch: Optional[Callable[[int, int], None]] = None,
+    on_gather: Optional[Callable[[Dict[str, int], int], None]] = None,
 ) -> Tuple[QueryResult, Extraction]:
     """Retrieve from RAGStack, then generate against a directly-addressed model.
 
@@ -350,6 +387,19 @@ def _generate_locally(
     started = time.monotonic()
     sources, plan = gather(client, spec, template)
     batches = retrieval.pack(sources, plan.batch_chars) or [[]]
+    if len(batches) > retrieval.MAX_BATCHES:
+        # Refuse loudly. Silently trimming would report a smaller corpus as
+        # though it were everything, which is the failure mode this whole
+        # change exists to remove.
+        raise LlmError(
+            f"{len(sources)} passages would need {len(batches)} generation "
+            f"calls, over the limit of {retrieval.MAX_BATCHES}. Narrow the "
+            f"query, pick a smaller collection, or lower --top-k."
+        )
+    if on_gather:
+        # Fired before any generation, so a caller can tell the user how much is
+        # about to be read while they wait for it.
+        on_gather(retrieval.summarise(sources), len(batches))
 
     owns = llm_client is None
     llm = llm_client or LlmClient(endpoint)
@@ -397,6 +447,7 @@ def run_query(
     endpoint: Optional[LlmEndpoint] = None,
     llm_client: Optional[LlmClient] = None,
     on_batch: Optional[Callable[[int, int], None]] = None,
+    on_gather: Optional[Callable[[Dict[str, int], int], None]] = None,
 ) -> RunResult:
     """Execute one curation query and return processed rows.
 
@@ -420,7 +471,8 @@ def run_query(
         # actually numbered, so it hands back the extraction rather than letting
         # us redo it here against a flat list the markers do not index into.
         result, extraction = _generate_locally(
-            client, spec, template, endpoint, llm_client, on_batch=on_batch,
+            client, spec, template, endpoint, llm_client,
+            on_batch=on_batch, on_gather=on_gather,
         )
     else:
         result = client.query(
@@ -444,6 +496,8 @@ def run_query(
     rows = list(extraction.rows)
     if extraction.is_table and not spec.no_dedupe:
         rows = dedupe(rows, template.id, extraction.columns)
+    if extraction.n_batches > 1:
+        rewrite_reference_cells(rows, extraction.columns)
 
     record = prov.build(
         result,

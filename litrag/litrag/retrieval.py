@@ -39,6 +39,17 @@ MAX_TOP_K = 100
 # but a longer tail: one slow batch holds up the whole query.
 DEFAULT_BATCH_CHARS = 60_000
 
+# Upper bound on concurrent generation calls for ONE query. Beyond this the
+# shared vLLM server stops going faster and starts queueing -- measured on
+# mango: 6 batches took 30.2s at concurrency 4, 24.9s at 6, 23.6s at 8. The
+# curve is already flat by 8, so more would only crowd out other users.
+MAX_CONCURRENCY = 8
+
+# Refuse rather than launch an unbounded fan-out. At ~1,700 chars per passage
+# this is roughly 1,700 passages, well past the point where a single query
+# should be silently spending this much of a shared GPU.
+MAX_BATCHES = 30
+
 # Depth presets. "standard" is today's behaviour and must stay that way: it is
 # the control arm for any comparison, so it may not acquire expansion by
 # accident.
