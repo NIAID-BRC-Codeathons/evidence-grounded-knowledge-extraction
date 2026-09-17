@@ -79,8 +79,12 @@ COLUMNS: Dict[str, str] = {
         "same MIC can be called S or R under CLSI versus EUCAST."
     ),
     "assertion": (
-        "What the source actually claims, in its own terms. Bracketed numbers "
-        "link to the passage the claim came from."
+        "Where the claim stands in the source: measured (the source ran the "
+        "experiment), inferred (concluded indirectly from its own data), "
+        "predicted (computational only), reported (attributed to other work), "
+        "or disputed (contradicted or unconfirmed). Local models are held to "
+        "these five; the hosted generator uses its own wording instead, such "
+        "as \"High confidence\"."
     ),
     "reference": (
         "The citation marker the model emitted. Resolved to real papers in the "

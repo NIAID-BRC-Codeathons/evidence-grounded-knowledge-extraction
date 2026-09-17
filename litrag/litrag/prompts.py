@@ -59,6 +59,46 @@ def build_context(
     return "\n\n---\n\n".join(blocks), len(blocks)
 
 
+# Rules attached to a column wherever it appears, including in the server's own
+# templates, which publish column names but no guidance of their own.
+#
+# "Assertion" needs one badly. Left undefined, Qwen echoed the instruction to
+# report only what sources state and wrote "Stated" in every row -- a constant,
+# carrying no information. Llama produced evidence types, the hosted path
+# produces confidence grades, so the column meant three things depending on who
+# generated it.
+#
+# The vocabulary below is an evidence-provenance axis rather than a confidence
+# one: whether a source measured, inferred, predicted, relayed, or disputed a
+# claim is checkable against its text, whereas a model's self-rated confidence
+# is not.
+ASSERTION_VALUES = ("measured", "inferred", "predicted", "reported", "disputed")
+
+COLUMN_RULES = {
+    "assertion": (
+        "The Assertion column must contain exactly one of: "
+        + ", ".join(ASSERTION_VALUES) + ". Use "
+        '"measured" when the source itself performed the experiment that shows '
+        'this; "inferred" when the source draws the conclusion indirectly from '
+        'its own data; "predicted" when the result is computational or in '
+        'silico only; "reported" when the source attributes it to other work '
+        'rather than its own; "disputed" when the source contradicts it or '
+        "fails to confirm it. Write nothing else in that column -- not a "
+        "confidence level, and not a restatement of the finding."
+    ),
+}
+
+
+def column_rules(columns: Sequence[str]) -> List[str]:
+    """Rules for whichever of the known columns this template actually has."""
+    rules = []
+    for column in columns:
+        rule = COLUMN_RULES.get(" ".join(str(column).split()).strip().lower())
+        if rule and rule not in rules:
+            rules.append(rule)
+    return rules
+
+
 def _table_instructions(template: Template, spec_bits: str, n_sources: int) -> str:
     columns = "\t".join(template.columns or [])
     rules = [
@@ -74,7 +114,8 @@ def _table_instructions(template: Template, spec_bits: str, n_sources: int) -> s
         "- Include only findings the sources actually state.",
         "- Output no text before or after the table.",
     ]
-    # A template may add rules specific to its data type.
+    # Rules for particular columns, then any the template itself declares.
+    rules.extend(f"- {line}" for line in column_rules(template.columns or []))
     rules.extend(f"- {line}" for line in template.guidance)
 
     return (

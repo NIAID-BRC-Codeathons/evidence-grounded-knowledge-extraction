@@ -86,3 +86,13 @@ def test_caveats_are_stated_where_they_matter():
     assert "never derived" in glossary.describe_column("SIR").lower()
     assert "never inferred" in glossary.describe_column("BioSample").lower()
     assert "order carries no meaning" in glossary.describe_column("Protein A").lower()
+
+
+def test_assertion_definition_lists_the_vocabulary():
+    """The tooltip has to name the values, since the column is now constrained."""
+    from litrag.prompts import ASSERTION_VALUES
+    text = glossary.describe_column("Assertion").lower()
+    for value in ASSERTION_VALUES:
+        assert value in text, f"{value} missing from the Assertion definition"
+    # And be honest that the hosted path does not follow it.
+    assert "hosted" in text

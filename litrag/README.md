@@ -326,6 +326,33 @@ litrag glossary off_target_gene
 A column with no definition simply gets no tooltip, so a template added
 server-side never shows a wrong one.
 
+### The Assertion column
+
+Server templates publish column names but no value vocabulary, so `Assertion`
+was undefined and each generator invented its own meaning: Qwen echoed the
+instruction to report only what sources state and wrote `Stated` in every row,
+Llama wrote evidence types, and the hosted path writes confidence grades like
+`High confidence`.
+
+On a local generator the column is now constrained to one of five values,
+describing where the claim stands in its source:
+
+| Value | Meaning |
+|---|---|
+| `measured` | The source ran the experiment that shows this |
+| `inferred` | The source concludes it indirectly from its own data |
+| `predicted` | Computational or in silico only |
+| `reported` | The source attributes it to other work, not its own |
+| `disputed` | The source contradicts it or fails to confirm it |
+
+This is an evidence-provenance axis rather than a confidence one: whether a
+source measured or merely relayed a claim is checkable against its text, while a
+model's self-rated confidence is not.
+
+The rule attaches to the column, so it applies to the server's templates too —
+they carry no guidance of their own. **The hosted path is unaffected**: its
+prompt belongs to the operator, and it still emits its own wording.
+
 ### Row flags
 
 | Flag | Meaning |
