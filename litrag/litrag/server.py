@@ -55,7 +55,7 @@ class QueryBody(BaseModel):
     genes: str = ""
     other_terms: str = ""
     data_type: str = "literature-summary"
-    top_k: int = Field(10, ge=1, le=50)
+    top_k: int = Field(10, ge=1, le=100)
     collection: Optional[str] = None
     keep_empty: bool = False
     no_dedupe: bool = False

@@ -19,6 +19,30 @@ from .dedup import dedupe
 from .extract import Extraction, Row, extract
 from .templates import Template, TemplateError, TemplateRegistry
 
+# Room left for the chat template's own wrapping around our prompt.
+CONTEXT_MARGIN = 1024
+# Never squeeze the retrieved context below this, whatever the output needs.
+MIN_CONTEXT_TOKENS = 4000
+# A table row costs roughly this much to write, so more sources means more
+# output is needed before the answer gets cut off.
+# Measured against Qwen at top_k=100: rows carry verbose assertions and
+# phenotypes, so 110 tokens a source still truncated the table.
+TOKENS_PER_SOURCE = 170
+MAX_OUTPUT_TOKENS = 20000
+
+
+def plan_output_tokens(template: Template, n_sources: int) -> int:
+    """How much room the answer needs.
+
+    The template declares a cap sized for the hosted path's own retrieval. On
+    the local path we choose top_k, so at 100 sources that cap cuts the table
+    off mid-row -- observed as truncated=True with rows silently missing.
+    """
+    declared = template.max_output_tokens or 2500
+    if not template.is_table:
+        return declared
+    return max(declared, min(MAX_OUTPUT_TOKENS, TOKENS_PER_SOURCE * max(1, n_sources)))
+
 
 @dataclass
 class QuerySpec:
@@ -109,6 +133,10 @@ class RunResult:
             "genes": self.spec.genes,
             "data_type": self.template.id,
             "n_sources": len(self.result.sources),
+            # Asked for vs actually shown to the model: a smaller context
+            # window silently drops the tail of a large retrieval.
+            "top_k": self.spec.top_k,
+            "sources_dropped": max(0, self.spec.top_k - len(self.result.sources)),
             "collections": self.spec.collection_label,
             "n_rows_raw": self.extraction.n_rows,
             "n_rows": len(self.rows),
@@ -116,6 +144,7 @@ class RunResult:
             "dropped_malformed": self.extraction.dropped_malformed,
             "unresolved_citations": self.extraction.unresolved_citations,
             "model": self.result.model,
+            "truncated": bool(self.result.truncated),
             "generator": self.result.generator,
             "endpoint": self.result.endpoint,
             "prompt_hash": self.result.prompt_hash,
@@ -166,24 +195,36 @@ def _generate_locally(
         retrieval_mode=spec.retrieval_mode,
     )
 
-    prompt, prompt_hash, _included = build_prompt(
+    # A large top_k produces both a bigger prompt and more rows to write, and
+    # the two compete for one context window. Size the output first, then give
+    # the prompt what is left -- so raising top_k truncates retrieved context
+    # rather than cutting the answer off mid-table.
+    output_tokens = plan_output_tokens(template, len(sources))
+    context_budget = spec.max_context_tokens or max(
+        MIN_CONTEXT_TOKENS, endpoint.context_tokens - output_tokens - CONTEXT_MARGIN
+    )
+
+    prompt, prompt_hash, included = build_prompt(
         template,
         sources,
         organism=spec.organism,
         genes=spec.genes,
         other_terms=spec.other_terms,
-        max_context_tokens=spec.max_context_tokens,
+        max_context_tokens=context_budget,
     )
 
     owns = llm_client is None
     llm = llm_client or LlmClient(endpoint)
     try:
-        completion = llm.complete(
-            prompt, max_tokens=template.max_output_tokens or 2500
-        )
+        completion = llm.complete(prompt, max_tokens=output_tokens)
     finally:
         if owns:
             llm.close()
+
+    if included < len(sources):
+        # Keep only what the model was actually shown: a citation marker past
+        # this point could not have come from a passage it read.
+        sources = list(sources[:included])
 
     return QueryResult(
         answer=completion.text,

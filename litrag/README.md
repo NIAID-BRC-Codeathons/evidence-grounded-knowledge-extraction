@@ -83,7 +83,7 @@ litrag serve --port 8080
 | `-g, --genes` | Comma-separated genes/proteins |
 | `-t, --other-terms` | Extra search terms |
 | `-T, --type` | `ppi`, `protein-function`, `mutation`, `summary`, `ast` (see **Data types**) |
-| `-k, --top-k` | Chunks to retrieve (1–50, default 10) |
+| `-k, --top-k` | Chunks to retrieve (1–100, default 10) |
 | `-c, --collection` | Corpus id, comma-separated ids, or `all` (default: PubMed Central) |
 | `-f, --format` | `table`, `tsv`, `csv`, `json`, `jsonl`, `md` |
 | `-o, --output` | Write to a file instead of stdout |
@@ -440,6 +440,29 @@ full references:
 
 Those ids go straight to the API's `/v1/chunks?ids=` to fetch the passage text
 back, along with its `prev_chunk_id` / `next_chunk_id` neighbours.
+
+### Retrieval depth
+
+`--top-k` goes to 100, and the slider with it. A deeper retrieval finds more,
+but the retrieved context and the answer compete for one context window, so both
+are budgeted: the answer is sized first (scaled to the number of sources, capped
+at 20k tokens), and the prompt gets what is left.
+
+Neither kind of loss is allowed to pass silently.
+
+- If the answer still hits its limit, the run is flagged **truncated** — a
+  cut-off table is missing rows and must not read as a complete result.
+- If the retrieval does not fit the model's window, the tail is dropped and the
+  run reports how many of the requested sources were actually shown. Only those
+  are kept as sources, so a citation marker can never point at a passage the
+  model never saw.
+
+Window sizes differ: Qwen holds 131k tokens and takes all 100 sources; Llama
+holds 60k and shows about 79 of them, which it now says. At `--top-k 100` expect
+roughly 20s rather than 2s.
+
+The hosted path budgets its own context and is unaffected — it accepts
+`top_k: 100` but returns about as many rows as it does at 10.
 
 ### Provenance
 

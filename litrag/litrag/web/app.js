@@ -132,6 +132,16 @@ function renderSummary(summary, rowCount) {
   if (summary.unresolved_citations > 0) {
     chips.push(`<span class="chip warn">${summary.unresolved_citations} unresolved citations</span>`);
   }
+  if (summary.sources_dropped > 0) {
+    chips.push(`<span class="chip warn">${summary.sources_dropped} of `
+      + `${summary.top_k} sources did not fit this model's context and were `
+      + `not used. Try Qwen, or fewer RAG Results.</span>`);
+  }
+  if (summary.truncated) {
+    // A cut-off table is missing rows and must not read as a full result.
+    chips.push('<span class="chip warn">truncated \u2014 the model hit its '
+      + 'output limit, so rows are missing. Lower RAG Results or narrow the query.</span>');
+  }
   const summaryEl = $('summary');
   summaryEl.innerHTML = chips.join('');
   summaryEl.classList.remove('hidden');

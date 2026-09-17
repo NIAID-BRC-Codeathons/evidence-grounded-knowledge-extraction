@@ -241,7 +241,7 @@ def query(
         "summary", "--type", "-T",
         help="Data type: ppi, protein-function, mutation, summary (see `litrag templates`).",
     ),
-    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=50, help="Chunks to retrieve."),
+    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=100, help="Chunks to retrieve (1-100)."),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c",
         help=f"Collection id, comma-separated ids, or '{ALL}'. Defaults to PubMed Central.",
@@ -300,6 +300,18 @@ def query(
         f"| {summary['data_type']} v{summary['template_version']} "
         f"| {summary['elapsed_s']}s"
     )
+    if summary.get("sources_dropped"):
+        _err(
+            f"Warning: {summary['sources_dropped']} of {summary['top_k']} retrieved "
+            f"sources did not fit this model's context and were not used. "
+            f"Use --llm qwen for a larger window, or lower --top-k."
+        )
+    if summary.get("truncated"):
+        # A cut-off table is missing rows; it must not look like a full result.
+        _err(
+            "Warning: the model hit its output limit, so this table is "
+            "incomplete. Lower --top-k, or narrow the query."
+        )
 
     text = formats.render(
         run.extraction, run.rows, fmt,
@@ -329,7 +341,7 @@ def batch(
     fmt: str = typer.Option("tsv", "--format", "-f", help="table|tsv|csv|json|jsonl|md."),
     concurrency: int = typer.Option(4, "--concurrency", "-j", min=1, max=16),
     data_type: str = typer.Option("summary", "--type", "-T", help="Default data type for rows that omit one."),
-    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=50),
+    top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=100),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c",
         help=f"Collection id, comma-separated ids, or '{ALL}'.",
