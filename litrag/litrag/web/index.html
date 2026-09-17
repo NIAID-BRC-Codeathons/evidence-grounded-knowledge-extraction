@@ -50,6 +50,14 @@
         <label for="backend">Model</label>
         <select id="backend"></select>
       </div>
+      <div class="formGroup">
+        <label for="depth">Reading depth</label>
+        <select id="depth">
+          <option value="standard" selected>Standard &mdash; top results only</option>
+          <option value="adaptive">Adaptive &mdash; read around each hit</option>
+          <option value="full">Full &mdash; read the top papers end to end</option>
+        </select>
+      </div>
       <div class="formGroup topk">
         <label for="topK">RAG Results <span id="topKValue" class="topKValue">10</span></label>
         <input type="range" id="topK" min="1" max="100" value="10">

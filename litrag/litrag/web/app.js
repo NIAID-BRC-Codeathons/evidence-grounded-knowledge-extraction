@@ -23,6 +23,7 @@ function requestBody() {
     top_k: parseInt($('topK').value, 10),
     collection: $('collection').value || null,
     llm: $('backend').value,
+    depth: $('depth').value,
     keep_empty: $('keepEmpty').checked,
     no_dedupe: !$('dedupe').checked,
   };
@@ -117,7 +118,10 @@ function setBusy(busy) {
 function renderSummary(summary, rowCount) {
   const chips = [
     `<span class="chip"><strong>${rowCount}</strong> rows</span>`,
-    `<span class="chip"><strong>${summary.n_sources}</strong> sources</span>`,
+    // Passages and papers are different numbers and the difference is the
+    // whole point: ten "sources" was ten fragments of eight papers.
+    `<span class="chip"><strong>${summary.n_sources}</strong> passages</span>`,
+    `<span class="chip"><strong>${summary.n_papers}</strong> papers</span>`,
     `<span class="chip">${escapeHtml(summary.data_type)} v${summary.template_version}</span>`,
     `<span class="chip">${escapeHtml(summary.model || '')}</span>`,
     `<span class="chip">${escapeHtml(summary.generator || '')}</span>`,
@@ -126,6 +130,16 @@ function renderSummary(summary, rowCount) {
   ];
   if (summary.dropped_empty > 0) {
     chips.push(`<span class="chip warn">${summary.dropped_empty} evidence-free dropped</span>`);
+  }
+  if (summary.n_batches > 1) {
+    chips.push(`<span class="chip">${summary.n_batches} parallel batches</span>`);
+  }
+  if (summary.n_batches_failed > 0) {
+    // A partial answer that looks complete is the worst outcome here, so this
+    // is a warning and not a footnote.
+    chips.push(`<span class="chip warn">${summary.n_batches_failed} of ` +
+               `${summary.n_batches} batches FAILED &mdash; drawn from part of ` +
+               `the literature, not all of it</span>`);
   }
   if (summary.unresolved_citations > 0) {
     chips.push(`<span class="chip warn">${summary.unresolved_citations} unresolved citations</span>`);
@@ -247,7 +261,13 @@ async function search(event) {
   state.lastBody = body;
   setBusy(true);
   $('status').className = 'status';
-  $('status').innerHTML = '<span class="spinner"></span>Searching literature and extracting…';
+  $('status').innerHTML = '<span class="spinner"></span>' + ({
+    standard: 'Searching literature and extracting…',
+    adaptive: 'Searching, then reading around each hit &mdash; a few hundred ' +
+              'passages across several parallel batches. Around 20 seconds.',
+    full: 'Searching, then reading the top papers end to end. This is the ' +
+          'slowest setting &mdash; around 40 seconds.',
+  }[body.depth] || 'Searching literature and extracting…');
   $('status').classList.remove('hidden');
   $('answerSection').classList.add('hidden');
   $('sourcesSection').classList.add('hidden');

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from pathlib import Path
 
-from . import __version__, formats
+from . import __version__, formats, retrieval
 from .client import ApiError, RagStackClient
 from .collections import ALL, CollectionRegistry, clean_title
 from .config import ConfigError, load_config
@@ -62,6 +62,10 @@ class QueryBody(BaseModel):
     keep_empty: bool = False
     no_dedupe: bool = False
     llm: str = DEFAULT_BACKEND
+    # How much of the literature to read. See retrieval.plan; "standard" is the
+    # original one-call behaviour and stays the default so nothing gets slower
+    # or more expensive without being asked for.
+    depth: str = retrieval.STANDARD
 
 
 def _resolve(client: RagStackClient, value):
@@ -86,7 +90,26 @@ def _collection_registry(client: RagStackClient) -> CollectionRegistry:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-def _spec(body: QueryBody, endpoint=None, collections=None) -> QuerySpec:
+def _depth(body: QueryBody, endpoint) -> str:
+    if body.depth not in retrieval.DEPTHS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown depth '{body.depth}'. "
+                   f"Choose from: {', '.join(retrieval.DEPTHS)}")
+    if body.depth != retrieval.STANDARD and endpoint is None:
+        # The hosted backend builds its own prompt server-side, so it cannot be
+        # handed a batch of passages. Refusing beats ignoring the setting and
+        # returning a shallow answer that looks deep.
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{body.depth}' depth needs a directly-addressed model. "
+                   f"The hosted RAGStack backend builds its own prompt. "
+                   f"Pick Qwen or Llama as the model.")
+    return body.depth
+
+
+def _spec(body: QueryBody, endpoint=None, collections=None,
+          collection_count: int = 0) -> QuerySpec:
     return QuerySpec(
         organism=body.organism.strip(),
         genes=body.genes.strip(),
@@ -98,7 +121,15 @@ def _spec(body: QueryBody, endpoint=None, collections=None) -> QuerySpec:
         no_dedupe=body.no_dedupe,
         backend=endpoint.name if endpoint is not None else SERVER,
         collections=list(collections or []),
+        depth=_depth(body, endpoint),
+        collection_count=collection_count,
     )
+
+
+def _collection_count(registry: CollectionRegistry, ids) -> int:
+    """Chunks in the corpus being searched -- what adaptive depth keys off."""
+    counts = [c.count for c in registry if c.id in set(ids or [])]
+    return max(counts) if counts else 0
 
 
 @app.get("/api/health")
@@ -191,7 +222,9 @@ def preview_request(body: QueryBody) -> Dict[str, Any]:
         try:
             template = registry.resolve(body.data_type)
             endpoint = _endpoint(body)
-            spec = _spec(body, endpoint, _resolve(client, body.collection))
+            chosen = _resolve(client, body.collection)
+            spec = _spec(body, endpoint, chosen,
+                         _collection_count(_collection_registry(client), chosen))
             declaration = {
                 "id": template.id, "version": template.version,
                 "hash": template.hash, "output": template.output,
@@ -235,8 +268,11 @@ def run(body: QueryBody) -> Dict[str, Any]:
         chosen = _resolve(client, body.collection)
         registry = _registry(client)
         try:
-            result = run_query(client, registry, _spec(body, endpoint, chosen),
-                               endpoint=endpoint)
+            result = run_query(
+                client, registry,
+                _spec(body, endpoint, chosen,
+                      _collection_count(_collection_registry(client), chosen)),
+                endpoint=endpoint)
         except TemplateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except LlmError as exc:
@@ -276,8 +312,11 @@ def export(body: QueryBody, fmt: str = "tsv") -> PlainTextResponse:
         chosen = _resolve(client, body.collection)
         registry = _registry(client)
         try:
-            result = run_query(client, registry, _spec(body, endpoint, chosen),
-                               endpoint=endpoint)
+            result = run_query(
+                client, registry,
+                _spec(body, endpoint, chosen,
+                      _collection_count(_collection_registry(client), chosen)),
+                endpoint=endpoint)
         except TemplateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except (ApiError, LlmError) as exc:
