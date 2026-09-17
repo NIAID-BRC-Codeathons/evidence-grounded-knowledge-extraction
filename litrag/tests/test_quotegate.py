@@ -161,3 +161,20 @@ def test_stamping_provenance_preserves_the_quote_gate_record():
     assert row.provenance["model"] == "gpt56sol", "the run record must land"
     assert row.provenance["quote_method"] == "exact", "the gate record must survive"
     assert row.provenance["quote"]
+
+
+def test_citation_survives_a_round_trip_with_its_passage():
+    """Batch resume restores rows from a sidecar via Row/Citation.from_dict.
+    from_dict did not carry chunk_id, doc_id or passage, so a RESUMED run came
+    back with citations but no evidence -- and the quote gate and the
+    unsupported-claim axis silently had nothing to work with."""
+    from litrag.extract import Citation
+
+    original = Citation(marker=1, pmid="123", chunk_id="c-1", doc_id="d-1",
+                        passage="the supporting sentence")
+    restored = Citation.from_dict(original.to_dict())
+
+    assert restored.pmid == "123"
+    assert restored.chunk_id == "c-1"
+    assert restored.doc_id == "d-1"
+    assert restored.passage == "the supporting sentence"

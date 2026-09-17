@@ -133,6 +133,12 @@ class Citation:
             title=data.get("title"), first_author=data.get("first_author"),
             resolved=bool(data.get("resolved", True)),
             matched_by=data.get("matched_by", "marker"),
+            # Batch resume rebuilds rows through here. Omitting these meant a
+            # resumed run came back with citations but no evidence, leaving the
+            # quote gate and the unsupported-claim axis with nothing to read.
+            chunk_id=data.get("chunk_id"),
+            doc_id=data.get("doc_id"),
+            passage=data.get("passage") or "",
         )
 
 
