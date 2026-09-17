@@ -310,7 +310,11 @@ th.evCol, td.evCol { width: 2rem; padding-right: 0; text-align: center; }
   .quotedBadge { background: #2d7fc4; }
 }
 
-/* --- Guided tour ---------------------------------------------------------- */
+/* --- Guided tour ----------------------------------------------------------
+   Spotlight mechanism: .tourSpot is a transparent bordered box whose single
+   enormous spread shadow dims everything outside it. That leaves the target
+   rendering exactly as it normally does -- no z-index lift, no forced
+   background -- so it works on transparent elements and in dark mode. */
 
 .tourLaunch {
   background: none; border: 1px solid #c3d4e2; border-radius: 4px;
@@ -320,43 +324,67 @@ th.evCol, td.evCol { width: 2rem; padding-right: 0; text-align: center; }
 .tourLaunch:hover { background: #e8f1f8; }
 .tourLaunch:focus-visible { outline: 2px solid #1a6fb5; outline-offset: 1px; }
 
-.tourOverlay {
-  position: fixed; inset: 0; background: rgba(16, 24, 32, 0.45);
-  z-index: 900;
-}
+/* Catches clicks anywhere outside the card. The visible dimming is the
+   spotlight's shadow, not this. */
+.tourOverlay { position: fixed; inset: 0; z-index: 900; background: transparent; }
 
-/* Lift the target above the dimming layer so it stays legible and obviously
-   the thing being talked about. */
-.tourTarget {
-  position: relative; z-index: 901;
-  outline: 3px solid #1a6fb5; outline-offset: 3px;
-  border-radius: 4px; background: #fff;
+.tourSpot {
+  position: absolute; z-index: 901; pointer-events: none;
+  border: 2px solid #1a6fb5; border-radius: 8px;
+  transition: left .18s ease, top .18s ease, width .18s ease, height .18s ease;
 }
 
 .tourCard {
-  position: absolute; z-index: 902; width: min(23rem, calc(100vw - 2rem));
-  background: #fff; border-radius: 6px; padding: 0.9rem 1rem 0.75rem;
-  box-shadow: 0 8px 28px rgba(16, 24, 32, 0.28);
+  position: absolute; z-index: 902; width: min(24rem, calc(100vw - 2rem));
+  background: #fff; border: 1px solid #d5dbdf; border-radius: 10px;
+  padding: 1rem 1.1rem 0.85rem;
+  box-shadow: 0 10px 30px rgba(22, 32, 42, 0.28);
 }
-.tourTitle { margin: 0 0 0.35rem; font-size: 0.95rem; color: #16324a; }
-.tourBody { margin: 0 0 0.75rem; font-size: 0.85rem; line-height: 1.5; color: #35424f; }
-.tourFooter { display: flex; align-items: center; gap: 0.4rem; }
-.tourSpacer { flex: 1; }
-.tourCount { font-size: 0.75rem; color: #8a97a3; }
+
+.tourHead {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.tourCount {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem; color: #5d6b78; font-variant-numeric: tabular-nums;
+}
+.tourSkip {
+  border: 0; background: transparent; color: #5d6b78;
+  font-size: 0.78rem; padding: 0.1rem 0.3rem; cursor: pointer;
+}
+.tourSkip:hover { color: #23313d; text-decoration: underline; }
+
+.tourTitle { margin: 0 0 0.4rem; font-size: 1rem; line-height: 1.25; color: #16324a; }
+.tourBody { margin: 0 0 0.85rem; font-size: 0.85rem; line-height: 1.6; color: #35424f; }
+
+.tourFooter { display: flex; align-items: center; gap: 0.45rem; }
 .tourBtn {
-  font-size: 0.82rem; padding: 0.3rem 0.7rem; border-radius: 4px;
+  font-size: 0.82rem; padding: 0.35rem 0.75rem; border-radius: 5px;
   border: 1px solid #c3d4e2; background: #fff; color: #23313d; cursor: pointer;
 }
 .tourBtn.primary { background: #1a6fb5; border-color: #1a6fb5; color: #fff; }
 .tourBtn:focus-visible { outline: 2px solid #1a6fb5; outline-offset: 2px; }
 
+.tourDots { margin-left: auto; display: flex; gap: 0.3rem; }
+.tourDot {
+  width: 6px; height: 6px; border-radius: 50%; background: #d5dbdf;
+  transition: background .15s ease;
+}
+.tourDot.on { background: #1a6fb5; }
+
 @media (prefers-color-scheme: dark) {
   .tourLaunch { border-color: #3a4a5a; color: #6fb3e8; }
   .tourLaunch:hover { background: #24303c; }
-  .tourTarget { background: #161d25; outline-color: #6fb3e8; }
-  .tourCard { background: #1a2028; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6); }
+  .tourSpot { border-color: #6fb3e8; }
+  .tourCard { background: #1a2028; border-color: #2b3642;
+              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65); }
   .tourTitle { color: #dbe4ec; }
   .tourBody { color: #c2ccd6; }
+  .tourCount, .tourSkip { color: #9aa9b6; }
+  .tourSkip:hover { color: #dbe4ec; }
   .tourBtn { background: #121820; border-color: #3a4a5a; color: #cdd7e0; }
   .tourBtn.primary { background: #2d7fc4; border-color: #2d7fc4; color: #fff; }
+  .tourDot { background: #3a4a5a; }
+  .tourDot.on { background: #6fb3e8; }
 }
