@@ -22,8 +22,9 @@ function requestBody() {
     data_type: $('dataType').value,
     top_k: parseInt($('topK').value, 10),
     collection: $('collection').value || null,
+    // No depth field any more. Every query reads the matched papers in full;
+    // the server defaults to it, so there is nothing to send.
     llm: $('backend').value,
-    depth: $('depth').value,
     keep_empty: $('keepEmpty').checked,
     no_dedupe: !$('dedupe').checked,
   };
@@ -198,25 +199,43 @@ function citationHtml(citations) {
 }
 
 function coverageChip(summary) {
-  // The question a passage count cannot answer: was any paper actually read
-  // all the way through? A finding in the middle of a paper is invisible to a
-  // window, however many windows there are.
-  const done = summary.n_papers_complete || 0;
+  // The question that decides whether an answer can be trusted: of the passages
+  // the matched papers hold, how many did the model actually see? A paper count
+  // cannot answer it, and "236 passages" on its own hides the denominator.
+  const seen = summary.n_sources || 0;
+  const available = summary.n_passages_available || 0;
+  const exact = summary.passages_available_exact;
   const papers = summary.n_papers || 0;
+  const done = summary.n_papers_complete || 0;
   const corpus = summary.collection_chunks || 0;
-  let note = `${done} of ${papers} papers were read from start to finish. `;
-  note += done === papers && papers > 0
-    ? 'Nothing in these papers was skipped.'
-    : 'The rest are partial windows, so a finding buried mid-paper can still '
-      + 'be missed. "Full" reading depth reads whole papers.';
+  const full = available > 0 && seen >= available && exact;
+
+  let note = `${seen.toLocaleString()} of ${available.toLocaleString()} passages `
+    + `from the ${papers} matched papers were put in front of the model. `;
+  note += full
+    ? 'Nothing in those papers was skipped.'
+    // An inexact denominator is a floor: a paper we never finished may run
+    // further than the highest chunk index we saw, so the real total can only
+    // be larger. Saying "of at least N" beats implying the total is known.
+    : `${done} of ${papers} papers were read start to finish; the rest stopped `
+      + 'at the chunk budget, so a finding buried in an unread part of those '
+      + 'papers can still be missed.';
+  if (!exact) {
+    note += ' The total is a floor, not a count: the corpus does not publish '
+      + 'how many passages a paper has, so it is inferred from the highest '
+      + 'passage number seen.';
+  }
   if (corpus) {
-    const share = 100 * summary.n_sources / corpus;
-    note += ` Across the whole collection: ${summary.n_sources.toLocaleString()}`
+    const share = 100 * seen / corpus;
+    note += ` Across the whole collection: ${seen.toLocaleString()}`
       + ` of ${corpus.toLocaleString()} passages (${share.toPrecision(3)}%).`;
   }
-  const cls = (papers > 0 && done === papers) ? 'chip ok' : 'chip warn';
-  return `<span class="${cls}" title="${escapeHtml(note)}">`
-    + `<strong>${done}/${papers}</strong> papers read in full</span>`;
+  const denominator = exact ? available.toLocaleString()
+                            : `≥${available.toLocaleString()}`;
+  return `<span class="${full ? 'chip ok' : 'chip warn'}" `
+    + `title="${escapeHtml(note)}">`
+    + `<strong>${seen.toLocaleString()}/${denominator}</strong>`
+    + ' passages reviewed</span>';
 }
 
 
@@ -300,8 +319,115 @@ function renderTable(result) {
   return `<div class="tableWrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+function groupSources(sources) {
+  // Passages arrive in reading order, grouped by paper already. Regrouping here
+  // rather than trusting that order keeps the picker correct if retrieval ever
+  // interleaves two papers.
+  const groups = [];
+  const byDoc = new Map();
+  sources.forEach((source, index) => {
+    const key = source.doc_id || `loose-${index}`;
+    let group = byDoc.get(key);
+    if (!group) {
+      group = {
+        title: source.title || 'Untitled',
+        pmid: source.pmid, doi: source.doi, year: source.year,
+        journal: source.journal, best: null, items: [],
+      };
+      byDoc.set(key, group);
+      groups.push(group);
+    }
+    if (typeof source.score === 'number'
+        && (group.best === null || source.score > group.best)) {
+      group.best = source.score;
+    }
+    group.items.push({ source, index });
+  });
+  return groups;
+}
+
+
 function renderSources(sources) {
-  return sources.map((source, index) => {
+  // One card per passage was readable at ten passages. At several hundred it is
+  // a wall, so passages collapse into their paper and the cards for a paper are
+  // only put in the DOM when that paper is opened. The HTML is built up front
+  // because string building is cheap; it is the nodes that are not.
+  const groups = groupSources(sources);
+  state.sourceGroups = groups;
+  state.groupCards = new Map();
+  state.markerGroup = new Map();
+
+  groups.forEach((group, gi) => {
+    state.groupCards.set(String(gi), group.items
+      .map(({ source, index }) => {
+        state.markerGroup.set(String(index + 1), String(gi));
+        return sourceCard(source, index);
+      }).join(''));
+  });
+
+  fillPaperPicker(groups);
+
+  return groups.map((group, gi) => {
+    const title = escapeHtml(group.title);
+    const link = group.doi
+      ? `<a href="https://doi.org/${escapeHtml(group.doi)}" target="_blank" rel="noopener noreferrer">${title}</a>`
+      : title;
+    const best = group.best === null ? ''
+      : `<span class="score">best ${group.best.toFixed(3)}</span>`;
+    const year = group.year ? `<span class="metaTag">${escapeHtml(group.year)}</span>` : '';
+    return `<details class="paperGroup" data-group="${gi}">
+      <summary>
+        <span class="paperName">${link}</span>
+        <span class="paperCount">${group.items.length} `
+      + `passage${group.items.length === 1 ? '' : 's'}</span>
+        ${best}${year}
+      </summary>
+      <div class="paperBody" data-group="${gi}"></div>
+    </details>`;
+  }).join('');
+}
+
+
+function fillPaperPicker(groups) {
+  const picker = $('paperPicker');
+  if (!picker) return;
+  const options = [`<option value="all">All papers (${groups.length})</option>`];
+  groups.forEach((group, gi) => {
+    const label = group.title.length > 70
+      ? group.title.slice(0, 70) + '…' : group.title;
+    options.push(`<option value="${gi}">${escapeHtml(label)} `
+      + `(${group.items.length})</option>`);
+  });
+  picker.innerHTML = options.join('');
+  picker.value = 'all';
+}
+
+
+function fillGroup(details) {
+  // Cards go in on first open and stay in. Re-filling on every toggle would
+  // throw away any "Show more" the reader had already clicked.
+  if (!details || !details.open) return;
+  const body = details.querySelector('.paperBody');
+  if (!body || body.dataset.filled) return;
+  body.innerHTML = (state.groupCards && state.groupCards.get(details.dataset.group)) || '';
+  body.dataset.filled = '1';
+}
+
+
+function showOnlyPaper(value) {
+  document.querySelectorAll('#sourcesBody .paperGroup').forEach((details) => {
+    const match = value === 'all' || details.dataset.group === value;
+    details.classList.toggle('hidden', !match);
+    if (match && value !== 'all') {
+      details.open = true;
+      fillGroup(details);
+    }
+  });
+}
+
+
+function sourceCard(source, index) {
+  {
     const meta = [
       source.journal ? escapeHtml(source.journal) : null,
       source.year ? escapeHtml(source.year) : null,
@@ -343,7 +469,7 @@ function renderSources(sources) {
       <div class="sourceContent" data-full="${escapeHtml(content)}" data-preview="${escapeHtml(preview)}">${escapeHtml(preview)}</div>
       ${isLong ? '<button type="button" class="expandBtn">Show more</button>' : ''}
     </div>`;
-  }).join('');
+  }
 }
 
 function renderResult(result) {
@@ -358,12 +484,52 @@ function renderResult(result) {
     : `<div class="answerText">${escapeHtml(result.answer)}</div>`;
   $('answerSection').classList.remove('hidden');
 
-  $('sourcesTitle').textContent = `Sources (${result.sources.length})`;
+  $('sourcesTitle').textContent = `Sources (${result.sources.length} passages `
+    + `from ${result.summary.n_papers} papers)`;
   $('sourcesBody').innerHTML = renderSources(result.sources);
   $('sourcesSection').classList.remove('hidden');
   $('status').classList.add('hidden');
   $('viewRequestBtn').disabled = false;
 }
+
+// Above this many generation calls, say what the run costs and wait for a yes.
+// Below it the wait is short enough that a confirmation is just a click tax.
+const CONFIRM_ABOVE_BATCHES = 12;
+
+
+function describePlan(plan) {
+  const clock = (s) => (s >= 90 ? `${Math.round(s / 60)} minutes` : `${s} seconds`);
+  const passages = (plan.n_passages_planned || plan.n_passages).toLocaleString();
+  // The counts are an estimate from the search hits, not a completed read, so
+  // the wording says "about" and never quotes a number it has not earned.
+  return `About ${passages} passages from ${plan.n_papers} papers, in about `
+    + `${plan.n_batches} calls to the model. Roughly `
+    + `${clock(plan.estimated_read_seconds)} to read the papers and `
+    + `${clock(plan.estimated_generate_seconds)} to extract, so about `
+    + `${clock(plan.estimated_seconds)} in total on shared hardware.`;
+}
+
+
+function confirmPlan(plan) {
+  // A promise that settles on the reader's answer, so `search` reads as one
+  // straight line rather than splitting into callbacks.
+  return new Promise((resolve) => {
+    $('planText').textContent = describePlan(plan);
+    $('planConfirm').classList.remove('hidden');
+    const done = (answer) => {
+      $('planConfirm').classList.add('hidden');
+      $('planRun').removeEventListener('click', yes);
+      $('planCancel').removeEventListener('click', no);
+      resolve(answer);
+    };
+    const yes = () => done(true);
+    const no = () => done(false);
+    $('planRun').addEventListener('click', yes);
+    $('planCancel').addEventListener('click', no);
+    $('planRun').focus();
+  });
+}
+
 
 async function search(event) {
   event.preventDefault();
@@ -373,19 +539,33 @@ async function search(event) {
   state.lastBody = body;
   setBusy(true);
   $('status').className = 'status';
-  $('status').innerHTML = '<span class="spinner"></span>' + ({
-    standard: 'Searching literature and extracting…',
-    adaptive: 'Searching, then reading around each hit &mdash; a few hundred ' +
-              'passages across several parallel batches. Around 20 seconds.',
-    full: 'Searching, then reading the top papers end to end. This is the ' +
-          'slowest setting &mdash; around 40 seconds.',
-  }[body.depth] || 'Searching literature and extracting…');
+  $('status').innerHTML = '<span class="spinner"></span>'
+    + 'Searching, and reading the matched papers. No model call yet.';
   $('status').classList.remove('hidden');
   $('answerSection').classList.add('hidden');
   $('sourcesSection').classList.add('hidden');
   $('summary').classList.add('hidden');
 
   try {
+    // Reading is free of model tokens, so the cost of the run can be counted
+    // exactly before any of it is spent.
+    const plan = await api('/api/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (plan.n_batches > CONFIRM_ABOVE_BATCHES) {
+      $('status').classList.add('hidden');
+      setBusy(false);
+      const go = await confirmPlan(plan);
+      if (!go) { $('status').classList.add('hidden'); return; }
+      setBusy(true);
+      $('status').classList.remove('hidden');
+    }
+    $('status').innerHTML = '<span class="spinner"></span>'
+      + `Reading ${plan.n_passages.toLocaleString()} passages from `
+      + `${plan.n_papers} papers in ${plan.n_batches} parallel calls.`;
+
     const result = await api('/api/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -471,6 +651,24 @@ function checkBackendSupport() {
 
 
 function jumpToSource(marker) {
+  // A citation must still reach its passage now that passages live inside a
+  // collapsed paper: open that paper, and clear a picker filter that would
+  // otherwise leave the target hidden.
+  const gi = state.markerGroup && state.markerGroup.get(String(marker));
+  if (gi != null) {
+    const picker = $('paperPicker');
+    if (picker && picker.value !== 'all' && picker.value !== gi) {
+      picker.value = 'all';
+      showOnlyPaper('all');
+    }
+    const details = document.querySelector(
+      `#sourcesBody .paperGroup[data-group="${gi}"]`);
+    if (details) {
+      details.classList.remove('hidden');
+      details.open = true;
+      fillGroup(details);
+    }
+  }
   const card = document.getElementById(`source-${marker}`);
   if (!card) return;
   card.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -586,6 +784,16 @@ function init() {
     button.addEventListener('click', () => download(button.dataset.fmt));
   });
   // Source cards are rebuilt on every search, so delegate instead of rebinding.
+  // `toggle` does not bubble, so this listens in the capture phase.
+  $('sourcesBody').addEventListener('toggle', (e) => {
+    if (e.target.classList && e.target.classList.contains('paperGroup')) {
+      fillGroup(e.target);
+    }
+  }, true);
+
+  const picker = $('paperPicker');
+  if (picker) picker.addEventListener('change', () => showOnlyPaper(picker.value));
+
   $('sourcesBody').addEventListener('click', (e) => {
     if (!e.target.classList.contains('expandBtn')) return;
     const content = e.target.previousElementSibling;

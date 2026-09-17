@@ -46,9 +46,12 @@ DEFAULT_BATCH_CHARS = 60_000
 MAX_CONCURRENCY = 8
 
 # Refuse rather than launch an unbounded fan-out. At ~1,700 chars per passage
-# this is roughly 1,700 passages, well past the point where a single query
-# should be silently spending this much of a shared GPU.
-MAX_BATCHES = 30
+# this is roughly 3,400 passages, well past the point where a single query
+# should be silently spending this much of a shared GPU. Raised from 30 when
+# chunk coverage became the goal: completing every matched paper on a broad
+# open-access query is ~48 batches by measurement, and a refusal there would
+# reject exactly the run the coverage work exists to make possible.
+MAX_BATCHES = 60
 
 # Chunks one document may contribute in "full" mode. Set from measurement, not
 # taste: the two papers in the Dengue collection are ~191 chunks each, and an
@@ -57,10 +60,13 @@ MAX_BATCHES = 30
 # worse than no completion mode at all.
 MAX_CHUNKS_PER_DOC = 250
 
-# Ceiling across all documents in one run, so "full" on PubMed Central cannot
-# fetch 8 x 250 chunks and spend twenty generation calls. Small curated corpora
-# (Dengue at 382 chunks) still fit entirely underneath it.
-MAX_COMPLETION_CHUNKS = 500
+# Ceiling across all documents in one run. This is now the ONLY thing that
+# stops completion: there is no paper cap, so papers are finished in score order
+# until this budget is spent. Sized from measurement -- an open-access paper ran
+# ~17 chunks in the katG run, so 1,500 covers ~85 papers, comfortably more than
+# the ~69 a top_k of 100 surfaces. Small curated corpora (Dengue at 382 chunks)
+# still fit entirely underneath it.
+MAX_COMPLETION_CHUNKS = 1_500
 
 # Measured against both mango models on real prompts: 3.98 chars/token on
 # Qwen3.6, 4.40 on Llama-4-Scout. prompts.CHARS_PER_TOKEN is 3.5, which
@@ -242,7 +248,7 @@ def expand(client: Any, sources: Sequence[Dict[str, Any]],
 
 
 def complete_documents(client: Any, sources: Sequence[Dict[str, Any]],
-                       collection: Optional[str], max_docs: int = 8,
+                       collection: Optional[str], max_docs: Optional[int] = None,
                        max_chunks_per_doc: int = MAX_CHUNKS_PER_DOC,
                        max_total: int = MAX_COMPLETION_CHUNKS
                        ) -> List[Dict[str, Any]]:
@@ -256,9 +262,17 @@ def complete_documents(client: Any, sources: Sequence[Dict[str, Any]],
     still missed it. Walking that one document to completion found it in 36
     chunks.
 
-    So this is the known-item strategy: pick the few papers most likely to hold
-    the answer and read all of them, rather than skimming the neighbourhood of
+    So this is the known-item strategy: pick the papers most likely to hold the
+    answer and read all of them, rather than skimming the neighbourhood of
     everything. Breadth still comes from top_k; this buys depth.
+
+    There is no paper cap by default. `max_docs` used to be 8, which made the
+    paper count -- not the chunk budget -- the thing that stopped a run: the katG
+    query finished 8 papers using 136 of the 500 chunks it was allowed, leaving
+    61 matched papers represented by a single fragment each. The goal is that
+    every chunk of a matched paper is reviewed, so papers are now completed in
+    score order until `max_total` is spent, and that budget is the only limit.
+    `max_docs` survives for tests that need a small deterministic run.
     """
     by_doc: Dict[Any, List[Dict[str, Any]]] = {}
     for source in sources:
@@ -268,7 +282,9 @@ def complete_documents(client: Any, sources: Sequence[Dict[str, Any]],
         scores = [s.get("score") for s in group if isinstance(s.get("score"), (int, float))]
         return max(scores) if scores else -1.0
 
-    ranked = sorted(by_doc.items(), key=lambda kv: -best(kv[1]))[:max_docs]
+    ranked = sorted(by_doc.items(), key=lambda kv: -best(kv[1]))
+    if max_docs is not None:
+        ranked = ranked[:max_docs]
     held = {s.get("chunk_id") for s in sources if s.get("chunk_id")}
     collected = list(sources)
 
@@ -440,25 +456,52 @@ def is_complete(chunks: Sequence[Dict[str, Any]]) -> bool:
     return span + 1 == len(ordered)
 
 
+def available_passages(chunks: Sequence[Dict[str, Any]]) -> int:
+    """How many passages this document holds, as far as we can tell.
+
+    The corpus exposes no per-document chunk total, so this is derived. A
+    complete document answers exactly: it is however many chunks we hold. An
+    incomplete one answers with a floor, because `chunk_index` is 0-based and
+    the highest index we have seen proves the document runs at least that far.
+    The floor can understate a paper whose tail we never fetched, which is why
+    `summarise` reports whether the total is exact rather than implying it is.
+    """
+    if not chunks:
+        return 0
+    if is_complete(chunks):
+        return len(chunks)
+    indices = [(c.get("metadata") or {}).get("chunk_index") for c in chunks]
+    highest = max((i for i in indices if isinstance(i, int)), default=None)
+    if highest is None:
+        return len(chunks)
+    return max(highest + 1, len(chunks))
+
+
 def summarise(sources: Sequence[Dict[str, Any]],
               collection_count: int = 0) -> Dict[str, int]:
     """Counts worth showing a user: how much was actually read.
 
-    `n_papers_complete` is the honest one. "199 passages" sounds thorough and
-    says nothing about whether any single paper was read end to end -- and a
-    fact buried mid-paper is invisible to a window, however many windows there
-    are.
+    `n_passages` over `n_passages_available` is the headline: every chunk of a
+    matched paper should be reviewed, so the question is what share of them the
+    model actually saw. `n_papers_complete` stays because it answers a different
+    question -- whether any single paper was read end to end -- and a fact buried
+    mid-paper is invisible to a window, however many windows there are.
+
+    `passages_available_exact` is false when some matched paper was left
+    incomplete, because the denominator is then a floor rather than a total.
     """
     by_doc: Dict[Any, List[Dict[str, Any]]] = {}
     for source in sources:
         by_doc.setdefault(source.get("doc_id"), []).append(source)
 
-    complete = sum(1 for doc, group in by_doc.items()
-                   if doc is not None and is_complete(group))
+    papers = [(doc, group) for doc, group in by_doc.items() if doc is not None]
+    complete = sum(1 for _, group in papers if is_complete(group))
     return {
         "n_passages": len(sources),
-        "n_papers": len([d for d in by_doc if d is not None]),
+        "n_papers": len(papers),
         "n_papers_complete": complete,
+        "n_passages_available": sum(available_passages(g) for _, g in papers),
+        "passages_available_exact": complete == len(papers),
         "n_expanded": sum(1 for s in sources if s.get("expanded")),
         "n_chars": sum(len(s.get("content") or "") for s in sources),
         # Share of the whole corpus seen. Meaningful for a small curated

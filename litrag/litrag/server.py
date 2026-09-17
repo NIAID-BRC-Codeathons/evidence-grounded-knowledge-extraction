@@ -23,7 +23,8 @@ from .collections import ALL, CollectionRegistry, clean_title
 from .config import ConfigError, load_config
 from . import glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmError, resolve_endpoint)
-from .pipeline import (QuerySpec, build_request, preview_generation, run_query)
+from .pipeline import (QuerySpec, build_request, plan_run, preview_generation,
+                       run_query)
 from .templates import TemplateError, TemplateRegistry
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -68,10 +69,13 @@ class QueryBody(BaseModel):
     # so omitting them behaves exactly as before.
     llm_model: Optional[str] = None
     thinking: Optional[bool] = None
-    # How much of the literature to read. See retrieval.plan; "standard" is the
-    # original one-call behaviour and stays the default so nothing gets slower
-    # or more expensive without being asked for.
-    depth: str = retrieval.STANDARD
+    # How much of the literature to read. See retrieval.plan. The UI no longer
+    # exposes this: three modes asked the user to predict which one would find
+    # their fact, which is exactly what they came here to learn. Reading the
+    # matched papers in full is the answer that is right most often -- measured
+    # on one katG/inhA query, 115 rows from 78 papers against 2 rows from 8 --
+    # so it is the default and the flag survives only for the CLI.
+    depth: str = retrieval.FULL
 
 
 def _resolve(client: RagStackClient, value):
@@ -104,13 +108,13 @@ def _depth(body: QueryBody, endpoint) -> str:
                    f"Choose from: {', '.join(retrieval.DEPTHS)}")
     if body.depth != retrieval.STANDARD and endpoint is None:
         # The hosted backend builds its own prompt server-side, so it cannot be
-        # handed a batch of passages. Refusing beats ignoring the setting and
-        # returning a shallow answer that looks deep.
-        raise HTTPException(
-            status_code=400,
-            detail=f"'{body.depth}' depth needs a directly-addressed model. "
-                   f"The hosted RAGStack backend builds its own prompt. "
-                   f"Pick Qwen or Llama as the model.")
+        # handed a batch of passages. This used to be a 400, which was right
+        # while the user picked a depth themselves -- refusing beat silently
+        # returning a shallow answer that looked deep. Now that whole-paper
+        # reading is the unasked-for default, a 400 would reject a request the
+        # caller never made a choice in, so fall back instead. The answer says
+        # which depth actually ran, and _depth is recorded in provenance.
+        return retrieval.STANDARD
     return body.depth
 
 
@@ -263,6 +267,29 @@ def preview_request(body: QueryBody) -> Dict[str, Any]:
             }
         except TemplateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/plan")
+def plan_query(body: QueryBody) -> Dict[str, Any]:
+    """How much this query will read, and how many calls it will take.
+
+    Free of model tokens, so a client can show the price before the user agrees
+    to pay it. Whole-paper reading turned a query from one call into dozens, and
+    a two minute wait nobody was warned about is its own kind of dishonesty.
+    """
+    endpoint = _endpoint(body)
+    with _client() as client:
+        registry = _registry(client)
+        try:
+            template = registry.resolve(body.data_type)
+            chosen = _resolve(client, body.collection)
+            spec = _spec(body, endpoint, chosen,
+                         _collection_count(_collection_registry(client), chosen))
+            return plan_run(client, spec, template, endpoint)
+        except TemplateError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except (ApiError, LlmError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/api/query")

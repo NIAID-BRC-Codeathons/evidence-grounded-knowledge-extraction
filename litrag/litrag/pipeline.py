@@ -197,6 +197,7 @@ class RunResult:
         return self.extraction.columns
 
     def summary(self) -> Dict[str, Any]:
+        counts = retrieval.summarise(self.result.sources)
         return {
             "query_id": self.spec.identity(),
             "organism": self.spec.organism,
@@ -211,8 +212,13 @@ class RunResult:
             # Of the papers read, how many were read END TO END. A passage count
             # says nothing about whether any paper was finished, and a fact
             # buried mid-paper is invisible to a window however wide.
-            "n_papers_complete": retrieval.summarise(
-                self.result.sources)["n_papers_complete"],
+            "n_papers_complete": counts["n_papers_complete"],
+            # The headline for chunk coverage: of the passages those papers
+            # hold, how many did the model actually see. The denominator is a
+            # floor when some paper was left incomplete, which is what
+            # `passages_available_exact` declares rather than hides.
+            "n_passages_available": counts["n_passages_available"],
+            "passages_available_exact": counts["passages_available_exact"],
             "collection_chunks": self.spec.collection_count,
             "depth": self.spec.depth,
             "n_batches": self.extraction.n_batches,
@@ -434,6 +440,98 @@ def _combined_hash(hashes: Sequence[str]) -> str:
         return hashes[0]
     digest = hashlib.sha256("|".join(sorted(hashes)).encode("utf-8"))
     return digest.hexdigest()[:16]
+
+
+# Wall clock for one wave of concurrent generation calls, in seconds. Measured,
+# not guessed: 9 batches at concurrency 8 is two waves and took 34.1s end to end
+# on the katG query, gather included.
+SECONDS_PER_WAVE = 16.0
+
+# Chunks the bulk endpoint returns per second, measured on the same run: the
+# completion walk fetched 1,500 chunks in 145 seconds. Reading is free of model
+# tokens and is still the larger half of the wait.
+CHUNKS_FETCHED_PER_SECOND = 10.0
+
+
+def plan_run(
+    client: RagStackClient,
+    spec: QuerySpec,
+    template: Template,
+    endpoint: Optional[Any] = None,
+    llm_client: Optional[LlmClient] = None,
+    quick: bool = True,
+) -> Dict[str, Any]:
+    """What this query will cost, before a single token is generated.
+
+    Generation spends the tokens, but reading is what spends the clock: on the
+    katG query, completion fetched 1,500 chunks in 145 seconds. Doing that twice,
+    once to price the run and once to run it, costs more than the warning saves.
+
+    So `quick` prices the run from the search hits alone, which is one request.
+    The hits name the papers, and each paper's highest chunk index puts a floor
+    under how many passages it holds, which is enough to say "about 60 calls"
+    honestly. `quick=False` does the real read and counts exactly.
+    """
+    llm = llm_client or (LlmClient(endpoint) if endpoint is not None else None)
+    try:
+        probe = None
+        if quick and spec.depth != retrieval.STANDARD:
+            # Retrieve at the depth's real breadth, but skip the completion walk:
+            # a STANDARD plan is exactly "fetch the hits and stop".
+            probe = retrieval.RetrievalPlan(
+                top_k=retrieval.MAX_TOP_K, hops=0,
+                batch_chars=retrieval.DEFAULT_BATCH_CHARS,
+                depth=retrieval.STANDARD)
+        sources, plan = gather(client, spec, template, plan=probe)
+        window = 0
+        if llm is not None:
+            window = llm.context_limit() or endpoint.context_tokens
+        budget = plan.batch_chars
+        if budget:
+            budget = retrieval.batch_chars_for(window, budget)
+    finally:
+        if llm is not None and llm_client is None:
+            llm.close()
+
+    counts: Dict[str, Any] = dict(
+        retrieval.summarise(sources, spec.collection_count))
+
+    if probe is not None:
+        # Completion will read toward every matched paper until the chunk budget
+        # runs out, so the passage count is whichever comes first: the floor the
+        # hits imply, or the budget.
+        planned = min(counts["n_passages_available"],
+                      len(sources) + retrieval.MAX_COMPLETION_CHUNKS)
+        per_passage = counts["n_chars"] / max(1, len(sources))
+        n_batches = max(1, -(-int(planned * per_passage) // budget)) if budget else 1
+    else:
+        planned = len(sources)
+        n_batches = len(retrieval.pack(sources, budget) or [[]])
+
+    counts["n_passages_planned"] = planned
+    counts["estimated"] = probe is not None
+    # Batches run concurrently up to MAX_CONCURRENCY, so wall clock tracks the
+    # number of waves, not the number of calls. SECONDS_PER_WAVE is measured:
+    # 9 batches at concurrency 8 is two waves, and that run took 34.1s including
+    # the gather this function has already paid for.
+    waves = -(-n_batches // retrieval.MAX_CONCURRENCY)
+    # Reading dominates, so an estimate that counted only generation would
+    # understate the wait by more than half. Both halves are measured on the
+    # same katG run: 1,500 chunks fetched in 145s, 9 batches generated in ~34s.
+    to_fetch = max(0, planned - len(sources)) if probe is not None else counts["n_expanded"]
+    read_seconds = int(to_fetch / CHUNKS_FETCHED_PER_SECOND)
+    generate_seconds = int(waves * SECONDS_PER_WAVE)
+    counts.update({
+        "depth": spec.depth,
+        "n_batches": n_batches,
+        "n_waves": waves,
+        "estimated_read_seconds": read_seconds,
+        "estimated_generate_seconds": generate_seconds,
+        "estimated_seconds": read_seconds + generate_seconds,
+        "max_batches": retrieval.MAX_BATCHES,
+        "over_batch_limit": n_batches > retrieval.MAX_BATCHES,
+    })
+    return counts
 
 
 def gather(

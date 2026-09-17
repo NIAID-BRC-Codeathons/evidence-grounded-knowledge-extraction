@@ -113,11 +113,17 @@ def _report_gather(counts: dict, n_batches: int) -> None:
         bits.append(f"in {n_batches} parallel batches")
     _info(" ".join(bits))
 
-    # The honest coverage line. A passage count sounds thorough and says nothing
-    # about whether any paper was finished.
+    # The honest coverage line, at parity with the web UI's chip: what share of
+    # the passages these papers hold did the model actually see. An inexact
+    # denominator prints as ">=", because a paper we never finished can run
+    # further than the highest passage number we saw.
     complete, papers = counts.get("n_papers_complete", 0), counts["n_papers"]
+    seen = counts["n_passages"]
+    available = counts.get("n_passages_available") or seen
+    exact = counts.get("passages_available_exact", False)
     corpus = counts.get("collection_chunks") or 0
-    line = f"  {complete} of {papers} papers read end to end"
+    line = (f"  {seen:,} of {'' if exact else '>='}{available:,} passages "
+            f"reviewed | {complete} of {papers} papers read end to end")
     if complete == 0:
         line += " -- every paper is a partial window, so a finding buried " \
                 "mid-paper can still be missed (try --depth full)"
@@ -337,10 +343,11 @@ def query(
     show_sources: bool = typer.Option(False, "--show-sources", help="Print retrieved sources."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the request body and exit."),
     depth: str = typer.Option(
-        retrieval.STANDARD, "--depth", "-d",
-        help="standard (top_k chunks, one call) | adaptive (read around each hit, "
-             "batched in parallel; depth set by corpus size) | full (read the "
-             "retrieved papers as completely as possible -- small corpora only).",
+        retrieval.FULL, "--depth", "-d",
+        help="full (default; read the matched papers as completely as possible) "
+             "| adaptive (read around each hit, depth set by corpus size) "
+             "| standard (top_k chunks in one call -- fastest, and the control "
+             "arm for comparisons).",
     ),
     concurrency: int = typer.Option(
         4, "--concurrency", "-j", min=1, max=16,

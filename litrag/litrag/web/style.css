@@ -169,22 +169,22 @@ a.passage:hover, a.marker:hover { background: var(--accent); color: #fff; }
 
 .standard {
   border-bottom: 1px dotted var(--muted);
-  cursor: help;
+  cursor: pointer;
 }
 
 .defined {
   border-bottom: 1px dotted var(--muted);
-  cursor: help;
+  cursor: pointer;
 }
 th .standard {
   border-bottom: 1px dotted var(--muted);
-  cursor: help;
+  cursor: pointer;
 }
 
 .defined { border-bottom-color: #9aa8b8; }
 .flag.standard {
   border-bottom: 1px dotted var(--muted);
-  cursor: help;
+  cursor: pointer;
 }
 
 .defined { border-bottom: 1px dotted var(--flag); }
@@ -204,6 +204,39 @@ th .standard {
 
 .hidden { display: none !important; }
 
+/* The cost of a run, shown before it is spent. Reading is free of model tokens,
+   so the count is exact rather than a guess, and it earns the interruption. */
+.planConfirm {
+  border: 1px solid #f0c36d; border-radius: 6px; background: #fffbef;
+  padding: 13px 15px; margin-bottom: 15px;
+}
+.planHeading { font-weight: 500; margin-bottom: 5px; }
+.planText { font-size: 13px; color: var(--fg); margin-bottom: 11px; }
+.planActions { display: flex; gap: 8px; }
+.planActions .secondary { background: transparent; border-color: var(--border); }
+
+/* Passages grouped by paper. The summary row is the whole paper at a glance, so
+   a query that read 1,200 passages opens as 69 scannable lines. */
+.sourcesControls {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 11px; font-size: 13px;
+}
+.sourcesControls select { max-width: 460px; }
+.paperGroup {
+  border: 1px solid var(--border); border-radius: 6px;
+  margin-bottom: 7px; background: #fff;
+}
+.paperGroup > summary {
+  display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  padding: 9px 12px; cursor: pointer; font-size: 13px;
+}
+.paperGroup > summary:hover { background: var(--panel); }
+.paperGroup[open] > summary { border-bottom: 1px solid var(--border); }
+.paperName { font-weight: 500; flex: 1 1 320px; }
+.paperCount { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.paperBody { padding: 10px 12px 3px; }
+.paperBody .sourceCard { margin-bottom: 9px; }
+
 .spinner {
   display: inline-block; width: 13px; height: 13px; margin-right: 7px;
   border: 2px solid var(--border); border-top-color: var(--accent);
@@ -215,7 +248,7 @@ th .standard {
    relying on colour alone, since "read in full" is a claim worth reading. */
 .chip.ok { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
 
-/* The "?" after a label. Signals that hovering explains the control -- a
+/* The "i" after a label. Signals that hovering explains the control -- a
    title attribute with nothing to point at is a tooltip nobody discovers. */
 .hint {
   display: inline-block;
@@ -225,10 +258,10 @@ th .standard {
   background: var(--border, #d8dee6);
   color: #55606e;
   font-size: 10px; font-weight: 700; text-align: center;
-  cursor: help;
+  cursor: pointer;
 }
 /* The chip opts into the shared tooltip by also being `.defined`, but it is a
    circle -- the dotted underline that marks defined words in prose would read
    as a smudge under it. */
 .hint.defined { border-bottom: none; }
-th[title] { cursor: help; text-decoration: underline dotted 1px; text-underline-offset: 3px; }
+th[title] { cursor: pointer; text-decoration: underline dotted 1px; text-underline-offset: 3px; }
