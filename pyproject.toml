@@ -1,0 +1,4 @@
+# Virtual workspace root: no package of its own, just the members below.
+# Lets `uv run litrag ...` work from anywhere in the repo.
+[tool.uv.workspace]
+members = ["litrag"]
