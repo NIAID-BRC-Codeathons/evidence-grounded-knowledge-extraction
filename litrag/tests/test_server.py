@@ -249,15 +249,44 @@ def test_eval_runs_the_scorer_it_is_given(tmp_path):
     assert "scored" in result.output
 
 
-def test_eval_says_so_when_no_scorer_can_be_found(tmp_path, monkeypatch):
-    from typer.testing import CliRunner
-    from litrag.cli import app
+def test_scorer_search_ignores_the_working_directory(tmp_path, monkeypatch):
+    """SECURITY: `eval` executes what it finds, so the search must not follow
+    the working directory -- otherwise running litrag from any directory an
+    attacker can write to would execute their ./experiment-01/evaluate.py."""
+    from litrag.cli import find_scorer
 
-    envelope = tmp_path / "run.json"
-    envelope.write_text("{}")
-    # An isolated cwd with no experiment-01 anywhere above it.
+    planted = tmp_path / "experiment-01"
+    planted.mkdir()
+    (planted / "evaluate.py").write_text("raise SystemExit('should never run')")
     monkeypatch.chdir(tmp_path)
 
-    result = CliRunner().invoke(app, ["eval", str(envelope)])
-    assert result.exit_code == 2
-    assert "--scorer" in result.output or "evaluate.py" in result.output
+    found = find_scorer()
+    assert found is None or tmp_path not in found.parents, (
+        "a scorer planted in the cwd must never be selected"
+    )
+
+
+def test_scorer_search_is_depth_bounded(tmp_path):
+    """Unbounded upward search reaches shared directories near the root."""
+    from litrag.cli import SCORER_SEARCH_DEPTH, find_scorer
+
+    deep = tmp_path
+    for level in range(SCORER_SEARCH_DEPTH + 3):
+        deep = deep / f"lvl{level}"
+    deep.mkdir(parents=True)
+    (tmp_path / "experiment-01").mkdir()
+    (tmp_path / "experiment-01" / "evaluate.py").write_text("print('too far')")
+
+    assert find_scorer(deep / "litrag.py") is None
+
+
+def test_scorer_search_finds_a_sibling_within_range(tmp_path):
+    from litrag.cli import find_scorer
+
+    pkg = tmp_path / "proj" / "litrag" / "litrag"
+    pkg.mkdir(parents=True)
+    scorer_dir = tmp_path / "proj" / "experiment-01"
+    scorer_dir.mkdir()
+    (scorer_dir / "evaluate.py").write_text("print('ok')")
+
+    assert find_scorer(pkg / "cli.py") == scorer_dir / "evaluate.py"

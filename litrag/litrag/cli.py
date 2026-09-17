@@ -458,6 +458,32 @@ def batch(
         raise typer.Exit(1)
 
 
+# How far above the installed package to look for the sibling scorer. Bounded
+# so the search cannot wander into shared or world-writable directories near
+# the filesystem root.
+SCORER_SEARCH_DEPTH = 6
+
+
+def find_scorer(start: Optional[Path] = None) -> Optional[Path]:
+    """Locate experiment-01/evaluate.py near this installation.
+
+    Searches upward from THIS FILE, never from the working directory. `eval`
+    executes whatever it finds, and the working directory is chosen by whoever
+    invokes the command -- so searching it would mean running
+    `./experiment-01/evaluate.py` from any directory an attacker could write
+    to. Anchoring to the package's own location makes the search depend on
+    where litrag is installed, which the user already trusts by running it.
+
+    Bounded depth, and the result must be a regular file that is not a symlink.
+    """
+    origin = (start or Path(__file__)).resolve()
+    for parent in list(origin.parents)[:SCORER_SEARCH_DEPTH]:
+        candidate = parent / "experiment-01" / "evaluate.py"
+        if candidate.is_file() and not candidate.is_symlink():
+            return candidate
+    return None
+
+
 @app.command("eval")
 def evaluate_run(
     envelope: Path = typer.Argument(..., help="A run envelope written by --envelope."),
@@ -479,15 +505,10 @@ def evaluate_run(
         _err(f"no envelope at {envelope}")
         raise typer.Exit(2)
 
-    candidates = [scorer] if scorer else [
-        # Walk up looking for the sibling project, so this works from any
-        # worktree without configuration.
-        parent / "experiment-01" / "evaluate.py"
-        for parent in [Path.cwd(), *Path.cwd().parents]
-    ]
-    found = next((p for p in candidates if p and p.is_file()), None)
-    if found is None:
-        _err("could not find evaluate.py. Pass --scorer /path/to/evaluate.py.")
+    found = scorer if scorer else find_scorer()
+    if found is None or not found.is_file():
+        _err("could not find evaluate.py beside this installation. "
+             "Pass --scorer /path/to/evaluate.py.")
         raise typer.Exit(2)
 
     command = [sys.executable, str(found), str(envelope)]
