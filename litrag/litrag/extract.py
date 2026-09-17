@@ -172,6 +172,11 @@ class Extraction:
     columns: List[str] = field(default_factory=list)
     dropped_empty: int = 0
     dropped_malformed: int = 0
+    # Cells beyond the declared columns. A model sometimes appends a column
+    # nobody asked for, or a value contains an unescaped tab. Those cells used
+    # to fall off the end of a zip with nothing recording it, so the loss was
+    # invisible both to the run summary and to whoever read the table.
+    dropped_cells: int = 0
     split_compound: int = 0
     # True when the model emitted the table rotated and it was repaired.
     transposed: bool = False
@@ -511,6 +516,15 @@ def extract_table(
 
         parsed = {col: clean(cells[i]) if i < len(cells) else "" for i, col in enumerate(columns)}
 
+        # Cells past the declared columns are not representable in the output
+        # shape, so they are lost either way -- but losing them silently is the
+        # bug. Flag rather than drop the row: the declared columns parsed
+        # correctly, so the finding is still usable, and LitRAG's posture
+        # everywhere else is to surface a doubt rather than discard a row.
+        extra_cells = max(0, len(cells) - len(columns))
+        if extra_cells:
+            result.dropped_cells += extra_cells
+
         if not keep_empty and _is_evidence_free(parsed, columns):
             result.dropped_empty += 1
             continue
@@ -521,6 +535,8 @@ def extract_table(
 
         for values in expanded:
             flags: List[str] = []
+            if extra_cells:
+                flags.append(f"extra_cells:{extra_cells}")
             if ambiguous:
                 flags.append("compound_row")
             if _is_evidence_free(values, columns):
