@@ -28,7 +28,7 @@ IDENTITY_COLUMNS: Dict[str, Sequence[str]] = {
     "ast": ("Organism", "Strain", "Antibiotic"),
     # A site on a protein is the unit. Glycan, method and effect are things
     # observed about that site, not part of what identifies it.
-    "glycosylation": ("Organism", "Protein", "Site"),
+    "glycosylation": ("Organism", "Protein", "Strain", "Site"),
 }
 
 # Pairs treated as unordered, because the relation they describe is symmetric.

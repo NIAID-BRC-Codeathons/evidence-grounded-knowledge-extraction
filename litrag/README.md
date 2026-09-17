@@ -137,7 +137,7 @@ One is defined by LitRAG:
 | `protein-function` | Organism, Gene Name, Function, Assertion, Reference |
 | `summary` | prose |
 | `ast` *(local)* | Organism, Strain, GenBank Accession, BioSample, Antibiotic, MIC, SIR, Reference |
-| `glycosylation` *(local)* | Organism, Protein, Site, Glycosylation Type, Glycan, Method, Effect, Assertion, Reference |
+| `glycosylation` *(local)* | Organism, Protein, Strain, Site, Glycosylation Type, Glycan, Method, Effect, Assertion, Reference |
 
 ### Antimicrobial susceptibility testing (`ast`)
 
@@ -210,7 +210,14 @@ constructs, so `N234` and `N235` stay distinct even where two papers mean the
 same residue. Notation is normalized for merging only: `N234`, `Asn234` and
 `Asn-234` are one site.
 
-Identity is organism + protein + site. Glycan, method and effect are things
+The protein is always named — a site without one cannot be interpreted — and
+the strain is recorded wherever a source gives it, as written
+(`A/California/07/2009 (H1N1)`, `H3N2`). Papers often list sites as bare
+positions (`42, 44, 50`); under an N-linked heading the residue is asparagine
+by definition, so the cell shows `N42` while the source's wording is kept.
+
+Identity is organism + protein + strain + site — numbering is strain-dependent,
+so position 146 on H3N2 HA is not the same site as position 146 on H1N1 HA. Glycan, method and effect are things
 observed *about* a site, not part of what identifies it, so two papers
 characterising `N234` differently merge into one row with both glycans listed.
 `N-linked` and `N-glycosylation` are the same linkage; `N-linked` versus

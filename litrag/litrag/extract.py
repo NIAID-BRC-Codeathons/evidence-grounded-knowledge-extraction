@@ -12,7 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-from .normalize import clean, is_null, normalize_gene, standard_notation
+from .normalize import (clean, clean_symbol, is_null, normalize_gene,
+                        site_with_residue, standard_notation)
 from .templates import Template
 
 _FENCE = re.compile(r"```[a-zA-Z]*\n?")
@@ -41,6 +42,8 @@ _STATUS_COLUMNS = {"assertion", "confidence", "evidence"}
 _KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type", "site"}
 # Columns whose value may be written in prose and has a standard notation.
 _NOTATION_COLUMNS = {"mutation", "variant", "allele"}
+_SITE_COLUMNS = {"site", "position", "residue"}
+_LINKAGE_COLUMNS = {"glycosylation type", "glycan type", "linkage"}
 # Columns where at least one of a group must be present for the row to say
 # anything. An AST row needs an MIC or an SIR; neither alone is required.
 _EITHER_OR_COLUMNS = [{"mic", "sir"}]
@@ -660,6 +663,38 @@ def _split_compound(
     return expanded, False
 
 
+# Columns whose value is a symbol, where "NA" is neuraminidase rather than
+# not-available.
+_SYMBOL_COLUMNS = {"gene name", "gene", "protein", "protein a", "protein b"}
+
+
+def _clean_for(column: str, value: str) -> str:
+    if column.strip().lower() in _SYMBOL_COLUMNS:
+        return clean_symbol(value)
+    return clean(value)
+
+
+def _gene_keys(requested: Optional[Sequence[str]]) -> set:
+    """Names that count as on-target, including each word of a multi-word entry.
+
+    A gene field reading "hemagglutinin HA" names one protein two ways, but
+    splitting only on commas made it a single token, so a row saying "HA" was
+    flagged off-target. Individual words are added alongside the whole entry.
+    Only single characters are dropped: two-letter symbols are ordinary here
+    (HA, NA, M2), so a longer cut-off would discard the very names being matched.
+    """
+    keys = set()
+    for entry in requested or []:
+        whole = normalize_gene(entry)
+        if not whole:
+            continue
+        keys.add(whole)
+        for word in whole.split():
+            if len(word) > 1:
+                keys.add(word)
+    return keys
+
+
 def _gene_columns(columns: Sequence[str]) -> List[str]:
     return [
         c for c in columns
@@ -695,7 +730,7 @@ def extract_table(
     if _looks_like_header(header, columns):
         start = 1
 
-    gene_keys = {normalize_gene(g) for g in (requested_genes or []) if normalize_gene(g)}
+    gene_keys = _gene_keys(requested_genes)
     gene_cols = _gene_columns(columns)
 
     parsed_lines = [_split_cells(line, delimiter) for line in lines[start:]]
@@ -710,7 +745,10 @@ def extract_table(
             continue
         line = delimiter.join(cells)
 
-        parsed = {col: clean(cells[i]) if i < len(cells) else "" for i, col in enumerate(columns)}
+        parsed = {
+            col: (_clean_for(col, cells[i]) if i < len(cells) else "")
+            for i, col in enumerate(columns)
+        }
 
         if not keep_empty and _is_evidence_free(parsed, columns):
             result.dropped_empty += 1
@@ -763,12 +801,25 @@ def extract_table(
             # A katG query legitimately returns inhA rows. Flag, do not drop --
             # the finding is real, it just was not what was asked for.
             if gene_keys and gene_cols:
-                row_genes = {normalize_gene(values.get(c)) for c in gene_cols}
-                row_genes.discard("")
+                row_genes = _gene_keys([values.get(c) for c in gene_cols])
                 if row_genes and not (row_genes & gene_keys):
                     flags.append("off_target_gene")
 
             row = Row(values=values, citations=citations, flags=flags)
+            # A bare position under an N-linked heading is an asparagine, so
+            # the residue can be supplied rather than left off.
+            for column in columns:
+                if column.strip().lower() not in _SITE_COLUMNS:
+                    continue
+                linkage = next(
+                    (values.get(c) for c in columns
+                     if c.strip().lower() in _LINKAGE_COLUMNS and values.get(c)),
+                    "",
+                )
+                resolved = site_with_residue(values.get(column, ""), linkage)
+                if resolved:
+                    row.standard[column] = resolved
+
             for column in columns:
                 if column.strip().lower() not in _NOTATION_COLUMNS:
                     continue
