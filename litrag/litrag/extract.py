@@ -28,10 +28,26 @@ _SUBJECT_COLUMNS = {
     # identifiers that pin the strain down. The evidence is the MIC or SIR.
     "strain", "isolate", "antibiotic", "drug", "antimicrobial", "agent",
     "genbank accession", "accession", "biosample",
+    # Charter relation types. "host" and "biomarker" are the subjects the user
+    # asked about, so a row carrying only those restates the question. Without
+    # them here, `SARS-CoV-2 | mouse | N/A | N/A | N/A` counted Host as evidence
+    # and survived -- exactly the case this check exists to catch.
+    #
+    # "disease" is the subject for biomarker rows but arguably the finding for
+    # mechanism rows. Calling it a subject is the safe direction: the mechanism
+    # type then relies on its Mechanism column (a key-value column below) to
+    # prove the row says something.
+    "host", "host species", "disease", "biomarker",
 }
 _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "source"}
 # The column that carries the actual finding for each table type.
-_KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type"}
+# NOTE: "phenotype" also appears on the server's `mutation` template, so adding
+# it here changes behaviour for an existing type -- a mutation row with an empty
+# Phenotype now carries a `missing:Phenotype` flag. That is correct (the row is
+# less informative and a curator should see it), but it is a change to a shipped
+# data type, not only to the new ones.
+_KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type",
+                      "phenotype", "mechanism", "association"}
 # Columns where at least one of a group must be present for the row to say
 # anything. An AST row needs an MIC or an SIR; neither alone is required.
 _EITHER_OR_COLUMNS = [{"mic", "sir"}]

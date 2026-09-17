@@ -25,6 +25,17 @@ IDENTITY_COLUMNS: Dict[str, Sequence[str]] = {
     # BioSample identify the strain rather than the observation, and MIC/SIR
     # are the result, so none of them belong in the key.
     "ast": ("Organism", "Strain", "Antibiotic"),
+    # Charter relation types. The free-text slot joins the key in the first two
+    # because a pathogen genuinely causes several distinct phenotypes and acts
+    # through several distinct mechanisms; collapsing on the entity pair alone
+    # would merge unrelated findings.
+    "phenotype": ("Pathogen", "Host", "Phenotype"),
+    "mechanism": ("Pathogen", "Disease", "Mechanism"),
+    # Association is deliberately NOT part of the key. Two papers reporting
+    # opposite directions for the same biomarker-disease pair is a genuine
+    # disagreement the curator must see, so the rows merge and the conflict
+    # surfaces in `variants` rather than becoming two unrelated-looking rows.
+    "biomarker": ("Biomarker", "Disease"),
 }
 
 # Pairs treated as unordered, because the relation they describe is symmetric.
@@ -32,7 +43,10 @@ SYMMETRIC_PAIRS: Dict[str, Tuple[str, str]] = {
     "ppi-extraction": ("Protein A", "Protein B"),
 }
 
-_GENE_COLUMNS = {"gene name", "gene", "protein a", "protein b", "protein"}
+# "biomarker" joins these because a biomarker surface is usually a gene or
+# protein symbol, so it benefits from the same symbol normalisation.
+_GENE_COLUMNS = {"gene name", "gene", "protein a", "protein b", "protein",
+                 "biomarker"}
 _MUTATION_COLUMNS = {"mutation", "variant", "allele"}
 _ANTIBIOTIC_COLUMNS = {"antibiotic", "drug", "antimicrobial", "agent"}
 _SIR_COLUMNS = {"sir", "interpretation", "category", "phenotype (sir)"}

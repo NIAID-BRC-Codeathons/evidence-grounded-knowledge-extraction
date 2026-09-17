@@ -68,6 +68,89 @@ BUILTIN: List[Dict[str, Any]] = [
             'isolates rather than a named strain, put "N/A" in Strain.',
         ],
     },
+    # --- the project charter's three relation types --------------------------
+    # The MVP names pathogen-host phenotype, pathogen-mechanism-disease and
+    # biomarker-disease. The server serves none of them, so they are defined
+    # here. Ids are deliberately short and are reused VERBATIM as the scorer's
+    # matcher key, the gold-file key and the dedup identity key -- the existing
+    # `ppi-extraction` / `ppi` split between the two codebases is the mistake
+    # this avoids repeating.
+    #
+    # Every one carries Assertion and Reference: citation resolution keys off
+    # Reference, and without Assertion the evidence-free check has nothing left
+    # to inspect once subject and reference columns are removed.
+    {
+        "id": "phenotype",
+        "label": "Pathogen-Host Phenotype",
+        "output": "table",
+        "version": 1,
+        "columns": ["Pathogen", "Host", "Phenotype", "Assertion", "Reference"],
+        "max_output_tokens": 3000,
+        "slots": _STANDARD_SLOTS,
+        "guidance": [
+            "Report an observable effect in an infected host: a sign, a "
+            "measurement, a survival or weight change, a tissue finding.",
+            "One host per row. If a paper reports mice and ferrets, that is two "
+            "rows, never one row saying \"mice and ferrets\".",
+            'Give the host as published ("BALB/c mice", "ferret", "human"). Do '
+            'not generalise a strain to its species or a species to "animal".',
+            "Record the direction and magnitude when the paper states them "
+            '("reduced weight gain of 15%%", "100%% lethality by day 6").',
+            "A phenotype the authors looked for and did NOT find is still a "
+            'finding: record it as stated ("no weight loss observed"), never as '
+            "its opposite, and never omit the negation.",
+            "Do not record a phenotype the paper only hypothesises or proposes "
+            "for future work.",
+        ],
+    },
+    {
+        "id": "mechanism",
+        "label": "Pathogen-Mechanism-Disease",
+        "output": "table",
+        "version": 1,
+        "columns": ["Pathogen", "Mechanism", "Disease", "Assertion", "Reference"],
+        "max_output_tokens": 3000,
+        "slots": _STANDARD_SLOTS,
+        "guidance": [
+            "Record how the pathogen causes the disease, not merely that it is "
+            "associated with it. A bare association is not a mechanism.",
+            "Mechanism must name a molecular or cellular process -- what acts on "
+            'what. "Disrupts epithelial tight junctions via protein Y" is a '
+            'mechanism; "causes severe disease" is a restatement of the disease '
+            "and must not be used.",
+            "Name the responsible factor (a protein, toxin, gene or structure) "
+            "whenever the paper identifies one.",
+            "One mechanism per row. A pathogen acting through two distinct "
+            "pathways produces two rows.",
+            "Do not record a mechanism the authors propose without evidence, or "
+            "one demonstrated only in a different pathogen.",
+        ],
+    },
+    {
+        "id": "biomarker",
+        "label": "Biomarker-Disease",
+        "output": "table",
+        "version": 1,
+        "columns": ["Biomarker", "Disease", "Association", "Assertion", "Reference"],
+        "max_output_tokens": 3000,
+        "slots": _STANDARD_SLOTS,
+        "guidance": [
+            "A biomarker is a measurable signal -- a gene, transcript, protein, "
+            "metabolite, glycan or cell count -- linked to a disease state.",
+            'Association must state the DIRECTION in the disease state: '
+            '"increased", "decreased", "unchanged", or "no association". Add the '
+            'clinical context after it when the paper gives one ("increased in '
+            'severe cases").',
+            '"Unchanged" and "no association" are real findings. Record them '
+            "rather than dropping the row: a biomarker that failed to separate "
+            "cases from controls is exactly what a curator needs to know.",
+            "Give the biomarker as the paper names it, keeping the standard "
+            'symbol where there is one ("IL-6", not "interleukin six").',
+            "One biomarker and one disease per row.",
+            "Do not infer a direction the paper does not state. If it reports "
+            'only that a biomarker was "detected", the Association is "N/A".',
+        ],
+    },
 ]
 
 
