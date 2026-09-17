@@ -22,6 +22,30 @@ from .dedup import dedupe
 from .extract import Extraction, Row, extract
 from .templates import Template, TemplateError, TemplateRegistry
 
+# Room left for the chat template's own wrapping around our prompt.
+CONTEXT_MARGIN = 1024
+# Never squeeze the retrieved context below this, whatever the output needs.
+MIN_CONTEXT_TOKENS = 4000
+# A table row costs roughly this much to write, so more sources means more
+# output is needed before the answer gets cut off.
+# Measured against Qwen at top_k=100: rows carry verbose assertions and
+# phenotypes, so 110 tokens a source still truncated the table.
+TOKENS_PER_SOURCE = 170
+MAX_OUTPUT_TOKENS = 20000
+
+
+def plan_output_tokens(template: Template, n_sources: int) -> int:
+    """How much room the answer needs.
+
+    The template declares a cap sized for the hosted path's own retrieval. On
+    the local path we choose top_k, so at 100 sources that cap cuts the table
+    off mid-row -- observed as truncated=True with rows silently missing.
+    """
+    declared = template.max_output_tokens or 2500
+    if not template.is_table:
+        return declared
+    return max(declared, min(MAX_OUTPUT_TOKENS, TOKENS_PER_SOURCE * max(1, n_sources)))
+
 
 @dataclass
 class QuerySpec:
@@ -137,6 +161,13 @@ class RunResult:
             "depth": self.spec.depth,
             "n_batches": self.extraction.n_batches,
             "n_batches_failed": self.extraction.n_batches_failed,
+            # Asked for vs actually shown to the model. Batching means the tail
+            # is normally split into another call rather than dropped, so this
+            # should now read zero -- which is worth being able to see.
+            "top_k": self.spec.top_k,
+            "sources_dropped": max(0, self.spec.top_k - len(self.result.sources))
+                               if self.spec.depth == retrieval.STANDARD else 0,
+            "truncated": self.result.truncated,
             "collections": self.spec.collection_label,
             "n_rows_raw": self.extraction.n_rows,
             "n_rows": len(self.rows),
@@ -144,6 +175,7 @@ class RunResult:
             "dropped_malformed": self.extraction.dropped_malformed,
             "unresolved_citations": self.extraction.unresolved_citations,
             "model": self.result.model,
+            "truncated": bool(self.result.truncated),
             "generator": self.result.generator,
             "endpoint": self.result.endpoint,
             "prompt_hash": self.result.prompt_hash,
@@ -180,12 +212,18 @@ class _BatchOutcome:
     extraction: Optional[Extraction] = None
     prompt_hash: str = ""
     error: Optional[str] = None
+    # The passages this batch actually put in front of the model, which is not
+    # always the whole slice: a prompt trimmed to fit the context window drops
+    # its tail, and a marker past that point indexes a passage never read.
+    shown: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _run_batches(
     llm: LlmClient,
     spec: QuerySpec,
     template: Template,
+    endpoint: LlmEndpoint,
+    window: int,
     batches: Sequence[Sequence[Dict[str, Any]]],
     on_batch: Optional[Callable[[int, int], None]] = None,
 ) -> List[_BatchOutcome]:
@@ -201,25 +239,35 @@ def _run_batches(
     `depth=standard` stay a true control arm.
     """
     total = len(batches)
-    max_tokens = template.max_output_tokens or 2500
 
     def work(index: int) -> _BatchOutcome:
         slice_ = batches[index]
-        prompt, prompt_hash, _ = build_prompt(
+        # Budget per batch, not per run. The retrieved context and the answer
+        # compete for one window, and both scale with the number of passages in
+        # THIS call -- so a small batch is not made to pay for a large one.
+        output_tokens = plan_output_tokens(template, len(slice_))
+        context_budget = spec.max_context_tokens or max(
+            MIN_CONTEXT_TOKENS, window - output_tokens - CONTEXT_MARGIN)
+
+        prompt, prompt_hash, included = build_prompt(
             template, slice_,
             organism=spec.organism, genes=spec.genes,
             other_terms=spec.other_terms,
-            max_context_tokens=spec.max_context_tokens,
+            max_context_tokens=context_budget,
         )
-        completion = llm.complete(prompt, max_tokens=max_tokens)
-        # Extract HERE, against `slice_` -- the exact passages this prompt
+        # What the model was shown. Batching normally makes this the whole
+        # slice -- the tail goes into the next call instead of being dropped --
+        # but a single oversized document can still overflow one batch.
+        shown = list(slice_[:included])
+        completion = llm.complete(prompt, max_tokens=output_tokens)
+        # Extract HERE, against `shown` -- the exact passages this prompt
         # numbered. Deferring it to the caller would mean resolving a marker
         # against the wrong list.
         extraction = extract(
-            completion.text, template, slice_,
+            completion.text, template, shown,
             requested_genes=spec.gene_list, keep_empty=spec.keep_empty,
         )
-        return _BatchOutcome(index, completion, extraction, prompt_hash)
+        return _BatchOutcome(index, completion, extraction, prompt_hash, shown=shown)
 
     if total <= 1:
         try:
@@ -400,13 +448,13 @@ def _generate_locally(
     llm = llm_client or LlmClient(endpoint)
     try:
         sources, plan = gather(client, spec, template)
-        # Ask the model how much it can take rather than assuming. Context
-        # windows differ by more than 2x between the two models on one host, so
-        # a fixed budget is a guess that happens to be safe. Cached on the
-        # client: one lookup before the fan-out, not one per batch.
+        # Ask the model how much it can take rather than assuming. The endpoint
+        # carries a declared window, but a server that publishes max_model_len
+        # knows better -- and an arbitrary --llm URL has no preset at all.
+        window = llm.context_limit() or endpoint.context_tokens
         budget = plan.batch_chars
         if budget:
-            budget = retrieval.batch_chars_for(llm.context_limit(), budget)
+            budget = retrieval.batch_chars_for(window, budget)
         batches = retrieval.pack(sources, budget) or [[]]
 
         if len(batches) > retrieval.MAX_BATCHES:
@@ -424,7 +472,8 @@ def _generate_locally(
             on_gather(retrieval.summarise(sources, spec.collection_count),
                       len(batches))
 
-        outcomes = _run_batches(llm, spec, template, batches, on_batch)
+        outcomes = _run_batches(llm, spec, template, endpoint, window,
+                                batches, on_batch)
     finally:
         if owns:
             llm.close()
@@ -436,6 +485,11 @@ def _generate_locally(
             f"all {len(batches)} generation batches failed. First error: "
             f"{errors[0] if errors else 'unknown'}"
         )
+
+    # Only the passages the model was actually shown. A batch whose prompt was
+    # trimmed to fit reports how many it kept, and a citation marker past that
+    # point could not have come from a passage the model read.
+    sources = [source for outcome in done for source in outcome.shown]
 
     extraction = _merge_extractions(done, len(batches))
     first = done[0].completion

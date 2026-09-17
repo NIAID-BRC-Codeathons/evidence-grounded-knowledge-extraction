@@ -13,7 +13,8 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 from .extract import Citation, Row
 from .normalize import (normalize_antibiotic, normalize_gene,
-                        normalize_mutation, normalize_sir, normalize_text)
+                        normalize_glyco_type, normalize_mutation,
+                        normalize_site, normalize_sir, normalize_text)
 
 # Which columns establish identity, per template. Columns absent from a row are
 # skipped, so a partially-populated table still dedups on what it has.
@@ -25,6 +26,9 @@ IDENTITY_COLUMNS: Dict[str, Sequence[str]] = {
     # BioSample identify the strain rather than the observation, and MIC/SIR
     # are the result, so none of them belong in the key.
     "ast": ("Organism", "Strain", "Antibiotic"),
+    # A site on a protein is the unit. Glycan, method and effect are things
+    # observed about that site, not part of what identifies it.
+    "glycosylation": ("Organism", "Protein", "Site"),
 }
 
 # Pairs treated as unordered, because the relation they describe is symmetric.
@@ -36,6 +40,8 @@ _GENE_COLUMNS = {"gene name", "gene", "protein a", "protein b", "protein"}
 _MUTATION_COLUMNS = {"mutation", "variant", "allele"}
 _ANTIBIOTIC_COLUMNS = {"antibiotic", "drug", "antimicrobial", "agent"}
 _SIR_COLUMNS = {"sir", "interpretation", "category", "phenotype (sir)"}
+_SITE_COLUMNS = {"site", "position", "residue"}
+_GLYCO_TYPE_COLUMNS = {"glycosylation type", "glycan type", "linkage"}
 _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "source"}
 
 
@@ -49,6 +55,10 @@ def _normalize_cell(column: str, value: str, gene_hint: str = "") -> str:
         return normalize_antibiotic(value)
     if key in _SIR_COLUMNS:
         return normalize_sir(value)
+    if key in _SITE_COLUMNS:
+        return normalize_site(value)
+    if key in _GLYCO_TYPE_COLUMNS:
+        return normalize_glyco_type(value)
     return normalize_text(value)
 
 
@@ -86,18 +96,52 @@ def identity_key(row: Row, template_id: str, columns: Sequence[str]) -> Tuple:
     )
 
 
+def _citation_key(citation: Citation) -> str:
+    """Stable "is this the same paper?" key.
+
+    The marker is the LAST resort, not the fallback it used to be. Passages are
+    now split across several concurrent generation calls, and each call numbers
+    its own sources from 1 -- so "[1]" in two batches is two different papers,
+    and keying on the marker silently merged them, dropping one paper's evidence
+    as a duplicate of an unrelated one. The Dengue and Influenza collections
+    publish no pmid and no pmcid at all, so their chunks land in exactly that
+    fallback.
+
+    Publication identifiers stay ahead of doc_id deliberately. Checked against
+    the live index: 16 of 111 PMIDs from one query came back under more than one
+    doc_id, one of them under five, because PMC gives figures and tables their
+    own ids. Keying on doc_id first would report one paper as several
+    independent sources and inflate n_support.
+    """
+    doc = next((c.doc_id for c in citation.chunks if c.doc_id), "")
+    chunk = next((c.chunk_id for c in citation.chunks if c.chunk_id), "")
+    return (citation.pmid or citation.doi or citation.pmcid or doc or chunk
+            or f"marker:{citation.marker}")
+
+
 def _merge_citations(existing: List[Citation], incoming: Iterable[Citation]) -> List[Citation]:
-    # Citation.identity, not the marker: once passages are split across parallel
-    # calls each call numbers its sources from 1, so "[1]" in two batches is two
-    # different papers. Keying on the marker silently dropped the second.
-    seen = {c.identity for c in existing}
+    """Union two citation lists, keeping every supporting passage.
+
+    When two merged rows cite the same paper through different chunks, both
+    chunks are evidence for the combined row -- discarding one would hide where
+    half the support came from.
+    """
     merged = list(existing)
+    by_key = {_citation_key(c): c for c in merged}
+
     for citation in incoming:
-        key = citation.identity
-        if key in seen:
+        key = _citation_key(citation)
+        current = by_key.get(key)
+        if current is None:
+            by_key[key] = citation
+            merged.append(citation)
             continue
-        seen.add(key)
-        merged.append(citation)
+        seen = {c.chunk_id or c.marker for c in current.chunks}
+        for chunk in citation.chunks:
+            if (chunk.chunk_id or chunk.marker) not in seen:
+                seen.add(chunk.chunk_id or chunk.marker)
+                current.chunks.append(chunk)
+        current.chunks.sort(key=lambda c: c.marker)
     return merged
 
 

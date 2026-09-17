@@ -1,7 +1,7 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const state = { templates: [], lastBody: null, lastResult: null };
+const state = { templates: [], lastBody: null, lastResult: null, glossary: null };
 
 function escapeHtml(value) {
   if (value === null || value === undefined) return '';
@@ -44,11 +44,13 @@ async function api(path, options) {
 
 async function loadMetadata() {
   try {
-    const [templates, collections, backends] = await Promise.all([
+    const [templates, collections, backends, glossary] = await Promise.all([
       api('/api/templates'),
       api('/api/collections'),
       api('/api/backends'),
+      api('/api/glossary'),
     ]);
+    state.glossary = glossary;
 
     state.templates = templates.templates;
     const typeSelect = $('dataType');
@@ -147,9 +149,33 @@ function renderSummary(summary, rowCount) {
   if (summary.unresolved_citations > 0) {
     chips.push(`<span class="chip warn">${summary.unresolved_citations} unresolved citations</span>`);
   }
+  if (summary.sources_dropped > 0) {
+    chips.push(`<span class="chip warn">${summary.sources_dropped} of `
+      + `${summary.top_k} sources did not fit this model's context and were `
+      + `not used. Try Qwen, or fewer RAG Results.</span>`);
+  }
+  if (summary.truncated) {
+    // A cut-off table is missing rows and must not read as a full result.
+    chips.push('<span class="chip warn">truncated \u2014 the model hit its '
+      + 'output limit, so rows are missing. Lower RAG Results or narrow the query.</span>');
+  }
   const summaryEl = $('summary');
   summaryEl.innerHTML = chips.join('');
   summaryEl.classList.remove('hidden');
+}
+
+function passageLinks(chunks) {
+  // One link per retrieved passage. The chunk, not the paper, is what the
+  // model actually read, so this is the evidence a curator needs to check.
+  if (!chunks || !chunks.length) return '';
+  return ' ' + chunks.map((ch) => {
+    const span = (ch.start_char != null && ch.end_char != null)
+      ? ` chars ${ch.start_char}\u2013${ch.end_char}` : '';
+    const title = `Jump to retrieved passage [${ch.marker}]${span}`
+      + (ch.chunk_id ? `\nchunk ${ch.chunk_id}` : '');
+    return `<a class="passage" href="#source-${ch.marker}"`
+      + ` data-marker="${ch.marker}" title="${escapeHtml(title)}">\u00b6${ch.marker}</a>`;
+  }).join('');
 }
 
 function citationHtml(citations) {
@@ -162,15 +188,13 @@ function citationHtml(citations) {
     ].filter(Boolean).join(' ');
     const id = c.pmid ? `PMID ${c.pmid}` : (c.doi ? `DOI ${c.doi}` : '');
     const text = escapeHtml(`${label} ${id}`.trim()) || `[${c.marker}]`;
-    return c.url
-      ? `<span class="cite"><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${text}</a></span>`
-      : `<span class="cite">${text}</span>`;
+    const paper = c.url
+      ? `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${text}</a>`
+      : text;
+    return `<span class="cite">${paper}${passageLinks(c.chunks)}</span>`;
   }).join('');
 }
 
-// Which columns are the data type's, and which LitRAG adds. Worth being
-// explicit: a curator reading a table cannot otherwise tell what the model
-// produced from what the tool computed about it.
 function coverageChip(summary) {
   // The question a passage count cannot answer: was any paper actually read
   // all the way through? A finding in the middle of a paper is invisible to a
@@ -193,57 +217,73 @@ function coverageChip(summary) {
     + `<strong>${done}/${papers}</strong> papers read in full</span>`;
 }
 
-const COLUMN_HELP = {
-  // --- Declared by the data-type template on the server; the model fills them.
-  'Organism': 'From the data type. The pathogen this finding is about, as the paper states it.',
-  'Pathogen': 'From the data type. The pathogen this finding is about, as the paper states it.',
-  'Gene Name': 'From the data type. The gene or protein the finding concerns.',
-  'Gene': 'From the data type. The gene or protein the finding concerns.',
-  'Mutation': 'From the data type. The variant, in whatever notation the paper used. Merging is notation-aware, so S315T and Ser315Thr collapse into one row.',
-  'Phenotype': 'From the data type. The observed effect.',
-  'Function': 'From the data type. The function attributed to the gene or protein.',
-  'Assertion': 'From the data type. What the paper claims about this finding.',
-  'Protein A': 'From the data type. One partner in the interaction; A/B order is not meaningful and is merged symmetrically.',
-  'Protein B': 'From the data type. The other partner; A/B order is not meaningful and is merged symmetrically.',
-  'Interaction Type': 'From the data type. The kind of interaction reported.',
-  'Reference': 'From the data type, then rewritten by LitRAG. The model writes a marker like [3], which is only meaningful inside one batch; for multi-batch runs this shows the resolved PMID or DOI instead, because the same [3] means a different paper in each batch.',
 
-  // --- Added by LitRAG, computed after extraction.
-  'Support': 'ADDED BY LITRAG. How many extracted rows merged into this one. Higher means several passages, often several papers, said the same thing. This is the triage signal: rows with support of 1 rest on a single passage and deserve checking first.',
-  'Citations': 'ADDED BY LITRAG. The papers this row resolved to, with PMID or DOI. Resolved per batch against the passages that batch actually saw, so a marker can never point at the wrong paper.',
-  'Flags': 'ADDED BY LITRAG. Problems found while parsing. "citation_not_in_sources" means the model cited something it was not given; "merged_variants" means merged rows disagreed on a non-identity column and both values were kept; "off_target_gene" means the row is about a gene you did not ask for.',
-};
-
-function columnHelp(name) {
-  return COLUMN_HELP[name]
-    || 'Declared by the data type (the server-side template); filled in by the model.';
+function linkMarkers(text, markerSet) {
+  // Turn the "[3]" the model wrote inside an assertion into a jump to that
+  // passage, so a claim can be checked against its source in one click.
+  return escapeHtml(text).replace(/\[(\d+(?:\s*[,\u2013-]\s*\d+)?)\]/g, (whole, body) => {
+    const parts = body.split(/[,\u2013-]/).map((n) => parseInt(n.trim(), 10))
+      .filter((n) => !Number.isNaN(n));
+    // "[1-3]" spans three passages; "[1, 2]" names two. Match how the
+    // extractor reads them so the links agree with the resolved citations.
+    const isSpan = parts.length === 2 && /[\u2013-]/.test(body);
+    const expanded = isSpan
+      ? Array.from({ length: Math.max(...parts) - Math.min(...parts) + 1 },
+                   (_, i) => Math.min(...parts) + i)
+      : parts;
+    const nums = expanded.filter((n) => markerSet.has(n));
+    if (!nums.length) return whole;
+    return nums.map((n) => `<a class="marker" href="#source-${n}" data-marker="${n}"`
+      + ` title="Jump to retrieved passage [${n}]">[${n}]</a>`).join('');
+  });
 }
 
 function renderTable(result) {
   const dataColumns = result.columns.filter(
     (c) => !['reference', 'references', 'citation', 'citations', 'source'].includes(c.toLowerCase())
   );
-  const head = dataColumns.map((c) =>
-      `<th title="${escapeHtml(columnHelp(c))}">${escapeHtml(c)}</th>`).join('')
-    + `<th title="${escapeHtml(COLUMN_HELP.Support)}">Support</th>`
-    + `<th title="${escapeHtml(COLUMN_HELP.Citations)}">Citations</th>`
-    + `<th title="${escapeHtml(COLUMN_HELP.Flags)}">Flags</th>`;
+  const template = currentTemplate() || {};
+  const columnHelp = template.column_help || {};
+  const derived = (state.glossary && state.glossary.derived) || {};
+
+  const th = (label, help) => help
+    ? `<th><span class="defined" data-help="${escapeHtml(help)}"`
+      + ` tabindex="0" role="button" aria-label="${escapeHtml(label)}: ${escapeHtml(help)}">`
+      + `${escapeHtml(label)}</span></th>`
+    : `<th>${escapeHtml(label)}</th>`;
+
+  const head = dataColumns.map((c) => th(c, columnHelp[c])).join('')
+    + th('Support', derived.support)
+    + th('Citations', derived.citations)
+    + th('Flags', derived.flags);
 
   const body = result.rows.map((row) => {
+    const markerSet = new Set(
+      (row.citations || []).flatMap((c) => (c.chunks || []).map((ch) => ch.marker)));
+
     const cells = dataColumns.map((column) => {
-      let cell = escapeHtml(row.values[column] || '');
-      if (row.variants && row.variants[column]) {
-        const others = row.variants[column].filter((v) => v !== row.values[column]);
-        if (others.length) {
-          cell += `<div class="variants">also reported: ${escapeHtml(others.join('; '))}</div>`;
-        }
+      const primary = row.values[column] || '';
+      // Merged rows list every alternative inline, separated by "; ", rather
+      // than hiding the disagreement behind a representative value.
+      const alternatives = (row.variants && row.variants[column]) || [];
+      const ordered = [];
+      for (const value of [primary, ...alternatives]) {
+        if (value && !ordered.includes(value)) ordered.push(value);
       }
-      return `<td>${cell}</td>`;
+      // Any cell may carry a [n]; the Assertion usually does.
+      return `<td>${linkMarkers(ordered.join('; '), markerSet)}</td>`;
     }).join('');
 
     const support = `<td class="num"><span class="support">${row.n_support}</span></td>`;
     const cites = `<td>${citationHtml(row.citations)}</td>`;
-    const flags = `<td>${row.flags.map((f) => `<span class="flag">${escapeHtml(f)}</span>`).join('')}</td>`;
+    const flagHelp = (state.glossary && state.glossary.flags) || {};
+    const flags = `<td>${row.flags.map((f) => {
+      const help = flagHelp[f.split(':')[0]];
+      return help
+        ? `<span class="flag defined" data-help="${escapeHtml(help)}" tabindex="0"`
+          + ` aria-label="${escapeHtml(f)}: ${escapeHtml(help)}">${escapeHtml(f)}</span>`
+        : `<span class="flag">${escapeHtml(f)}</span>`;
+    }).join('')}</td>`;
     return `<tr>${cells}${support}${cites}${flags}</tr>`;
   }).join('');
 
@@ -276,7 +316,10 @@ function renderSources(sources) {
     const corpus = source.collection
       ? `<span class="corpusTag">${escapeHtml(source.collection)}</span>` : '';
 
-    return `<div class="sourceCard">
+    const span = (source.start_char != null && source.end_char != null)
+      ? `<span class="metaTag">chars ${source.start_char}\u2013${source.end_char}</span>` : '';
+
+    return `<div class="sourceCard" id="source-${index + 1}">
       <div class="sourceHead">
         <span class="rank">#${index + 1}</span>
         <span class="score">score ${Number(source.score).toFixed(3)}</span>
@@ -285,6 +328,8 @@ function renderSources(sources) {
       <div class="sourceTitle">${link}</div>
       <div>${meta}</div>
       ${authors ? `<div class="metaTag">${escapeHtml(authors)}</div>` : ''}
+      <div class="chunkMeta">${span}<span class="metaTag chunkId" title="chunk id">`
+        + `${escapeHtml(source.chunk_id || '')}</span></div>
       <div class="sourceContent" data-full="${escapeHtml(content)}" data-preview="${escapeHtml(preview)}">${escapeHtml(preview)}</div>
       ${isLong ? '<button type="button" class="expandBtn">Show more</button>' : ''}
     </div>`;
@@ -412,7 +457,80 @@ function checkBackendSupport() {
 }
 
 
+function jumpToSource(marker) {
+  const card = document.getElementById(`source-${marker}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.querySelectorAll('.sourceCard.highlight')
+    .forEach((el) => el.classList.remove('highlight'));
+  card.classList.add('highlight');
+}
+
+
+function showTip(target) {
+  const text = target.dataset.help;
+  if (!text) return;
+  let tip = document.getElementById('tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'tooltip';
+    tip.className = 'tooltip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+  }
+  tip.textContent = text;
+  tip.style.visibility = 'hidden';
+  tip.classList.add('visible');
+
+  // Positioned against the viewport rather than nested in the table, whose
+  // overflow-x container would otherwise clip it.
+  const box = target.getBoundingClientRect();
+  const tipBox = tip.getBoundingClientRect();
+  const margin = 8;
+  let left = box.left + box.width / 2 - tipBox.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tipBox.width - margin));
+  let top = box.bottom + 6;
+  if (top + tipBox.height > window.innerHeight - margin) {
+    top = box.top - tipBox.height - 6;
+  }
+  tip.style.left = `${left + window.scrollX}px`;
+  tip.style.top = `${top + window.scrollY}px`;
+  tip.style.visibility = 'visible';
+}
+
+function hideTip() {
+  const tip = document.getElementById('tooltip');
+  if (tip) tip.classList.remove('visible');
+}
+
+
 function init() {
+  // Delegated so rebuilt tables keep working; focus included for keyboard use.
+  document.addEventListener('mouseover', (e) => {
+    const target = e.target.closest('.defined');
+    if (target) showTip(target);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (e.target.closest('.defined')) hideTip();
+  });
+  document.addEventListener('focusin', (e) => {
+    const target = e.target.closest('.defined');
+    if (target) showTip(target);
+  });
+  document.addEventListener('focusout', (e) => {
+    if (e.target.closest('.defined')) hideTip();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideTip();
+  });
+  window.addEventListener('scroll', hideTip, { passive: true });
+  // Delegated: the table and source list are rebuilt on every search.
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a.passage, a.marker');
+    if (!link) return;
+    e.preventDefault();
+    jumpToSource(link.dataset.marker);
+  });
   $('dataType').addEventListener('change', checkBackendSupport);
   $('backend').addEventListener('change', checkBackendSupport);
   $('topK').addEventListener('input', (e) => { $('topKValue').textContent = e.target.value; });

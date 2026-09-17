@@ -36,18 +36,67 @@ _SUBJECT_COLUMNS = {
     # identifiers that pin the strain down. The evidence is the MIC or SIR.
     "strain", "isolate", "antibiotic", "drug", "antimicrobial", "agent",
     "genbank accession", "accession", "biosample",
+    # A glycosylation row is about a site on a protein; the glycan, method and
+    # effect are what is reported about it.
+    "site", "position", "residue",
 }
 _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "source"}
+# Assertion classifies the status of a claim, not its content. Since it is now
+# filled from a fixed vocabulary on every row, counting it as evidence would
+# mean no row is ever evidence-free and the filter would never fire.
+_STATUS_COLUMNS = {"assertion", "confidence", "evidence"}
 # The column that carries the actual finding for each table type.
-_KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type"}
+_KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type", "site"}
 # Columns where at least one of a group must be present for the row to say
 # anything. An AST row needs an MIC or an SIR; neither alone is required.
 _EITHER_OR_COLUMNS = [{"mic", "sir"}]
 
 
 @dataclass
+class ChunkRef:
+    """One retrieved passage supporting a claim.
+
+    The chunk, not the paper, is the real unit of evidence: it is the text the
+    model actually read. Two chunks of one paper are two pieces of support and
+    must both survive, which is why a Citation carries a list of these rather
+    than a single marker.
+    """
+
+    marker: int
+    chunk_id: str = ""
+    doc_id: str = ""
+    start_char: Optional[int] = None
+    end_char: Optional[int] = None
+    score: Optional[float] = None
+
+    @property
+    def span(self) -> str:
+        if self.start_char is None or self.end_char is None:
+            return ""
+        return f"{self.start_char}-{self.end_char}"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "marker": self.marker, "chunk_id": self.chunk_id,
+            "doc_id": self.doc_id, "start_char": self.start_char,
+            "end_char": self.end_char, "score": self.score,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ChunkRef":
+        return cls(
+            marker=int(data.get("marker", 0)),
+            chunk_id=data.get("chunk_id", "") or "",
+            doc_id=data.get("doc_id", "") or "",
+            start_char=data.get("start_char"),
+            end_char=data.get("end_char"),
+            score=data.get("score"),
+        )
+
+
+@dataclass
 class Citation:
-    """A resolved literature reference."""
+    """A resolved literature reference, with the passages that support it."""
 
     marker: int
     pmid: Optional[str] = None
@@ -60,38 +109,32 @@ class Citation:
     resolved: bool = True
     # "marker" for a [n] reference, "author" for a prose name match.
     matched_by: str = "marker"
-    # Which retrieved document and chunk this marker pointed at. The marker
-    # itself is only meaningful within the prompt that produced it -- once
-    # passages are split across parallel calls, every call numbers its sources
-    # from 1, so `doc_id` is the only stable identity a citation carries. Some
-    # corpora (Dengue, Influenza_2024_2025) publish no pmid or pmcid at all,
-    # which is exactly when the identifiers below are all None.
-    doc_id: Optional[str] = None
-    chunk_id: Optional[str] = None
+    # Every retrieved passage backing this citation, in marker order.
+    chunks: List[ChunkRef] = field(default_factory=list)
 
     @property
     def identity(self) -> str:
-        """Stable key for "is this the same paper?" across batches.
+        """Stable key for "is this the same paper?" across parallel batches.
 
-        Order matters and is not the obvious one. `doc_id` is present on every
-        source while pmid/doi are corpus-dependent, which argues for checking it
-        first -- but measured against the live index, 16 of 111 PMIDs from one
-        query came back under MORE THAN ONE doc_id, one of them under five. PMC
-        splits an article into sub-documents (`PMC4643029#figure-3`,
-        `PMC10290095#table-2-part-2`), each with its own doc_id. Keying on doc_id
-        first would therefore count a single paper as several independent
-        supporting sources and inflate `n_support`, which is exactly the signal
-        used to rank what a curator reviews first.
+        The bare marker is the LAST resort. Passages are split across several
+        concurrent generation calls and each call numbers its own sources from
+        1, so "[1]" means a different paper in every batch; merging on it
+        silently discarded one paper's evidence as a duplicate of an unrelated
+        one. Dengue and Influenza_2024_2025 publish no pmid and no pmcid at all,
+        so their chunks land in exactly that fallback.
 
-        So: publication identifiers first, because they are what actually
-        identifies a paper; doc_id then chunk_id as fallbacks for corpora that
-        publish no identifiers at all (Dengue and Influenza_2024_2025 carry no
-        pmid or pmcid). The bare marker is last and should now be unreachable --
-        it is a different paper in every batch, so it must never be the thing
-        two citations are merged on.
+        Publication identifiers come FIRST, ahead of doc_id, and that order is
+        deliberate. Measured against the live index: 16 of 111 PMIDs from one
+        query came back under more than one doc_id, one of them under five,
+        because PMC gives figures and tables their own ids
+        (`PMC4643029#figure-3`). Keying on doc_id first would count one paper as
+        several independent supporting sources and inflate n_support -- the
+        signal used to rank what a curator checks first.
         """
-        return (self.pmid or self.doi or self.pmcid or self.doc_id
-                or self.chunk_id or f"marker:{self.marker}")
+        doc = next((c.doc_id for c in self.chunks if c.doc_id), "")
+        chunk = next((c.chunk_id for c in self.chunks if c.chunk_id), "")
+        return (self.pmid or self.doi or self.pmcid or doc or chunk
+                or f"marker:{self.marker}")
 
     @property
     def url(self) -> Optional[str]:
@@ -102,6 +145,14 @@ class Citation:
         if self.pmcid:
             return f"https://www.ncbi.nlm.nih.gov/pmc/articles/{self.pmcid}/"
         return None
+
+    @property
+    def markers(self) -> List[int]:
+        return [c.marker for c in self.chunks] or [self.marker]
+
+    @property
+    def chunk_ids(self) -> List[str]:
+        return [c.chunk_id for c in self.chunks if c.chunk_id]
 
     def short(self) -> str:
         """A compact human-readable citation."""
@@ -133,8 +184,7 @@ class Citation:
             "url": self.url,
             "resolved": self.resolved,
             "matched_by": self.matched_by,
-            "doc_id": self.doc_id,
-            "chunk_id": self.chunk_id,
+            "chunks": [c.to_dict() for c in self.chunks],
         }
 
 
@@ -147,7 +197,7 @@ class Citation:
             title=data.get("title"), first_author=data.get("first_author"),
             resolved=bool(data.get("resolved", True)),
             matched_by=data.get("matched_by", "marker"),
-            doc_id=data.get("doc_id"), chunk_id=data.get("chunk_id"),
+            chunks=[ChunkRef.from_dict(c) for c in data.get("chunks", [])],
         )
 
 
@@ -168,6 +218,23 @@ class Row:
     def get(self, column: str) -> str:
         return self.values.get(column, "")
 
+    def display(self, column: str) -> str:
+        """The cell value, with every merged alternative joined by "; ".
+
+        When rows merge, the representative value alone hides that the sources
+        said different things. Listing them all inline keeps a flat table
+        honest without needing a second line per cell.
+        """
+        primary = self.values.get(column, "")
+        alternatives = self.variants.get(column)
+        if not alternatives:
+            return primary
+        ordered = [primary] if primary else []
+        for value in alternatives:
+            if value and value not in ordered:
+                ordered.append(value)
+        return "; ".join(ordered)
+
     @property
     def citation_text(self) -> str:
         return "; ".join(c.short() for c in self.citations)
@@ -175,6 +242,25 @@ class Row:
     @property
     def pmids(self) -> List[str]:
         return [c.pmid for c in self.citations if c.pmid]
+
+    @property
+    def chunk_ids(self) -> List[str]:
+        """Every passage backing this row, across all its citations."""
+        ids: List[str] = []
+        for citation in self.citations:
+            for chunk_id in citation.chunk_ids:
+                if chunk_id not in ids:
+                    ids.append(chunk_id)
+        return ids
+
+    @property
+    def markers(self) -> List[int]:
+        seen: List[int] = []
+        for citation in self.citations:
+            for marker in citation.markers:
+                if marker not in seen:
+                    seen.append(marker)
+        return sorted(seen)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -295,12 +381,32 @@ def _looks_like_header(cells: Sequence[str], columns: Sequence[str]) -> bool:
     return len(normalized & expected) >= max(2, len(expected) // 2)
 
 
-def parse_citations(text: str, sources: Sequence[Dict[str, Any]]) -> List[Citation]:
+_BARE_NUMBERS = re.compile(r"\d+")
+# A cell that is nothing but source numbers: "3", "3, 5", "1-3". Anything else
+# in it -- a letter, a dot, a slash -- means the digits belong to something
+# that is not a marker, and a DOI is the common case: every DOI starts "10.",
+# so harvesting its digits attributes the row to source 10.
+_BARE_ONLY = re.compile(r"[\d\s,;–-]+")
+
+
+def parse_citations(
+    text: str,
+    sources: Sequence[Dict[str, Any]],
+    bare_numbers: bool = False,
+) -> List[Citation]:
     """Map [n] markers onto the retrieved sources.
 
     Markers are 1-based positions into the sources list -- verified against live
     responses. Several chunks of one paper can be retrieved separately, so the
     result is deduplicated by document.
+
+    ``bare_numbers`` allows "3" to mean "[3]". Only pass it for text taken from
+    a reference column, where a lone integer can only be a source number --
+    elsewhere it would turn a position or a dose into a citation. Even there it
+    applies only when the cell holds nothing but numbers and separators: a
+    reference written as a DOI or an "Author Year, Journal 5:231" string must
+    fall through to ``_match_by_text`` and be flagged, not be resolved from
+    whichever of its digits happen to be in range.
     """
     citations: List[Citation] = []
     seen: set = set()
@@ -331,18 +437,37 @@ def parse_citations(text: str, sources: Sequence[Dict[str, Any]]) -> List[Citati
                 seen.add(marker)
                 citations.append(_citation_for(marker, sources))
 
+    if not citations and bare_numbers and _BARE_ONLY.fullmatch((text or "").strip()):
+        for token in _BARE_NUMBERS.findall(text or ""):
+            marker = int(token)
+            if marker in seen or not 1 <= marker <= len(sources):
+                continue
+            seen.add(marker)
+            citations.append(_citation_for(marker, sources))
+
     if not citations:
         citations = _match_by_text(text, sources)
 
-    # Collapse chunks of the same document into one citation.
+    # One citation per document, but every supporting passage is kept: three
+    # chunks of one paper are three pieces of evidence, and dropping two of
+    # them would throw away exactly the provenance a curator needs.
     deduped: List[Citation] = []
-    doc_seen: set = set()
+    by_document: Dict[str, Citation] = {}
     for citation in citations:
+        # Citation.identity, not a bare marker: per-batch numbering means the
+        # same marker is a different paper in each batch.
         key = citation.identity
-        if key in doc_seen:
+        existing = by_document.get(key)
+        if existing is None:
+            by_document[key] = citation
+            deduped.append(citation)
             continue
-        doc_seen.add(key)
-        deduped.append(citation)
+        seen = {c.chunk_id or c.marker for c in existing.chunks}
+        for chunk in citation.chunks:
+            if (chunk.chunk_id or chunk.marker) not in seen:
+                existing.chunks.append(chunk)
+    for citation in deduped:
+        citation.chunks.sort(key=lambda c: c.marker)
     return deduped
 
 
@@ -403,6 +528,14 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
 
     source = sources[index]
     meta = source.get("metadata", {}) or {}
+    chunk = ChunkRef(
+        marker=marker,
+        chunk_id=source.get("chunk_id", "") or "",
+        doc_id=source.get("doc_id", "") or "",
+        start_char=meta.get("start_char"),
+        end_char=meta.get("end_char"),
+        score=source.get("score"),
+    )
     authors = meta.get("authors") or []
     first_author = None
     if isinstance(authors, list) and authors:
@@ -421,9 +554,7 @@ def _citation_for(marker: int, sources: Sequence[Dict[str, Any]]) -> Citation:
         title=_as_str(meta.get("title")),
         first_author=first_author,
         resolved=True,
-        # Top level on a retrieved source, not inside metadata.
-        doc_id=_as_str(source.get("doc_id")),
-        chunk_id=_as_str(source.get("chunk_id")),
+        chunks=[chunk],
     )
 
 
@@ -453,9 +584,14 @@ def _is_evidence_free(values: Dict[str, str], columns: Sequence[str]) -> bool:
         c for c in columns
         if c.strip().lower() not in _SUBJECT_COLUMNS
         and c.strip().lower() not in _REFERENCE_COLUMNS
+        and c.strip().lower() not in _STATUS_COLUMNS
     ]
     if not evidence_columns:
-        evidence_columns = [c for c in columns if c.strip().lower() not in _SUBJECT_COLUMNS]
+        evidence_columns = [
+            c for c in columns
+            if c.strip().lower() not in _SUBJECT_COLUMNS
+            and c.strip().lower() not in _STATUS_COLUMNS
+        ]
     if not evidence_columns:
         return False
     return all(is_null(values.get(c)) for c in evidence_columns)
@@ -467,8 +603,45 @@ def _is_evidence_free(values: Dict[str, str], columns: Sequence[str]) -> bool:
 _SPLITTABLE_COLUMNS = {
     "gene name", "gene", "mutation", "variant", "allele", "protein",
     "antibiotic", "drug", "antimicrobial", "mic", "sir",
+    "site", "position", "residue",
 }
 _LIST_SEPARATOR = re.compile(r"\s*[,;]\s*|\s+and\s+")
+
+
+def _split_list(value: str) -> List[str]:
+    """Split "a, b and c" into parts, ignoring separators inside brackets.
+
+    "Multiple mutations (codons 315, 316, 309)" is one value, not three: the
+    commas belong to the parenthetical. Splitting blindly produced the rows
+    "Multiple mutations (codons 315", "316" and "309)".
+    """
+    parts: List[str] = []
+    depth = 0
+    current: List[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char in "([{":
+            depth += 1
+            current.append(char)
+            index += 1
+            continue
+        if char in ")]}":
+            depth = max(0, depth - 1)
+            current.append(char)
+            index += 1
+            continue
+        if depth == 0:
+            match = _LIST_SEPARATOR.match(value, index)
+            if match and match.end() > index:
+                parts.append("".join(current))
+                current = []
+                index = match.end()
+                continue
+        current.append(char)
+        index += 1
+    parts.append("".join(current))
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _split_compound(
@@ -487,7 +660,7 @@ def _split_compound(
         value = values.get(column, "")
         if not value:
             continue
-        parts = [p.strip() for p in _LIST_SEPARATOR.split(value) if p.strip()]
+        parts = _split_list(value)
         if len(parts) > 1:
             parts_by_column[column] = parts
 
@@ -575,11 +748,15 @@ def extract_table(
             if _is_evidence_free(values, columns):
                 flags.append("evidence_free")
 
-            reference_text = " ".join(
+            reference_cells = [
                 cells[i] for i, col in enumerate(columns)
                 if i < len(cells) and col.strip().lower() in _REFERENCE_COLUMNS
-            ) or line
-            citations = parse_citations(reference_text, sources)
+            ]
+            from_reference_column = bool(" ".join(reference_cells).strip())
+            reference_text = " ".join(reference_cells) or line
+            citations = parse_citations(
+                reference_text, sources, bare_numbers=from_reference_column
+            )
             unresolved = [c for c in citations if not c.resolved]
             result.unresolved_citations += len(unresolved)
             if unresolved:

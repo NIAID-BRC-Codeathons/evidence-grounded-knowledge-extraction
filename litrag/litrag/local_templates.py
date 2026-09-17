@@ -68,6 +68,40 @@ BUILTIN: List[Dict[str, Any]] = [
             'isolates rather than a named strain, put "N/A" in Strain.',
         ],
     },
+    {
+        "id": "glycosylation",
+        "label": "Glycosylation Sites",
+        "output": "table",
+        "version": 1,
+        "columns": [
+            "Organism", "Protein", "Site", "Glycosylation Type",
+            "Glycan", "Method", "Effect", "Assertion", "Reference",
+        ],
+        "max_output_tokens": 3000,
+        "slots": _STANDARD_SLOTS,
+        "guidance": [
+            "One row per glycosylation site. Never combine several sites, "
+            "several proteins, or a range of positions into one row.",
+            'Write the site as the residue letter plus its position, as the '
+            'source numbers it — N234, Asn234, T678. Include the residue; a '
+            'bare number does not identify a site.',
+            "Use the position numbering the source uses and never renumber. "
+            "Glycosite numbering differs between isoforms, strains and "
+            "constructs, so a renumbered position is a different site.",
+            'Glycosylation Type is N-linked, O-linked or C-mannosylation, and '
+            'only when the source states it. Do not infer the type from the '
+            'residue alone.',
+            'Record the Glycan as published — high-mannose, complex, hybrid, '
+            'Man5GlcNAc2, core-fucosylated. Do not convert between '
+            'nomenclatures, and use "N/A" when the glycan was not characterised.',
+            "Method is how the site was established: mass spectrometry, "
+            "site-directed mutagenesis, lectin binding, cryo-EM or "
+            "crystallography, or sequence-based prediction.",
+            "Effect is the functional consequence the source reports for that "
+            'site — folding, receptor binding, antibody shielding. Use "N/A" '
+            "when none is reported; do not supply one from general knowledge.",
+        ],
+    },
 ]
 
 

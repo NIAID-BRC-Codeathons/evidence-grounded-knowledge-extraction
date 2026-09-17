@@ -16,6 +16,9 @@ from typing import Any, Dict, List, Optional, Sequence
 # request is built.
 ALL = "all"
 
+# The API caps a multi-collection request at five (QueryRequest.collections).
+MAX_PER_REQUEST = 5
+
 # Preferred default, by id. PubMed Central open access is the broadest corpus
 # and the one a curator wants unless they say otherwise.
 PREFERRED_DEFAULT = "open-access"
@@ -71,8 +74,10 @@ class CollectionRegistry:
         items = [
             Collection.from_payload(c, default_id)
             for c in payload.get("collections", [])
-            # Archived or restoring corpora cannot serve a query.
-            if (c.get("state") or "active") == "active"
+            # Archived or restoring corpora cannot serve a query, and neither
+            # can an empty index -- the registry lists a raw backing store with
+            # no state and no chunks, which is not something to offer a user.
+            if (c.get("state") or "active") == "active" and (c.get("count") or 0) > 0
         ]
         return cls(items, default_id)
 
@@ -122,7 +127,16 @@ class CollectionRegistry:
 
         raw = [part.strip() for part in str(value).replace(";", ",").split(",") if part.strip()]
         if any(part.lower() == ALL for part in raw):
-            return list(self.ids)
+            every = list(self.ids)
+            if len(every) > MAX_PER_REQUEST:
+                # Searching 5 of 6 corpora and saying nothing would be a silent
+                # gap in coverage, which is worse for curation than an error.
+                raise ValueError(
+                    f"'{ALL}' covers {len(every)} collections but the API allows "
+                    f"at most {MAX_PER_REQUEST} per request. Choose up to "
+                    f"{MAX_PER_REQUEST} of: {', '.join(every)}"
+                )
+            return every
 
         known = set(self.ids)
         unknown = [part for part in raw if part not in known]

@@ -87,3 +87,72 @@ def test_unknown_format_is_rejected(registry, mutation_response):
         assert "unknown format" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_chunk_ids_are_exported(registry, mutation_response):
+    """A curated row must be traceable to the passages behind it; these ids go
+    straight to /v1/chunks?ids= to fetch the text back."""
+    template, result = _extraction(registry, mutation_response)
+    text = formats.render(result, result.rows, "tsv", provenance=False)
+    header = text.splitlines()[0]
+    assert "_chunk_ids" in header and "_markers" in header
+
+    rows = list(csv.DictReader(io.StringIO(text), delimiter="\t"))
+    assert rows[0]["_chunk_ids"]
+    assert rows[0]["_markers"]
+
+
+def test_json_carries_chunk_references(registry, mutation_response):
+    template, result = _extraction(registry, mutation_response)
+    payload = json.loads(formats.render(result, result.rows, "json"))
+    chunks = payload["rows"][0]["citations"][0]["chunks"]
+    assert chunks and chunks[0]["chunk_id"]
+    assert "start_char" in chunks[0]
+    assert payload["rows"][0]["chunk_ids"]
+
+
+def test_source_summary_exposes_the_span(registry, mutation_response):
+    template, result = _extraction(registry, mutation_response)
+    payload = json.loads(formats.render(
+        result, result.rows, "json", sources=mutation_response["sources"]))
+    source = payload["sources"][0]
+    assert source["chunk_id"] and "start_char" in source
+
+
+def test_merged_alternatives_are_joined_in_flat_formats(registry, mutation_response):
+    """A flat table has nowhere to put alternatives except the cell.
+
+    Exporting only the representative value silently dropped the fact that the
+    sources disagreed.
+    """
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.values["Phenotype"] = "isoniazid resistance"
+    row.variants["Phenotype"] = [
+        "isoniazid resistance", "moderate-level isoniazid resistance",
+    ]
+
+    text = formats.render(result, [row], "tsv", provenance=False)
+    cell = list(csv.DictReader(io.StringIO(text), delimiter="\t"))[0]["Phenotype"]
+    assert cell == "isoniazid resistance; moderate-level isoniazid resistance"
+
+
+def test_unmerged_cell_is_unchanged(registry, mutation_response):
+    """No variants means no separator -- a plain row must look plain."""
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.variants.clear()
+    text = formats.render(result, [row], "tsv", provenance=False)
+    cell = list(csv.DictReader(io.StringIO(text), delimiter="\t"))[0]["Gene Name"]
+    assert cell == row.get("Gene Name") and ";" not in cell
+
+
+def test_json_keeps_alternatives_structured(registry, mutation_response):
+    """Flat formats join; JSON should not, since it can represent both."""
+    template, result = _extraction(registry, mutation_response)
+    row = result.rows[0]
+    row.values["Phenotype"] = "a"
+    row.variants["Phenotype"] = ["a", "b"]
+    payload = json.loads(formats.render(result, [row], "json"))
+    assert payload["rows"][0]["Phenotype"] == "a"
+    assert payload["rows"][0]["variants"]["Phenotype"] == ["a", "b"]

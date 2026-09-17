@@ -75,3 +75,40 @@ def test_context_includes_identifiers(registry, mutation_response):
     prompt, _, _ = build_prompt(registry.resolve("mutation"),
                                 mutation_response["sources"], "M. tb")
     assert "PMID:" in prompt
+
+
+def test_assertion_column_gets_a_vocabulary(registry, mutation_response):
+    """Left undefined, the column became a constant.
+
+    Qwen echoed the instruction to report only what sources state and wrote
+    "Stated" in every row -- no information at all. Llama wrote evidence types,
+    the hosted path writes confidence grades, so the column meant three
+    different things depending on who generated it.
+    """
+    from litrag.prompts import ASSERTION_VALUES
+    prompt, _, _ = build_prompt(registry.resolve("mutation"),
+                                mutation_response["sources"], "M. tb")
+    assert "Assertion column must contain exactly one of" in prompt
+    for value in ASSERTION_VALUES:
+        assert value in prompt
+    assert "not a confidence level" in prompt
+
+
+def test_column_rules_apply_to_server_templates(registry):
+    """Server templates publish column names but no guidance of their own, so
+    the rule has to attach to the column, not to the template."""
+    from litrag.prompts import column_rules
+    for name in ("mutation", "ppi-extraction", "protein-function"):
+        template = registry.resolve(name)
+        assert column_rules(template.columns), f"{name} has an Assertion column"
+
+
+def test_column_rules_skip_templates_without_the_column():
+    """AST has no Assertion, so it must not be told how to fill one."""
+    from litrag.prompts import column_rules
+    assert column_rules(["Organism", "Strain", "Antibiotic", "MIC", "SIR"]) == []
+
+
+def test_column_rule_lookup_is_normalized():
+    from litrag.prompts import column_rules
+    assert column_rules(["assertion"]) == column_rules([" Assertion "])

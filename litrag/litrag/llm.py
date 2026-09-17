@@ -38,6 +38,9 @@ class LlmEndpoint:
     # Qwen3 exposes a thinking mode through the chat template. False disables it.
     thinking: Optional[bool] = None
     label: str = ""
+    # Total input+output the server will accept, from its /v1/models entry.
+    # Needed to size a prompt: at top_k=100 the context alone is ~48k tokens.
+    context_tokens: int = 32768
 
     def described(self) -> str:
         return self.label or f"{self.name} ({self.base_url})"
@@ -56,12 +59,14 @@ PRESETS: Dict[str, LlmEndpoint] = {
         model="Qwen/Qwen3.6-35B-A3B",
         thinking=False,
         label="Qwen3.6-35B (local, thinking off)",
+        context_tokens=131072,
     ),
     "llama": LlmEndpoint(
         name="llama",
         base_url="http://mango.cels.anl.gov:8003/v1",
         model="RedHatAI/Llama-4-Scout-17B-16E-Instruct-FP8-dynamic",
         label="Llama-4-Scout (local)",
+        context_tokens=60000,
     ),
 }
 
@@ -95,6 +100,7 @@ def resolve_endpoint(
         model=model or preset.model,
         thinking=preset.thinking if thinking is None else thinking,
         label=preset.label,
+        context_tokens=preset.context_tokens,
     )
 
 

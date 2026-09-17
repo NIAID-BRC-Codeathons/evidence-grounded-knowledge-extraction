@@ -178,3 +178,27 @@ def test_unknown_collection_is_a_400(client):
     })
     assert response.status_code == 400
     assert "unknown collection" in response.json()["detail"]
+
+
+def test_glossary_endpoint(client):
+    payload = client.get("/api/glossary").json()
+    assert payload["derived"]["support"]
+    assert payload["flags"]["off_target_gene"]
+
+
+def test_templates_carry_per_column_help(client):
+    payload = client.get("/api/templates").json()
+    mutation = next(t for t in payload["templates"] if t["id"] == "mutation")
+    help_text = mutation["column_help"]
+    assert set(help_text) == set(mutation["columns"]), "every column needs a definition"
+    assert "notation is normalized" in help_text["Mutation"].lower()
+
+
+def test_top_k_accepts_one_hundred(client):
+    body = {"organism": "M. tb", "data_type": "mutation", "top_k": 100, "llm": "server"}
+    assert client.post("/api/query", json=body).status_code == 200
+
+
+def test_top_k_above_the_cap_is_rejected(client):
+    body = {"organism": "M. tb", "data_type": "mutation", "top_k": 101, "llm": "server"}
+    assert client.post("/api/query", json=body).status_code == 422
