@@ -348,12 +348,17 @@ def gather(
         retrieval_mode=spec.retrieval_mode,
     )
     sources = retrieval.dedupe_chunks(sources)
-    if plan.expands:
-        # Multi-collection requests have no single collection to scope a chunk
-        # lookup to, and the endpoint needs one. Expansion is skipped rather
-        # than silently returning nothing.
-        scope = spec.collection or (spec.collections[0] if len(spec.collections) == 1 else None)
-        if scope:
+    # Multi-collection requests have no single collection to scope a chunk
+    # lookup to, and the endpoint requires one -- it returns an empty list
+    # rather than an error without it. Reading around hits is skipped in that
+    # case rather than silently returning nothing.
+    scope = spec.collection or (spec.collections[0] if len(spec.collections) == 1 else None)
+    if scope:
+        if plan.depth == retrieval.FULL:
+            sources = retrieval.dedupe_chunks(
+                retrieval.complete_documents(client, sources, scope)
+            )
+        elif plan.expands:
             sources = retrieval.dedupe_chunks(
                 retrieval.expand(client, sources, scope, hops=plan.hops)
             )

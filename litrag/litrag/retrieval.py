@@ -123,9 +123,11 @@ def plan(count: int, depth: str = STANDARD, top_k: int = 10,
                              batch_chars=0, depth=depth)
 
     if depth == FULL:
-        # Walk until the documents run out. Only sane on a small corpus; the
-        # caller is responsible for not pointing this at 47M chunks.
-        return RetrievalPlan(top_k=MAX_TOP_K, hops=6, batch_chars=batch_chars,
+        # hops=0 on purpose: `full` reads whole DOCUMENTS (see
+        # complete_documents), which is a different traversal from widening the
+        # window around every hit. Breadth-first expansion provably fails to
+        # reach a fact buried mid-paper.
+        return RetrievalPlan(top_k=MAX_TOP_K, hops=0, batch_chars=batch_chars,
                              depth=depth)
 
     # ADAPTIVE. top_k is the API maximum everywhere, because breadth and depth
@@ -224,6 +226,57 @@ def expand(client: Any, sources: Sequence[Dict[str, Any]],
             frontier.append(normalised)
         if not frontier:
             break
+    return collected
+
+
+def complete_documents(client: Any, sources: Sequence[Dict[str, Any]],
+                       collection: Optional[str], max_docs: int = 8,
+                       max_chunks_per_doc: int = 120) -> List[Dict[str, Any]]:
+    """Read the best-ranked papers end to end, instead of widening every paper.
+
+    `expand` walks outward from every hit at once, which spreads a fixed budget
+    thinly across all of them. Measured against a known answer -- the PDK-53
+    vaccine mutation NS1 G53D -- that never arrives: the paper containing it WAS
+    retrieved, but the sentence sits 16 chunks away from the chunk that matched,
+    and four hops of breadth-first expansion (481 passages across 77 papers)
+    still missed it. Walking that one document to completion found it in 36
+    chunks.
+
+    So this is the known-item strategy: pick the few papers most likely to hold
+    the answer and read all of them, rather than skimming the neighbourhood of
+    everything. Breadth still comes from top_k; this buys depth.
+    """
+    by_doc: Dict[Any, List[Dict[str, Any]]] = {}
+    for source in sources:
+        by_doc.setdefault(source.get("doc_id"), []).append(source)
+
+    def best(group):
+        scores = [s.get("score") for s in group if isinstance(s.get("score"), (int, float))]
+        return max(scores) if scores else -1.0
+
+    ranked = sorted(by_doc.items(), key=lambda kv: -best(kv[1]))[:max_docs]
+    held = {s.get("chunk_id") for s in sources if s.get("chunk_id")}
+    collected = list(sources)
+
+    for _, group in ranked:
+        frontier = list(group)
+        gathered = len(group)
+        while frontier and gathered < max_chunks_per_doc:
+            wanted = _neighbour_ids(frontier, held)[:max_chunks_per_doc]
+            if not wanted:
+                break
+            fetched = client.chunks(wanted, collection=collection) or []
+            asked = set(wanted)
+            frontier = []
+            for chunk in fetched:
+                key = chunk.get("chunk_id") or chunk.get("id")
+                if not key or key in held or key not in asked:
+                    continue
+                held.add(key)
+                source = _as_source(chunk, key)
+                collected.append(source)
+                frontier.append(source)
+                gathered += 1
     return collected
 
 

@@ -564,3 +564,66 @@ def test_single_batch_leaves_the_reference_cell_alone(registry):
 
     assert run.summary()["n_batches"] == 1
     assert run.rows[0].get("Reference").startswith("[")
+
+
+def test_full_depth_reads_documents_end_to_end_not_windows():
+    """Depth must finish a paper, not widen every paper.
+
+    From a real spot check with a known answer -- the PDK-53 vaccine mutation
+    NS1 G53D. The paper containing it WAS retrieved, but the sentence sits 16
+    chunks from the chunk that matched the query, and breadth-first expansion
+    never arrives: four hops reached 481 passages across 77 papers and still
+    missed it. Completing that one document found it.
+    """
+    from litrag import retrieval
+
+    class Chain:
+        """One document, 20 chunks in a prev/next chain. Only #0 is retrieved."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def chunks(self, ids, collection=None):
+            self.calls += 1
+            out = []
+            for cid in ids:
+                i = int(cid.split("-")[1])
+                out.append({
+                    "chunk_id": cid, "doc_id": "doc-1",
+                    "content": "ANSWER" if i == 16 else f"text {i}",
+                    "metadata": {
+                        "chunk_index": i,
+                        "prev_chunk_id": f"c-{i-1}" if i > 0 else None,
+                        "next_chunk_id": f"c-{i+1}" if i < 19 else None,
+                    },
+                })
+            return out
+
+    seed = [{"chunk_id": "c-0", "doc_id": "doc-1", "score": 0.9, "content": "text 0",
+             "metadata": {"chunk_index": 0, "next_chunk_id": "c-1"}}]
+
+    client = Chain()
+    windowed = retrieval.expand(client, seed, "open-access", hops=4)
+    assert not any("ANSWER" in s.get("content", "") for s in windowed), \
+        "a 4-hop window should not reach chunk 16 -- that is the point"
+
+    completed = retrieval.complete_documents(Chain(), seed, "open-access")
+    assert any("ANSWER" in s.get("content", "") for s in completed)
+    assert len(completed) == 20, "the whole document, once"
+
+
+def test_complete_documents_is_bounded():
+    """An unbounded walk on a large corpus would fetch forever."""
+    from litrag import retrieval
+
+    class Endless:
+        def chunks(self, ids, collection=None):
+            return [{"chunk_id": cid, "doc_id": "doc-1", "content": "x",
+                     "metadata": {"prev_chunk_id": cid + "p",
+                                  "next_chunk_id": cid + "n"}}
+                    for cid in ids]
+
+    seed = [{"chunk_id": "c", "doc_id": "doc-1", "score": 1.0, "content": "x",
+             "metadata": {"next_chunk_id": "c2"}}]
+    out = retrieval.complete_documents(Endless(), seed, "x", max_chunks_per_doc=30)
+    assert len(out) < 200
