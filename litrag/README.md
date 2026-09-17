@@ -274,9 +274,11 @@ Slots are validated locally, turning a server 422 into a message before the call
 finding. Rows with nothing outside their subject columns are removed and counted
 in the summary. `--keep-empty` retains them, flagged.
 
-**Citations are resolved to real papers.** `[1]` maps to the first retrieved
-source, expanded to PMID, PMCID, DOI, journal, year, and first author. Chunks of
-one paper collapse to one citation. When the model cites by name instead of by
+**Citations are resolved to real papers, and to the passage behind them.**
+`[1]` maps to the first retrieved source, expanded to PMID, PMCID, DOI, journal,
+year, and first author. Chunks of one paper collapse to one citation, but every
+supporting passage is kept: three chunks of one paper are three pieces of
+evidence, and the chunk is what the model actually read. When the model cites by name instead of by
 number, matching falls back to the **first author only** — `X et al.` means X is
 first, and a looser rule mis-attributes claims. A reference that matches nothing
 is flagged `citation_not_in_sources` rather than guessed at; in practice this
@@ -307,6 +309,35 @@ qualifier as every source's finding.
 | `missing:<col>` | The column carrying the actual finding is empty (for `ast`, `missing:MIC/SIR`) |
 | `missing:<col>` | The column carrying the actual finding is empty (for `ast`, `missing:MIC/SIR`) |
 | `evidence_free` | Only present with `--keep-empty` |
+
+### Passage-level provenance
+
+Every claim links back to the passage it came from, not just the paper.
+
+In the UI, a `[3]` inside an assertion is a link: clicking it scrolls to that
+retrieved passage and highlights it. Each citation also carries `¶` links, one
+per supporting passage, so a paper cited through two different chunks shows
+`¶1 ¶2`. Source cards display their chunk id and character span.
+
+In exports, `_chunk_ids` and `_markers` accompany `_pmids`, and JSON nests the
+full references:
+
+```json
+{
+  "Mutation": "S315T",
+  "citations": [{
+    "pmid": "19578178", "journal": "J Antimicrob Chemother",
+    "chunks": [
+      {"marker": 3, "chunk_id": "e641b7e2-…", "start_char": 0,    "end_char": 2110},
+      {"marker": 5, "chunk_id": "f09b6a14-…", "start_char": 3596, "end_char": 5400}
+    ]
+  }],
+  "chunk_ids": ["e641b7e2-…", "f09b6a14-…"]
+}
+```
+
+Those ids go straight to the API's `/v1/chunks?ids=` to fetch the passage text
+back, along with its `prev_chunk_id` / `next_chunk_id` neighbours.
 
 ### Provenance
 
