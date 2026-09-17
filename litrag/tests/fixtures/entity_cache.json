@@ -1,0 +1,1277 @@
+{
+  "e. coli": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "3379134",
+        "Pseudomonadati",
+        "kingdom"
+      ],
+      [
+        "1224",
+        "Pseudomonadota",
+        "phylum"
+      ],
+      [
+        "1236",
+        "Gammaproteobacteria",
+        "class"
+      ],
+      [
+        "91347",
+        "Enterobacterales",
+        "order"
+      ],
+      [
+        "543",
+        "Enterobacteriaceae",
+        "family"
+      ],
+      [
+        "561",
+        "Escherichia",
+        "genus"
+      ]
+    ],
+    "note": "matched via 'Escherichia coli'",
+    "rank": "species",
+    "scientific_name": "Escherichia coli",
+    "source": "ncbi_taxonomy",
+    "taxid": "562"
+  },
+  "escherichia coli": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "3379134",
+        "Pseudomonadati",
+        "kingdom"
+      ],
+      [
+        "1224",
+        "Pseudomonadota",
+        "phylum"
+      ],
+      [
+        "1236",
+        "Gammaproteobacteria",
+        "class"
+      ],
+      [
+        "91347",
+        "Enterobacterales",
+        "order"
+      ],
+      [
+        "543",
+        "Enterobacteriaceae",
+        "family"
+      ],
+      [
+        "561",
+        "Escherichia",
+        "genus"
+      ]
+    ],
+    "note": "",
+    "rank": "species",
+    "scientific_name": "Escherichia coli",
+    "source": "ncbi_taxonomy",
+    "taxid": "562"
+  },
+  "ferret": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2759",
+        "Eukaryota",
+        "domain"
+      ],
+      [
+        "33154",
+        "Opisthokonta",
+        "clade"
+      ],
+      [
+        "33208",
+        "Metazoa",
+        "kingdom"
+      ],
+      [
+        "6072",
+        "Eumetazoa",
+        "clade"
+      ],
+      [
+        "33213",
+        "Bilateria",
+        "clade"
+      ],
+      [
+        "33511",
+        "Deuterostomia",
+        "clade"
+      ],
+      [
+        "7711",
+        "Chordata",
+        "phylum"
+      ],
+      [
+        "89593",
+        "Craniata",
+        "subphylum"
+      ],
+      [
+        "7742",
+        "Vertebrata",
+        "clade"
+      ],
+      [
+        "7776",
+        "Gnathostomata",
+        "clade"
+      ],
+      [
+        "117570",
+        "Teleostomi",
+        "clade"
+      ],
+      [
+        "117571",
+        "Euteleostomi",
+        "clade"
+      ],
+      [
+        "8287",
+        "Sarcopterygii",
+        "superclass"
+      ],
+      [
+        "1338369",
+        "Dipnotetrapodomorpha",
+        "clade"
+      ],
+      [
+        "32523",
+        "Tetrapoda",
+        "clade"
+      ],
+      [
+        "32524",
+        "Amniota",
+        "clade"
+      ],
+      [
+        "40674",
+        "Mammalia",
+        "class"
+      ],
+      [
+        "32525",
+        "Theria",
+        "clade"
+      ],
+      [
+        "9347",
+        "Eutheria",
+        "clade"
+      ],
+      [
+        "1437010",
+        "Boreoeutheria",
+        "clade"
+      ],
+      [
+        "314145",
+        "Laurasiatheria",
+        "superorder"
+      ],
+      [
+        "33554",
+        "Carnivora",
+        "order"
+      ],
+      [
+        "379584",
+        "Caniformia",
+        "suborder"
+      ],
+      [
+        "3072906",
+        "Musteloidea",
+        "superfamily"
+      ],
+      [
+        "9655",
+        "Mustelidae",
+        "family"
+      ],
+      [
+        "169418",
+        "Mustelinae",
+        "subfamily"
+      ],
+      [
+        "9665",
+        "Mustela",
+        "genus"
+      ],
+      [
+        "9668",
+        "Mustela putorius",
+        "species"
+      ]
+    ],
+    "note": "matched via 'Mustela putorius furo'",
+    "rank": "subspecies",
+    "scientific_name": "Mustela putorius furo",
+    "source": "ncbi_taxonomy",
+    "taxid": "9669"
+  },
+  "human": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2759",
+        "Eukaryota",
+        "domain"
+      ],
+      [
+        "33154",
+        "Opisthokonta",
+        "clade"
+      ],
+      [
+        "33208",
+        "Metazoa",
+        "kingdom"
+      ],
+      [
+        "6072",
+        "Eumetazoa",
+        "clade"
+      ],
+      [
+        "33213",
+        "Bilateria",
+        "clade"
+      ],
+      [
+        "33511",
+        "Deuterostomia",
+        "clade"
+      ],
+      [
+        "7711",
+        "Chordata",
+        "phylum"
+      ],
+      [
+        "89593",
+        "Craniata",
+        "subphylum"
+      ],
+      [
+        "7742",
+        "Vertebrata",
+        "clade"
+      ],
+      [
+        "7776",
+        "Gnathostomata",
+        "clade"
+      ],
+      [
+        "117570",
+        "Teleostomi",
+        "clade"
+      ],
+      [
+        "117571",
+        "Euteleostomi",
+        "clade"
+      ],
+      [
+        "8287",
+        "Sarcopterygii",
+        "superclass"
+      ],
+      [
+        "1338369",
+        "Dipnotetrapodomorpha",
+        "clade"
+      ],
+      [
+        "32523",
+        "Tetrapoda",
+        "clade"
+      ],
+      [
+        "32524",
+        "Amniota",
+        "clade"
+      ],
+      [
+        "40674",
+        "Mammalia",
+        "class"
+      ],
+      [
+        "32525",
+        "Theria",
+        "clade"
+      ],
+      [
+        "9347",
+        "Eutheria",
+        "clade"
+      ],
+      [
+        "1437010",
+        "Boreoeutheria",
+        "clade"
+      ],
+      [
+        "314146",
+        "Euarchontoglires",
+        "superorder"
+      ],
+      [
+        "9443",
+        "Primates",
+        "order"
+      ],
+      [
+        "376913",
+        "Haplorrhini",
+        "suborder"
+      ],
+      [
+        "314293",
+        "Simiiformes",
+        "infraorder"
+      ],
+      [
+        "9526",
+        "Catarrhini",
+        "parvorder"
+      ],
+      [
+        "314295",
+        "Hominoidea",
+        "superfamily"
+      ],
+      [
+        "9604",
+        "Hominidae",
+        "family"
+      ],
+      [
+        "207598",
+        "Homininae",
+        "subfamily"
+      ],
+      [
+        "9605",
+        "Homo",
+        "genus"
+      ]
+    ],
+    "note": "matched via 'Homo sapiens'",
+    "rank": "species",
+    "scientific_name": "Homo sapiens",
+    "source": "ncbi_taxonomy",
+    "taxid": "9606"
+  },
+  "influenza a virus": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2559587",
+        "Riboviria",
+        "realm"
+      ],
+      [
+        "2732396",
+        "Orthornavirae",
+        "kingdom"
+      ],
+      [
+        "2497569",
+        "Negarnaviricota",
+        "phylum"
+      ],
+      [
+        "2497571",
+        "Polyploviricotina",
+        "subphylum"
+      ],
+      [
+        "2497577",
+        "Insthoviricetes",
+        "class"
+      ],
+      [
+        "2499411",
+        "Articulavirales",
+        "order"
+      ],
+      [
+        "11308",
+        "Orthomyxoviridae",
+        "family"
+      ],
+      [
+        "197911",
+        "Alphainfluenzavirus",
+        "genus"
+      ],
+      [
+        "2955291",
+        "Alphainfluenzavirus influenzae",
+        "species"
+      ]
+    ],
+    "note": "",
+    "rank": "no rank",
+    "scientific_name": "Influenza A virus",
+    "source": "ncbi_taxonomy",
+    "taxid": "11320"
+  },
+  "k. pneumoniae": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "3379134",
+        "Pseudomonadati",
+        "kingdom"
+      ],
+      [
+        "1224",
+        "Pseudomonadota",
+        "phylum"
+      ],
+      [
+        "1236",
+        "Gammaproteobacteria",
+        "class"
+      ],
+      [
+        "91347",
+        "Enterobacterales",
+        "order"
+      ],
+      [
+        "543",
+        "Enterobacteriaceae",
+        "family"
+      ],
+      [
+        "570",
+        "Klebsiella",
+        "genus"
+      ],
+      [
+        "3390273",
+        "Klebsiella pneumoniae complex",
+        "species group"
+      ]
+    ],
+    "note": "matched via 'Klebsiella pneumoniae'",
+    "rank": "species",
+    "scientific_name": "Klebsiella pneumoniae",
+    "source": "ncbi_taxonomy",
+    "taxid": "573"
+  },
+  "klebsiella pneumoniae": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "3379134",
+        "Pseudomonadati",
+        "kingdom"
+      ],
+      [
+        "1224",
+        "Pseudomonadota",
+        "phylum"
+      ],
+      [
+        "1236",
+        "Gammaproteobacteria",
+        "class"
+      ],
+      [
+        "91347",
+        "Enterobacterales",
+        "order"
+      ],
+      [
+        "543",
+        "Enterobacteriaceae",
+        "family"
+      ],
+      [
+        "570",
+        "Klebsiella",
+        "genus"
+      ],
+      [
+        "3390273",
+        "Klebsiella pneumoniae complex",
+        "species group"
+      ]
+    ],
+    "note": "",
+    "rank": "species",
+    "scientific_name": "Klebsiella pneumoniae",
+    "source": "ncbi_taxonomy",
+    "taxid": "573"
+  },
+  "m. tb": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "1783272",
+        "Bacillati",
+        "kingdom"
+      ],
+      [
+        "201174",
+        "Actinomycetota",
+        "phylum"
+      ],
+      [
+        "1760",
+        "Actinomycetes",
+        "class"
+      ],
+      [
+        "85007",
+        "Mycobacteriales",
+        "order"
+      ],
+      [
+        "1762",
+        "Mycobacteriaceae",
+        "family"
+      ],
+      [
+        "1763",
+        "Mycobacterium",
+        "genus"
+      ],
+      [
+        "77643",
+        "Mycobacterium tuberculosis complex",
+        "species group"
+      ]
+    ],
+    "note": "matched via 'Mycobacterium tuberculosis'",
+    "rank": "species",
+    "scientific_name": "Mycobacterium tuberculosis",
+    "source": "ncbi_taxonomy",
+    "taxid": "1773"
+  },
+  "m. tuberculosis": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "1783272",
+        "Bacillati",
+        "kingdom"
+      ],
+      [
+        "201174",
+        "Actinomycetota",
+        "phylum"
+      ],
+      [
+        "1760",
+        "Actinomycetes",
+        "class"
+      ],
+      [
+        "85007",
+        "Mycobacteriales",
+        "order"
+      ],
+      [
+        "1762",
+        "Mycobacteriaceae",
+        "family"
+      ],
+      [
+        "1763",
+        "Mycobacterium",
+        "genus"
+      ],
+      [
+        "77643",
+        "Mycobacterium tuberculosis complex",
+        "species group"
+      ]
+    ],
+    "note": "matched via 'Mycobacterium tuberculosis'",
+    "rank": "species",
+    "scientific_name": "Mycobacterium tuberculosis",
+    "source": "ncbi_taxonomy",
+    "taxid": "1773"
+  },
+  "mice": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2759",
+        "Eukaryota",
+        "domain"
+      ],
+      [
+        "33154",
+        "Opisthokonta",
+        "clade"
+      ],
+      [
+        "33208",
+        "Metazoa",
+        "kingdom"
+      ],
+      [
+        "6072",
+        "Eumetazoa",
+        "clade"
+      ],
+      [
+        "33213",
+        "Bilateria",
+        "clade"
+      ],
+      [
+        "33511",
+        "Deuterostomia",
+        "clade"
+      ],
+      [
+        "7711",
+        "Chordata",
+        "phylum"
+      ],
+      [
+        "89593",
+        "Craniata",
+        "subphylum"
+      ],
+      [
+        "7742",
+        "Vertebrata",
+        "clade"
+      ],
+      [
+        "7776",
+        "Gnathostomata",
+        "clade"
+      ],
+      [
+        "117570",
+        "Teleostomi",
+        "clade"
+      ],
+      [
+        "117571",
+        "Euteleostomi",
+        "clade"
+      ],
+      [
+        "8287",
+        "Sarcopterygii",
+        "superclass"
+      ],
+      [
+        "1338369",
+        "Dipnotetrapodomorpha",
+        "clade"
+      ],
+      [
+        "32523",
+        "Tetrapoda",
+        "clade"
+      ],
+      [
+        "32524",
+        "Amniota",
+        "clade"
+      ],
+      [
+        "40674",
+        "Mammalia",
+        "class"
+      ],
+      [
+        "32525",
+        "Theria",
+        "clade"
+      ],
+      [
+        "9347",
+        "Eutheria",
+        "clade"
+      ],
+      [
+        "1437010",
+        "Boreoeutheria",
+        "clade"
+      ],
+      [
+        "314146",
+        "Euarchontoglires",
+        "superorder"
+      ],
+      [
+        "314147",
+        "Glires",
+        "clade"
+      ],
+      [
+        "9989",
+        "Rodentia",
+        "order"
+      ],
+      [
+        "1963758",
+        "Myomorpha",
+        "suborder"
+      ],
+      [
+        "337687",
+        "Muroidea",
+        "clade"
+      ],
+      [
+        "10066",
+        "Muridae",
+        "family"
+      ],
+      [
+        "39107",
+        "Murinae",
+        "subfamily"
+      ],
+      [
+        "10088",
+        "Mus",
+        "genus"
+      ],
+      [
+        "862507",
+        "Mus",
+        "subgenus"
+      ]
+    ],
+    "note": "matched via 'Mus musculus'",
+    "rank": "species",
+    "scientific_name": "Mus musculus",
+    "source": "ncbi_taxonomy",
+    "taxid": "10090"
+  },
+  "mouse": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2759",
+        "Eukaryota",
+        "domain"
+      ],
+      [
+        "33154",
+        "Opisthokonta",
+        "clade"
+      ],
+      [
+        "33208",
+        "Metazoa",
+        "kingdom"
+      ],
+      [
+        "6072",
+        "Eumetazoa",
+        "clade"
+      ],
+      [
+        "33213",
+        "Bilateria",
+        "clade"
+      ],
+      [
+        "33511",
+        "Deuterostomia",
+        "clade"
+      ],
+      [
+        "7711",
+        "Chordata",
+        "phylum"
+      ],
+      [
+        "89593",
+        "Craniata",
+        "subphylum"
+      ],
+      [
+        "7742",
+        "Vertebrata",
+        "clade"
+      ],
+      [
+        "7776",
+        "Gnathostomata",
+        "clade"
+      ],
+      [
+        "117570",
+        "Teleostomi",
+        "clade"
+      ],
+      [
+        "117571",
+        "Euteleostomi",
+        "clade"
+      ],
+      [
+        "8287",
+        "Sarcopterygii",
+        "superclass"
+      ],
+      [
+        "1338369",
+        "Dipnotetrapodomorpha",
+        "clade"
+      ],
+      [
+        "32523",
+        "Tetrapoda",
+        "clade"
+      ],
+      [
+        "32524",
+        "Amniota",
+        "clade"
+      ],
+      [
+        "40674",
+        "Mammalia",
+        "class"
+      ],
+      [
+        "32525",
+        "Theria",
+        "clade"
+      ],
+      [
+        "9347",
+        "Eutheria",
+        "clade"
+      ],
+      [
+        "1437010",
+        "Boreoeutheria",
+        "clade"
+      ],
+      [
+        "314146",
+        "Euarchontoglires",
+        "superorder"
+      ],
+      [
+        "314147",
+        "Glires",
+        "clade"
+      ],
+      [
+        "9989",
+        "Rodentia",
+        "order"
+      ],
+      [
+        "1963758",
+        "Myomorpha",
+        "suborder"
+      ],
+      [
+        "337687",
+        "Muroidea",
+        "clade"
+      ],
+      [
+        "10066",
+        "Muridae",
+        "family"
+      ],
+      [
+        "39107",
+        "Murinae",
+        "subfamily"
+      ],
+      [
+        "10088",
+        "Mus",
+        "genus"
+      ],
+      [
+        "862507",
+        "Mus",
+        "subgenus"
+      ]
+    ],
+    "note": "matched via 'Mus musculus'",
+    "rank": "species",
+    "scientific_name": "Mus musculus",
+    "source": "ncbi_taxonomy",
+    "taxid": "10090"
+  },
+  "mtb": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "1783272",
+        "Bacillati",
+        "kingdom"
+      ],
+      [
+        "201174",
+        "Actinomycetota",
+        "phylum"
+      ],
+      [
+        "1760",
+        "Actinomycetes",
+        "class"
+      ],
+      [
+        "85007",
+        "Mycobacteriales",
+        "order"
+      ],
+      [
+        "1762",
+        "Mycobacteriaceae",
+        "family"
+      ],
+      [
+        "1763",
+        "Mycobacterium",
+        "genus"
+      ],
+      [
+        "77643",
+        "Mycobacterium tuberculosis complex",
+        "species group"
+      ]
+    ],
+    "note": "matched via 'Mycobacterium tuberculosis'",
+    "rank": "species",
+    "scientific_name": "Mycobacterium tuberculosis",
+    "source": "ncbi_taxonomy",
+    "taxid": "1773"
+  },
+  "mycobacterium bovis": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "1783272",
+        "Bacillati",
+        "kingdom"
+      ],
+      [
+        "201174",
+        "Actinomycetota",
+        "phylum"
+      ],
+      [
+        "1760",
+        "Actinomycetes",
+        "class"
+      ],
+      [
+        "85007",
+        "Mycobacteriales",
+        "order"
+      ],
+      [
+        "1762",
+        "Mycobacteriaceae",
+        "family"
+      ],
+      [
+        "1763",
+        "Mycobacterium",
+        "genus"
+      ],
+      [
+        "77643",
+        "Mycobacterium tuberculosis complex",
+        "species group"
+      ],
+      [
+        "1773",
+        "Mycobacterium tuberculosis",
+        "species"
+      ]
+    ],
+    "note": "",
+    "rank": "biotype",
+    "scientific_name": "Mycobacterium tuberculosis variant bovis",
+    "source": "ncbi_taxonomy",
+    "taxid": "1765"
+  },
+  "mycobacterium tuberculosis": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "1783272",
+        "Bacillati",
+        "kingdom"
+      ],
+      [
+        "201174",
+        "Actinomycetota",
+        "phylum"
+      ],
+      [
+        "1760",
+        "Actinomycetes",
+        "class"
+      ],
+      [
+        "85007",
+        "Mycobacteriales",
+        "order"
+      ],
+      [
+        "1762",
+        "Mycobacteriaceae",
+        "family"
+      ],
+      [
+        "1763",
+        "Mycobacterium",
+        "genus"
+      ],
+      [
+        "77643",
+        "Mycobacterium tuberculosis complex",
+        "species group"
+      ]
+    ],
+    "note": "",
+    "rank": "species",
+    "scientific_name": "Mycobacterium tuberculosis",
+    "source": "ncbi_taxonomy",
+    "taxid": "1773"
+  },
+  "pseudomonas aeruginosa": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "3379134",
+        "Pseudomonadati",
+        "kingdom"
+      ],
+      [
+        "1224",
+        "Pseudomonadota",
+        "phylum"
+      ],
+      [
+        "1236",
+        "Gammaproteobacteria",
+        "class"
+      ],
+      [
+        "72274",
+        "Pseudomonadales",
+        "order"
+      ],
+      [
+        "135621",
+        "Pseudomonadaceae",
+        "family"
+      ],
+      [
+        "286",
+        "Pseudomonas",
+        "genus"
+      ],
+      [
+        "136841",
+        "Pseudomonas aeruginosa group",
+        "species group"
+      ]
+    ],
+    "note": "",
+    "rank": "species",
+    "scientific_name": "Pseudomonas aeruginosa",
+    "source": "ncbi_taxonomy",
+    "taxid": "287"
+  },
+  "sars-cov-2": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2559587",
+        "Riboviria",
+        "realm"
+      ],
+      [
+        "2732396",
+        "Orthornavirae",
+        "kingdom"
+      ],
+      [
+        "2732408",
+        "Pisuviricota",
+        "phylum"
+      ],
+      [
+        "2732506",
+        "Pisoniviricetes",
+        "class"
+      ],
+      [
+        "76804",
+        "Nidovirales",
+        "order"
+      ],
+      [
+        "2499399",
+        "Cornidovirineae",
+        "suborder"
+      ],
+      [
+        "11118",
+        "Coronaviridae",
+        "family"
+      ],
+      [
+        "2501931",
+        "Orthocoronavirinae",
+        "subfamily"
+      ],
+      [
+        "694002",
+        "Betacoronavirus",
+        "genus"
+      ],
+      [
+        "2509511",
+        "Sarbecovirus",
+        "subgenus"
+      ],
+      [
+        "3418604",
+        "Betacoronavirus pandemicum",
+        "species"
+      ]
+    ],
+    "note": "",
+    "rank": "no rank",
+    "scientific_name": "Severe acute respiratory syndrome coronavirus 2",
+    "source": "ncbi_taxonomy",
+    "taxid": "2697049"
+  },
+  "staphylococcus aureus": {
+    "ambiguous": false,
+    "lineage": [
+      [
+        "2",
+        "Bacteria",
+        "domain"
+      ],
+      [
+        "1783272",
+        "Bacillati",
+        "kingdom"
+      ],
+      [
+        "1239",
+        "Bacillota",
+        "phylum"
+      ],
+      [
+        "91061",
+        "Bacilli",
+        "class"
+      ],
+      [
+        "1385",
+        "Caryophanales",
+        "order"
+      ],
+      [
+        "90964",
+        "Staphylococcaceae",
+        "family"
+      ],
+      [
+        "1279",
+        "Staphylococcus",
+        "genus"
+      ]
+    ],
+    "note": "",
+    "rank": "species",
+    "scientific_name": "Staphylococcus aureus",
+    "source": "ncbi_taxonomy",
+    "taxid": "1280"
+  }
+}
