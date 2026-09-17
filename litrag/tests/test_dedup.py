@@ -152,3 +152,59 @@ def test_merging_unions_supporting_passages(registry, mutation_response):
     assert len(merged[0].citations) == 1, "same paper stays one citation"
     assert [c.marker for c in merged[0].citations[0].chunks] == [3, 5]
     assert len(merged[0].chunk_ids) == 2
+
+
+AST_COLUMNS = ["Organism", "Strain", "Antibiotic", "MIC", "SIR", "Reference"]
+
+
+def ast_row(mic, sir):
+    return Row(values={
+        "Organism": "Escherichia coli", "Strain": "K-12", "Antibiotic": "colistin",
+        "MIC": mic, "SIR": sir, "Reference": "[1]",
+    })
+
+
+def test_a_merged_ast_row_reports_a_pair_some_source_actually_measured():
+    """MIC and SIR are one result, not two independent columns.
+
+    Merging them separately picked the longer string in each: ">128" beat "0.5"
+    while "Susceptible" beat "Resistant", producing ">128 / Susceptible" -- a
+    combination no paper reported, and a clinically impossible one. The AST
+    template forbids the model from inferring one of the pair from the other;
+    the merge layer must not do it either.
+    """
+    merged = dedupe([ast_row("0.5", "Susceptible"), ast_row(">128", "Resistant")],
+                    "ast", AST_COLUMNS)
+
+    assert len(merged) == 1
+    assert (merged[0].get("MIC"), merged[0].get("SIR")) in {
+        ("0.5", "Susceptible"), (">128", "Resistant"),
+    }
+
+
+def test_a_conflicting_ast_pair_is_flagged_and_both_pairs_kept():
+    merged = dedupe([ast_row("0.5", "Susceptible"), ast_row(">128", "Resistant")],
+                    "ast", AST_COLUMNS)
+
+    assert "conflicting_result:MIC/SIR" in merged[0].flags
+    assert set(merged[0].variants["MIC"]) == {"0.5", ">128"}
+    assert set(merged[0].variants["SIR"]) == {"Susceptible", "Resistant"}
+
+
+def test_agreeing_ast_rows_still_merge_quietly():
+    merged = dedupe([ast_row("0.5", "Susceptible"), ast_row("0.5", "S")],
+                    "ast", AST_COLUMNS)
+
+    assert len(merged) == 1 and merged[0].n_support == 2
+    assert "conflicting_result:MIC/SIR" not in merged[0].flags
+
+
+def test_a_missing_half_is_filled_rather_than_treated_as_a_conflict():
+    """"N/A" is what the template tells the model to write when a paper gives
+    only one of the pair, so a row that supplies it is completing, not
+    contradicting."""
+    merged = dedupe([ast_row(">128", "N/A"), ast_row(">128", "Resistant")],
+                    "ast", AST_COLUMNS)
+
+    assert merged[0].get("SIR") == "Resistant"
+    assert "conflicting_result:MIC/SIR" not in merged[0].flags

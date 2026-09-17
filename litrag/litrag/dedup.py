@@ -36,6 +36,16 @@ SYMMETRIC_PAIRS: Dict[str, Tuple[str, str]] = {
     "ppi-extraction": ("Protein A", "Protein B"),
 }
 
+# Columns that are one measurement rather than several, and so must be carried
+# across a merge together. Resolving them independently picks a winner per
+# column and can emit a combination no source reported: from (0.5, Susceptible)
+# and (>128, Resistant) the longest-value rule takes ">128" and "Susceptible",
+# which is clinically impossible. The AST template already forbids the model
+# from inferring one of MIC and SIR from the other -- the merge must not either.
+CORRELATED_COLUMNS: Dict[str, Sequence[Tuple[str, ...]]] = {
+    "ast": (("MIC", "SIR"),),
+}
+
 _GENE_COLUMNS = {"gene name", "gene", "protein a", "protein b", "protein"}
 _MUTATION_COLUMNS = {"mutation", "variant", "allele"}
 _ANTIBIOTIC_COLUMNS = {"antibiotic", "drug", "antimicrobial", "agent"}
@@ -150,6 +160,55 @@ def _richer(candidate: str, current: str) -> bool:
     return len(candidate.strip()) > len(current.strip())
 
 
+def _stated(value: str) -> bool:
+    """Whether a cell carries a finding at all.
+
+    The AST template tells the model to write "N/A" into whichever of MIC and
+    SIR a paper did not report, so an N/A half is a gap another row may fill,
+    not a contradiction to flag.
+    """
+    text = (value or "").strip()
+    return bool(text) and text.lower() not in {"n/a", "na", "none", "-"}
+
+
+def _merge_correlated(existing: Row, incoming_row: Row, group: Sequence[str]) -> None:
+    """Carry a group of columns across a merge as a single measurement."""
+    current = [existing.values.get(c, "") for c in group]
+    incoming = [incoming_row.values.get(c, "") for c in group]
+
+    # Alternatives are still recorded per column: the table and the UI look
+    # them up by column name, so a composite key would hide them entirely.
+    disagreed = False
+    for column, was, now in zip(group, current, incoming):
+        if not (_stated(was) and _stated(now)):
+            continue
+        if _normalize_cell(column, was) == _normalize_cell(column, now):
+            continue
+        disagreed = True
+        existing.variants.setdefault(column, [])
+        for value in (was, now):
+            if value not in existing.variants[column]:
+                existing.variants[column].append(value)
+        flag = f"merged_variants:{column}"
+        if flag not in existing.flags:
+            existing.flags.append(flag)
+
+    if disagreed:
+        # Keep the pair already displayed rather than taking the richer value in
+        # each column independently. It came from the higher-ranked row and is
+        # internally coherent; splicing half of this one together with half of
+        # that one is exactly what invented ">128 / Susceptible".
+        flag = "conflicting_result:" + "/".join(group)
+        if flag not in existing.flags:
+            existing.flags.append(flag)
+        return
+
+    # Nothing contradicts, so let this row complete any half that was missing.
+    for column, was, now in zip(group, current, incoming):
+        if _stated(now) and (not _stated(was) or _richer(now, was)):
+            existing.values[column] = now
+
+
 def dedupe(
     rows: Sequence[Row],
     template_id: str,
@@ -188,7 +247,18 @@ def dedupe(
         # "moderate-level isoniazid resistance" would otherwise present one
         # paper's qualifier as if every source had reported it.
         identity = set(IDENTITY_COLUMNS.get(template_id, tuple()))
+
+        # Correlated groups are resolved first, as a unit, and then held out of
+        # the per-column pass below so it cannot recombine their halves.
+        correlated: set = set()
+        for group in CORRELATED_COLUMNS.get(template_id, ()):
+            if all(c in columns for c in group):
+                _merge_correlated(existing, row, group)
+                correlated.update(group)
+
         for column in columns:
+            if column in correlated:
+                continue
             # Reference columns are expected to differ -- merging rows from
             # different papers is the point -- and the real citations are
             # tracked separately on the row.

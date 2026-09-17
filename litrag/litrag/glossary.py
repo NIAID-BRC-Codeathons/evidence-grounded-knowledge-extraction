@@ -149,6 +149,13 @@ FLAGS: Dict[str, str] = {
         "shown and the alternatives are listed underneath, so a single paper's "
         "wording is never presented as every source's finding."
     ),
+    "conflicting_result": (
+        "Sources disagreed about a measurement whose columns belong together, "
+        "such as MIC and SIR. The pair shown is one source's, reported exactly "
+        "as that source gave it; the other readings are listed as alternatives. "
+        "No value here is combined from two different papers. Worth resolving "
+        "by hand before the row is used."
+    ),
     "compound_row": (
         "The source packed several findings into one row and they could not be "
         "split apart unambiguously. Worth reading by hand."
