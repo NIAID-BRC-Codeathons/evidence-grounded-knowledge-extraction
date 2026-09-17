@@ -75,6 +75,14 @@ def build_context(
 ASSERTION_VALUES = ("measured", "inferred", "predicted", "reported", "disputed")
 
 COLUMN_RULES = {
+    "method": (
+        "Method is the experimental technique the source used — "
+        "co-immunoprecipitation, mass spectrometry, yeast two-hybrid, reporter "
+        "assay, microscopy, broth microdilution, site-directed mutagenesis, "
+        "sequence-based prediction. It is never an evidence category: "
+        '"measured", "reported", "inferred" and "predicted" belong in '
+        'Assertion, not here. Write "N/A" when the source names no technique.'
+    ),
     "mutation": (
         "Write every mutation in standard notation -- reference residue, "
         "position, variant residue, as in S315T or G53D. A source that spells "

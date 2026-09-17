@@ -138,6 +138,7 @@ One is defined by LitRAG:
 | `summary` | prose |
 | `ast` *(local)* | Organism, Strain, GenBank Accession, BioSample, Antibiotic, MIC, SIR, Reference |
 | `glycosylation` *(local)* | Organism, Protein, Strain, Site, Glycosylation Type, Glycan, Method, Effect, Assertion, Reference |
+| `host-virus` *(local)* | Organism, Viral Protein, Interaction Type, Host Protein, Host Organism, Biological Consequence, Method, Assertion, Reference |
 
 ### Antimicrobial susceptibility testing (`ast`)
 
@@ -226,6 +227,37 @@ characterising `N234` differently merge into one row with both glycans listed.
 The linkage is recorded only when the source states it — never inferred from the
 residue — and an empty Glycan means the glycan was not characterised, not that
 the site is unglycosylated.
+
+### Host-virus interactions (`host-virus`)
+
+```bash
+litrag query -O "SARS-CoV-2" -T host-virus -k 40 \
+    -t "viral protein host interaction interferon antagonism"
+```
+
+```
+Organism    Viral Protein  Interaction  Host Protein  Host      Biological Consequence
+----------  -------------  -----------  ------------  --------  -----------------------------
+SARS-CoV-2  ORF6           inhibits     STAT1         human     reduced interferon signalling
+SARS-CoV-2  ORF6           binds        NUP98-RAE1    human     reduced interferon signalling
+SARS-CoV-2  ORF6           degrades     TRIM25        human     reduced interferon signalling
+```
+
+Aliases: `host-virus`, `virus-host`, `hvi`, `host`.
+
+The curated chain is **viral protein → interaction type → host protein →
+biological consequence**. Interaction Type is a closed vocabulary — `binds`,
+`cleaves`, `inhibits`, `activates`, `degrades`, `relocalizes` — which is what
+makes the table queryable. Synonyms fold in (`sequesters` and `retains` are
+`relocalizes`, `ubiquitinates` is `degrades`, `blocks` is `inhibits`), and a
+verb that fits none of the six is kept as the source wrote it rather than filed
+under the nearest.
+
+The relation is **directional**, unlike a protein-protein pair: the viral
+protein acts on the host target and the pair is never reordered. The verb is
+part of the claim, so binding STAT1 and degrading it are two findings. The
+consequence is not — two papers reporting different downstream effects of one
+interaction merge, with both kept.
 
 ### Adding your own
 

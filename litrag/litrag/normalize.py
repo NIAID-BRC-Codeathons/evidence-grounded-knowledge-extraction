@@ -448,3 +448,63 @@ def site_with_residue(site: Optional[str], glyco_type: Optional[str] = None) -> 
     if not residue:
         return ""
     return f"{residue}{int(bare.group(1))}"
+
+
+# The six ways a viral protein acts on a host target. Papers use many verbs for
+# each, so they are folded together -- otherwise "sequesters" and "relocalizes"
+# describe one finding as two.
+INTERACTION_TYPES = (
+    "binds", "cleaves", "inhibits", "activates", "degrades", "relocalizes",
+)
+
+_INTERACTION_SYNONYMS = {
+    "binds": "binds", "bind": "binds", "binding": "binds", "bound": "binds",
+    "interacts": "binds", "interacts with": "binds", "interaction": "binds",
+    "associates": "binds", "associates with": "binds", "association": "binds",
+    "complexes with": "binds", "physical interaction": "binds",
+    "direct interaction": "binds", "co precipitates": "binds",
+
+    "cleaves": "cleaves", "cleave": "cleaves", "cleavage": "cleaves",
+    "cleaved": "cleaves", "proteolysis": "cleaves",
+    "proteolytic cleavage": "cleaves", "processes": "cleaves",
+
+    "inhibits": "inhibits", "inhibit": "inhibits", "inhibition": "inhibits",
+    "blocks": "inhibits", "block": "inhibits", "suppresses": "inhibits",
+    "suppression": "inhibits", "antagonizes": "inhibits",
+    "antagonises": "inhibits", "impairs": "inhibits", "disrupts": "inhibits",
+    "downregulates": "inhibits", "represses": "inhibits",
+
+    "activates": "activates", "activate": "activates",
+    "activation": "activates", "induces": "activates", "induction": "activates",
+    "stimulates": "activates", "upregulates": "activates",
+    "enhances": "activates", "promotes": "activates",
+
+    "degrades": "degrades", "degrade": "degrades", "degradation": "degrades",
+    "targets for degradation": "degrades", "promotes degradation": "degrades",
+    "proteasomal degradation": "degrades", "ubiquitinates": "degrades",
+
+    "relocalizes": "relocalizes", "relocalises": "relocalizes",
+    "relocalization": "relocalizes", "relocalisation": "relocalizes",
+    "mislocalizes": "relocalizes", "mislocalises": "relocalizes",
+    "sequesters": "relocalizes", "sequestration": "relocalizes",
+    "retains": "relocalizes", "redistributes": "relocalizes",
+    "translocates": "relocalizes",
+}
+
+
+def normalize_interaction(value: Optional[str]) -> str:
+    """Canonical interaction verb, or normalized text when none of the six fit.
+
+    Falling back to text rather than forcing a match keeps an unusual verb
+    visible instead of quietly filing it under the nearest of the six.
+    """
+    cleaned = clean(value)
+    if not cleaned:
+        return ""
+    key = normalize_text(cleaned)
+    if key in _INTERACTION_SYNONYMS:
+        return _INTERACTION_SYNONYMS[key]
+    # "inhibits nuclear import" -- the verb carries the type, the rest is the
+    # target and belongs in another column.
+    first = key.split(" ", 1)[0]
+    return _INTERACTION_SYNONYMS.get(first, key)

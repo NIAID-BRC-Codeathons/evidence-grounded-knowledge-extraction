@@ -13,8 +13,9 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 from .extract import Citation, Row
 from .normalize import (normalize_antibiotic, normalize_gene,
-                        normalize_glyco_type, normalize_mutation,
-                        normalize_site, normalize_sir, normalize_text)
+                        normalize_glyco_type, normalize_interaction,
+                        normalize_mutation, normalize_site, normalize_sir,
+                        normalize_text)
 
 # Which columns establish identity, per template. Columns absent from a row are
 # skipped, so a partially-populated table still dedups on what it has.
@@ -29,6 +30,12 @@ IDENTITY_COLUMNS: Dict[str, Sequence[str]] = {
     # A site on a protein is the unit. Glycan, method and effect are things
     # observed about that site, not part of what identifies it.
     "glycosylation": ("Organism", "Protein", "Strain", "Site"),
+    # Unlike a protein-protein interaction this is directional -- the viral
+    # protein acts on the host target -- so the pair is never reordered. The
+    # verb is part of the claim: binding STAT1 and degrading it are two
+    # findings, not one.
+    "host-virus": ("Organism", "Viral Protein", "Interaction Type",
+                   "Host Protein"),
 }
 
 # Pairs treated as unordered, because the relation they describe is symmetric.
@@ -39,6 +46,7 @@ SYMMETRIC_PAIRS: Dict[str, Tuple[str, str]] = {
 _GENE_COLUMNS = {"gene name", "gene", "protein a", "protein b", "protein"}
 _MUTATION_COLUMNS = {"mutation", "variant", "allele"}
 _ANTIBIOTIC_COLUMNS = {"antibiotic", "drug", "antimicrobial", "agent"}
+_INTERACTION_COLUMNS = {"interaction type", "interaction"}
 _SIR_COLUMNS = {"sir", "interpretation", "category", "phenotype (sir)"}
 _SITE_COLUMNS = {"site", "position", "residue"}
 _GLYCO_TYPE_COLUMNS = {"glycosylation type", "glycan type", "linkage"}
@@ -53,6 +61,8 @@ def _normalize_cell(column: str, value: str, gene_hint: str = "") -> str:
         return normalize_gene(value)
     if key in _ANTIBIOTIC_COLUMNS:
         return normalize_antibiotic(value)
+    if key in _INTERACTION_COLUMNS:
+        return normalize_interaction(value)
     if key in _SIR_COLUMNS:
         return normalize_sir(value)
     if key in _SITE_COLUMNS:
