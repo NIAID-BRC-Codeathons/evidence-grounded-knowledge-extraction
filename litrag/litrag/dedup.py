@@ -13,7 +13,8 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 from .extract import Citation, Row
 from .normalize import (normalize_antibiotic, normalize_gene,
-                        normalize_mutation, normalize_sir, normalize_text)
+                        normalize_glyco_type, normalize_mutation,
+                        normalize_site, normalize_sir, normalize_text)
 
 # Which columns establish identity, per template. Columns absent from a row are
 # skipped, so a partially-populated table still dedups on what it has.
@@ -25,6 +26,9 @@ IDENTITY_COLUMNS: Dict[str, Sequence[str]] = {
     # BioSample identify the strain rather than the observation, and MIC/SIR
     # are the result, so none of them belong in the key.
     "ast": ("Organism", "Strain", "Antibiotic"),
+    # A site on a protein is the unit. Glycan, method and effect are things
+    # observed about that site, not part of what identifies it.
+    "glycosylation": ("Organism", "Protein", "Site"),
 }
 
 # Pairs treated as unordered, because the relation they describe is symmetric.
@@ -36,6 +40,8 @@ _GENE_COLUMNS = {"gene name", "gene", "protein a", "protein b", "protein"}
 _MUTATION_COLUMNS = {"mutation", "variant", "allele"}
 _ANTIBIOTIC_COLUMNS = {"antibiotic", "drug", "antimicrobial", "agent"}
 _SIR_COLUMNS = {"sir", "interpretation", "category", "phenotype (sir)"}
+_SITE_COLUMNS = {"site", "position", "residue"}
+_GLYCO_TYPE_COLUMNS = {"glycosylation type", "glycan type", "linkage"}
 _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "source"}
 
 
@@ -49,6 +55,10 @@ def _normalize_cell(column: str, value: str, gene_hint: str = "") -> str:
         return normalize_antibiotic(value)
     if key in _SIR_COLUMNS:
         return normalize_sir(value)
+    if key in _SITE_COLUMNS:
+        return normalize_site(value)
+    if key in _GLYCO_TYPE_COLUMNS:
+        return normalize_glyco_type(value)
     return normalize_text(value)
 
 

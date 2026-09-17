@@ -137,6 +137,7 @@ One is defined by LitRAG:
 | `protein-function` | Organism, Gene Name, Function, Assertion, Reference |
 | `summary` | prose |
 | `ast` *(local)* | Organism, Strain, GenBank Accession, BioSample, Antibiotic, MIC, SIR, Reference |
+| `glycosylation` *(local)* | Organism, Protein, Site, Glycosylation Type, Glycan, Method, Effect, Assertion, Reference |
 
 ### Antimicrobial susceptibility testing (`ast`)
 
@@ -186,6 +187,39 @@ in practice.
 A row with neither an MIC nor an SIR names a strain and a drug without reporting
 a result, and is dropped as evidence-free.
 
+### Glycosylation sites (`glycosylation`)
+
+```bash
+litrag query -O "SARS-CoV-2" -g Spike -T glycosylation -k 12 \
+    -t "N-linked glycosylation site glycan shield site-specific"
+```
+
+```
+Organism    Protein  Site   Type      Glycan         Method                Effect              Assertion
+----------  -------  -----  --------  -------------  --------------------  ------------------  ---------
+SARS-CoV-2  Spike    N234   N-linked  oligomannose   mass spectrometry     antibody shielding  reported
+SARS-CoV-2  Spike    N343   N-linked  fucosylated    molecular dynamics    structural stability predicted
+SARS-CoV-2  Spike    N1194  N-linked  N-acetyl hex.  mass spectrometry                         reported
+```
+
+Aliases: `glycosylation`, `glyco`, `glycan`, `glycosite`. Local generator only,
+for the same reason as `ast`.
+
+**Site numbering is never rewritten.** It differs between isoforms, strains and
+constructs, so `N234` and `N235` stay distinct even where two papers mean the
+same residue. Notation is normalized for merging only: `N234`, `Asn234` and
+`Asn-234` are one site.
+
+Identity is organism + protein + site. Glycan, method and effect are things
+observed *about* a site, not part of what identifies it, so two papers
+characterising `N234` differently merge into one row with both glycans listed.
+`N-linked` and `N-glycosylation` are the same linkage; `N-linked` versus
+`O-linked` on one site is a real conflict and is flagged.
+
+The linkage is recorded only when the source states it — never inferred from the
+residue — and an empty Glycan means the glycan was not characterised, not that
+the site is unglycosylated.
+
 ### Adding your own
 
 Drop declarations into `~/.config/litrag/templates.toml` — no code change:
@@ -218,7 +252,16 @@ litrag query ... -c open-access,asm-semantic        # an explicit set
 |---|---|---|
 | `open-access` *(default)* | PubMed Central (open access) | 47.6M chunks |
 | `asm-semantic` | ASM journals | 6.7M chunks |
+| `Dengue`, `Influenza_2024_2025`, `Glyco` | Team-curated corpora | 382 – 3,064 chunks |
 | `all` | Every corpus in one request | 54.3M chunks |
+
+The list is read from the server, so corpora added by the team appear without a
+code change. Empty indexes are filtered out: the registry also lists a raw
+backing store with no state and no chunks, which cannot serve a query.
+
+`all` is capped by the API at five collections per request. If more than five
+are active, `all` fails and names them rather than silently searching a subset —
+a quiet gap in coverage is worse for curation than an error.
 
 `all` uses the API's `collections` array (capped at five), which stamps each
 source with the corpus it came from — shown as a badge on every source card and

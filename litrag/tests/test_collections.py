@@ -102,3 +102,49 @@ def test_clean_title_strips_markup():
     assert clean_title("<b>A</b>   <i>B</i>") == "A B"
     assert clean_title(None) == ""
     assert clean_title("Plain title") == "Plain title"
+
+
+def test_empty_indexes_are_not_offered():
+    """The registry lists a raw backing store with no state and no chunks.
+
+    An empty index cannot serve a query, so offering it would only produce a
+    confusing empty result.
+    """
+    payload = {
+        "collections": PAYLOAD["collections"] + [
+            {"id": "ragstack_raw_backing_store", "count": 0, "state": None},
+        ],
+        "default": "open-access",
+    }
+    registry = CollectionRegistry.from_payload(payload)
+    assert "ragstack_raw_backing_store" not in registry.ids
+
+
+def test_all_refuses_to_exceed_the_api_cap():
+    """Searching 5 of 6 corpora and saying nothing would be a silent coverage
+    gap, which is worse for curation than an error."""
+    from litrag.collections import MAX_PER_REQUEST
+    payload = {
+        "collections": [
+            {"id": f"corpus-{i}", "count": 100, "state": "active"}
+            for i in range(MAX_PER_REQUEST + 1)
+        ],
+        "default": "corpus-0",
+    }
+    registry = CollectionRegistry.from_payload(payload)
+    with pytest.raises(ValueError, match="at most"):
+        registry.resolve(ALL)
+    # An explicit selection within the cap still works.
+    assert len(registry.resolve("corpus-0,corpus-1")) == 2
+
+
+def test_all_works_at_exactly_the_cap():
+    from litrag.collections import MAX_PER_REQUEST
+    payload = {
+        "collections": [
+            {"id": f"corpus-{i}", "count": 100, "state": "active"}
+            for i in range(MAX_PER_REQUEST)
+        ],
+        "default": "corpus-0",
+    }
+    assert len(CollectionRegistry.from_payload(payload).resolve(ALL)) == MAX_PER_REQUEST

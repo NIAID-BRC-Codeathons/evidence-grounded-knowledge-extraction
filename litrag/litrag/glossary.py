@@ -78,6 +78,27 @@ COLUMNS: Dict[str, str] = {
         "Never derived from the MIC, and no breakpoint is applied here — the "
         "same MIC can be called S or R under CLSI versus EUCAST."
     ),
+    "site": (
+        "The modified residue and its position, as the source numbers it — "
+        "N234, Asn234, T678. Numbering is never rewritten: it differs between "
+        "isoforms, strains and constructs, so N234 and N235 are distinct sites "
+        "even for the same residue in two papers."
+    ),
+    "glycosylation type": (
+        "The linkage: N-linked (on Asn), O-linked (on Ser or Thr), or "
+        "C-mannosylation (on Trp). Recorded only when the source states it — "
+        "never inferred from the residue alone."
+    ),
+    "glycan": (
+        "The glycan structure or composition as published — high-mannose, "
+        "complex, hybrid, Man5GlcNAc2, core-fucosylated. Nomenclature is not "
+        "converted. N/A means the glycan was not characterised, not that the "
+        "site is unglycosylated."
+    ),
+    "effect": (
+        "The functional consequence the source reports for this site — folding, "
+        "receptor binding, antibody shielding. N/A when the source reports none."
+    ),
     "assertion": (
         "Where the claim stands in the source: measured (the source ran the "
         "experiment), inferred (concluded indirectly from its own data), "

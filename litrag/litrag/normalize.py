@@ -209,3 +209,52 @@ def normalize_antibiotic(value: Optional[str]) -> str:
         previous = cleaned
         cleaned = _ANTIBIOTIC_SUFFIX.sub("", cleaned).strip()
     return normalize_text(cleaned)
+
+
+# Asn234 / N234 / Asn-234 / N-234 / p.Asn234 -- a residue and its position.
+_SITE = re.compile(
+    r"^(?:p\.)?(" + "|".join(AA_THREE_TO_ONE) + r"|[A-Z])[\s\-]?(\d+)$",
+    re.IGNORECASE,
+)
+
+_GLYCO_TYPES = {
+    "n": "N-linked", "n linked": "N-linked", "nlinked": "N-linked",
+    "n glycosylation": "N-linked", "n glycan": "N-linked",
+    "n linked glycosylation": "N-linked", "asn linked": "N-linked",
+    "o": "O-linked", "o linked": "O-linked", "olinked": "O-linked",
+    "o glycosylation": "O-linked", "o glycan": "O-linked",
+    "o linked glycosylation": "O-linked",
+    "c mannosylation": "C-mannosylation", "c mannosylated": "C-mannosylation",
+    "c linked": "C-mannosylation", "c mannose": "C-mannosylation",
+}
+
+
+def normalize_site(value: Optional[str]) -> str:
+    """Canonical residue-and-position for a modification site.
+
+    Asn234, N234 and Asn-234 are one site. The position is never rewritten:
+    glycosite numbering differs between isoforms and strains, so N234 and N235
+    must stay distinct even when they are the same residue in two constructs.
+    """
+    cleaned = clean(value)
+    if not cleaned:
+        return ""
+    match = _SITE.match(cleaned.strip())
+    if not match:
+        return normalize_text(cleaned)
+    residue, position = match.groups()
+    letter = AA_THREE_TO_ONE.get(residue.lower(), residue.upper())
+    return f"{letter}{int(position)}"
+
+
+def normalize_glyco_type(value: Optional[str]) -> str:
+    """Canonical N-linked / O-linked / C-mannosylation."""
+    cleaned = clean(value)
+    if not cleaned:
+        return ""
+    key = normalize_text(cleaned)
+    if key in _GLYCO_TYPES:
+        return _GLYCO_TYPES[key]
+    key = re.sub(r"\b(glycosylation|glycosylated|glycan|site|linked)\b", " ", key).strip()
+    key = _WHITESPACE.sub(" ", key)
+    return _GLYCO_TYPES.get(key, normalize_text(cleaned))

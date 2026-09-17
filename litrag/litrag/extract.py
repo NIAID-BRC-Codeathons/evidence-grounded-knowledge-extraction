@@ -28,10 +28,17 @@ _SUBJECT_COLUMNS = {
     # identifiers that pin the strain down. The evidence is the MIC or SIR.
     "strain", "isolate", "antibiotic", "drug", "antimicrobial", "agent",
     "genbank accession", "accession", "biosample",
+    # A glycosylation row is about a site on a protein; the glycan, method and
+    # effect are what is reported about it.
+    "site", "position", "residue",
 }
 _REFERENCE_COLUMNS = {"reference", "references", "citation", "citations", "source"}
+# Assertion classifies the status of a claim, not its content. Since it is now
+# filled from a fixed vocabulary on every row, counting it as evidence would
+# mean no row is ever evidence-free and the filter would never fire.
+_STATUS_COLUMNS = {"assertion", "confidence", "evidence"}
 # The column that carries the actual finding for each table type.
-_KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type"}
+_KEY_VALUE_COLUMNS = {"mutation", "function", "interaction type", "site"}
 # Columns where at least one of a group must be present for the row to say
 # anything. An AST row needs an MIC or an SIR; neither alone is required.
 _EITHER_OR_COLUMNS = [{"mic", "sir"}]
@@ -332,12 +339,23 @@ def _looks_like_header(cells: Sequence[str], columns: Sequence[str]) -> bool:
     return len(normalized & expected) >= max(2, len(expected) // 2)
 
 
-def parse_citations(text: str, sources: Sequence[Dict[str, Any]]) -> List[Citation]:
+_BARE_NUMBERS = re.compile(r"\d+")
+
+
+def parse_citations(
+    text: str,
+    sources: Sequence[Dict[str, Any]],
+    bare_numbers: bool = False,
+) -> List[Citation]:
     """Map [n] markers onto the retrieved sources.
 
     Markers are 1-based positions into the sources list -- verified against live
     responses. Several chunks of one paper can be retrieved separately, so the
     result is deduplicated by document.
+
+    ``bare_numbers`` allows "3" to mean "[3]". Only pass it for text taken from
+    a reference column, where a lone integer can only be a source number --
+    elsewhere it would turn a position or a dose into a citation.
     """
     citations: List[Citation] = []
     seen: set = set()
@@ -357,6 +375,14 @@ def parse_citations(text: str, sources: Sequence[Dict[str, Any]]) -> List[Citati
 
         for marker in span:
             if marker in seen:
+                continue
+            seen.add(marker)
+            citations.append(_citation_for(marker, sources))
+
+    if not citations and bare_numbers:
+        for token in _BARE_NUMBERS.findall(text or ""):
+            marker = int(token)
+            if marker in seen or not 1 <= marker <= len(sources):
                 continue
             seen.add(marker)
             citations.append(_citation_for(marker, sources))
@@ -499,9 +525,14 @@ def _is_evidence_free(values: Dict[str, str], columns: Sequence[str]) -> bool:
         c for c in columns
         if c.strip().lower() not in _SUBJECT_COLUMNS
         and c.strip().lower() not in _REFERENCE_COLUMNS
+        and c.strip().lower() not in _STATUS_COLUMNS
     ]
     if not evidence_columns:
-        evidence_columns = [c for c in columns if c.strip().lower() not in _SUBJECT_COLUMNS]
+        evidence_columns = [
+            c for c in columns
+            if c.strip().lower() not in _SUBJECT_COLUMNS
+            and c.strip().lower() not in _STATUS_COLUMNS
+        ]
     if not evidence_columns:
         return False
     return all(is_null(values.get(c)) for c in evidence_columns)
@@ -513,6 +544,7 @@ def _is_evidence_free(values: Dict[str, str], columns: Sequence[str]) -> bool:
 _SPLITTABLE_COLUMNS = {
     "gene name", "gene", "mutation", "variant", "allele", "protein",
     "antibiotic", "drug", "antimicrobial", "mic", "sir",
+    "site", "position", "residue",
 }
 _LIST_SEPARATOR = re.compile(r"\s*[,;]\s*|\s+and\s+")
 
@@ -657,11 +689,15 @@ def extract_table(
             if _is_evidence_free(values, columns):
                 flags.append("evidence_free")
 
-            reference_text = " ".join(
+            reference_cells = [
                 cells[i] for i, col in enumerate(columns)
                 if i < len(cells) and col.strip().lower() in _REFERENCE_COLUMNS
-            ) or line
-            citations = parse_citations(reference_text, sources)
+            ]
+            from_reference_column = bool(" ".join(reference_cells).strip())
+            reference_text = " ".join(reference_cells) or line
+            citations = parse_citations(
+                reference_text, sources, bare_numbers=from_reference_column
+            )
             unresolved = [c for c in citations if not c.resolved]
             result.unresolved_citations += len(unresolved)
             if unresolved:

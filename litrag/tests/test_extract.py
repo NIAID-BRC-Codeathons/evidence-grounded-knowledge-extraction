@@ -342,3 +342,41 @@ def test_display_without_variants_is_the_plain_value():
     from litrag.extract import Row
     assert Row(values={"A": "x"}).display("A") == "x"
     assert Row(values={}).display("A") == ""
+
+
+def test_assertion_does_not_count_as_evidence(registry, ppi_response):
+    """Regression: once Assertion was filled from a fixed vocabulary on every
+    row, counting it as evidence meant no row was ever evidence-free and the
+    filter stopped firing."""
+    template = registry.resolve("ppi")
+    answer = (
+        "Pathogen\tProtein A\tProtein B\tInteraction Type\tMethod\tAssertion\tReference\n"
+        "SARS-CoV-2\tNSP13\tSpike\tN/A\tN/A\treported\tN/A\n"
+    )
+    result = extract(answer, template, ppi_response["sources"])
+    assert result.n_rows == 0 and result.dropped_empty == 1
+
+
+def test_bare_number_in_a_reference_column_resolves(registry, mutation_response):
+    """Models sometimes write "3" instead of "[3]" in the Reference column.
+
+    A lone integer there can only be a source number, so it is read as one.
+    """
+    template = registry.resolve("mutation")
+    answer = (
+        "Organism\tGene Name\tMutation\tPhenotype\tAssertion\tReference\n"
+        "M. tuberculosis\tkatG\tS315T\tINH resistance\tmeasured\t1\n"
+    )
+    result = extract(answer, template, mutation_response["sources"])
+    assert result.rows[0].citations[0].pmid == "40580943"
+    assert "no_citation" not in result.rows[0].flags
+
+
+def test_bare_numbers_are_not_read_as_citations_elsewhere(mutation_response):
+    """Outside a reference column an integer is a position or a dose."""
+    assert parse_citations("3", mutation_response["sources"]) == []
+    assert parse_citations(">32 mg/L", mutation_response["sources"], bare_numbers=True) == []
+
+
+def test_out_of_range_bare_number_is_ignored(mutation_response):
+    assert parse_citations("99", mutation_response["sources"], bare_numbers=True) == []
