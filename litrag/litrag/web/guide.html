@@ -2,268 +2,408 @@
 <html lang="en">
 
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LitRAG - How to Use</title>
-  <style>
-    :root {
-      --ink: #17212b;
-      --muted: #536273;
-      --line: #cbd5df;
-      --blue: #155e91;
-      --blue-pale: #eaf3f9;
-      --gold: #8a5a00;
-      --gold-pale: #fff6dc;
-    }
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LitRAG - How to Use</title>
+    <style>
+        :root {
+            --ink: #17212b;
+            --muted: #536273;
+            --line: #cbd5df;
+            --blue: #155e91;
+            --blue-pale: #eaf3f9;
+            --gold: #8a5a00;
+            --gold-pale: #fff6dc;
+        }
 
-    * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+        }
 
-    body {
-      margin: 0;
-      color: var(--ink);
-      font: 11pt/1.48 Georgia, "Times New Roman", serif;
-      background: #eef2f5;
-    }
+        body {
+            margin: 0;
+            color: var(--ink);
+            font: 11pt/1.48 Georgia, "Times New Roman", serif;
+            background: #eef2f5;
+        }
 
-    .page {
-      max-width: 860px;
-      margin: 24px auto;
-      padding: 36px 46px;
-      background: white;
-      box-shadow: 0 2px 16px #17212b20;
-    }
+        .page {
+            max-width: 860px;
+            margin: 24px auto;
+            padding: 36px 46px;
+            background: white;
+            box-shadow: 0 2px 16px #17212b20;
+        }
 
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 20px;
-      border-bottom: 2px solid var(--blue);
-      padding-bottom: 11px;
-    }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 20px;
+            border-bottom: 2px solid var(--blue);
+            padding-bottom: 11px;
+        }
 
-    h1 {
-      margin: 0;
-      color: var(--blue);
-      font: 700 25pt/1.05 Georgia, "Times New Roman", serif;
-    }
+        h1 {
+            margin: 0;
+            color: var(--blue);
+            font: 700 25pt/1.05 Georgia, "Times New Roman", serif;
+        }
 
-    .subtitle {
-      color: var(--muted);
-      font-size: 10pt;
-      text-align: right;
-    }
+        .subtitle {
+            color: var(--muted);
+            font-size: 10pt;
+            text-align: right;
+        }
 
-    h2 {
-      margin: 20px 0 6px;
-      color: var(--blue);
-      font-size: 15pt;
-      line-height: 1.15;
-    }
+        h2 {
+            margin: 20px 0 6px;
+            color: var(--blue);
+            font-size: 15pt;
+            line-height: 1.15;
+        }
 
-    h3 { margin: 0 0 3px; font-size: 11pt; }
-    p { margin: 6px 0 9px; }
-    .lede { font-size: 12pt; margin: 14px 0 13px; }
+        h3 {
+            margin: 0 0 3px;
+            font-size: 11pt;
+        }
 
-    .screen {
-      margin: 12px 0 15px;
-      padding: 9px;
-      border: 1px solid var(--line);
-      background: #fbfcfd;
-    }
+        p {
+            margin: 6px 0 9px;
+        }
 
-    .screen img {
-      display: block;
-      width: 100%;
-      height: auto;
-    }
+        .lede {
+            font-size: 12pt;
+            margin: 14px 0 13px;
+        }
 
-    .screen figcaption {
-      margin-top: 7px;
-      color: var(--muted);
-      font-size: 9.5pt;
-    }
+        .screen {
+            margin: 12px 0 15px;
+            padding: 9px;
+            border: 1px solid var(--line);
+            background: #fbfcfd;
+        }
 
-    .callouts {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 3px 22px;
-      margin: 6px 0 0 19px;
-      padding: 0;
-      color: var(--ink);
-      font-size: 9.5pt;
-    }
+        .screen img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
 
-    .callouts li { margin: 1px 0; }
+        .screen figcaption {
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 9.5pt;
+        }
 
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      margin: 11px 0 15px;
-    }
+        .callouts {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3px 22px;
+            margin: 6px 0 0 19px;
+            padding: 0;
+            color: var(--ink);
+            font-size: 9.5pt;
+        }
 
-    .step {
-      border: 1px solid var(--line);
-      border-top: 4px solid var(--blue);
-      padding: 10px 12px;
-      background: #fbfcfd;
-    }
+        .callouts li {
+            margin: 1px 0;
+        }
 
-    .number {
-      color: var(--blue);
-      font-weight: bold;
-      font-size: 15pt;
-    }
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 11px 0 15px;
+        }
 
-    .columns {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 26px;
-    }
+        .step {
+            border: 1px solid var(--line);
+            border-top: 4px solid var(--blue);
+            padding: 10px 12px;
+            background: #fbfcfd;
+        }
 
-    .block {
-      border-top: 1px solid var(--line);
-      padding-top: 8px;
-    }
+        .number {
+            color: var(--blue);
+            font-weight: bold;
+            font-size: 15pt;
+        }
 
-    ul { margin: 5px 0 7px 18px; padding: 0; }
-    li { margin: 3px 0; }
+        .columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 26px;
+        }
 
-    .callout {
-      border-left: 4px solid var(--gold);
-      background: var(--gold-pale);
-      padding: 9px 12px;
-      margin: 15px 0 12px;
-    }
+        .block {
+            border-top: 1px solid var(--line);
+            padding-top: 8px;
+        }
 
-    code {
-      font: 0.9em Menlo, Consolas, monospace;
-      color: #143d59;
-    }
+        ul {
+            margin: 5px 0 7px 18px;
+            padding: 0;
+        }
 
-    .footer {
-      margin-top: 17px;
-      padding-top: 8px;
-      border-top: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 9pt;
-    }
+        li {
+            margin: 3px 0;
+        }
 
-    a { color: var(--blue); }
+        .callout {
+            border-left: 4px solid var(--gold);
+            background: var(--gold-pale);
+            padding: 9px 12px;
+            margin: 15px 0 12px;
+        }
 
-    @media (max-width: 700px) {
-      .page { margin: 0; padding: 23px 19px; box-shadow: none; }
-      header { display: block; }
-      .subtitle { text-align: left; margin-top: 6px; }
-      .steps, .columns { grid-template-columns: 1fr; }
-    }
+        code {
+            font: 0.9em Menlo, Consolas, monospace;
+            color: #143d59;
+        }
 
-    @media print {
-      @page { size: letter; margin: 0.55in; }
-      body { background: white; font-size: 10pt; line-height: 1.35; }
-      .page { max-width: none; margin: 0; padding: 0; box-shadow: none; }
-      h1 { font-size: 22pt; }
-      h2 { font-size: 13pt; margin-top: 13px; }
-      .lede { font-size: 10.5pt; margin: 9px 0; }
-      .screen { margin: 7px 0 9px; padding: 5px; }
-      .screen figcaption, .callouts { font-size: 8.5pt; }
-      .callouts { gap: 2px 15px; }
-      .steps { gap: 8px; margin: 7px 0 10px; }
-      .step { padding: 7px 9px; }
-      .columns { gap: 8px 18px; }
-      .block { padding-top: 5px; }
-      p { margin: 3px 0 6px; }
-      ul { margin-top: 3px; margin-bottom: 4px; }
-      li { margin: 2px 0; }
-      .callout { margin: 9px 0 7px; padding: 6px 9px; }
-      .footer { margin-top: 9px; }
-    }
-  </style>
+        .footer {
+            margin-top: 17px;
+            padding-top: 8px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 9pt;
+        }
+
+        a {
+            color: var(--blue);
+        }
+
+        @media (max-width: 700px) {
+            .page {
+                margin: 0;
+                padding: 23px 19px;
+                box-shadow: none;
+            }
+
+            header {
+                display: block;
+            }
+
+            .subtitle {
+                text-align: left;
+                margin-top: 6px;
+            }
+
+            .steps,
+            .columns {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media print {
+            @page {
+                size: letter;
+                margin: 0.55in;
+            }
+
+            body {
+                background: white;
+                font-size: 10pt;
+                line-height: 1.35;
+            }
+
+            .page {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+
+            h1 {
+                font-size: 22pt;
+            }
+
+            h2 {
+                font-size: 13pt;
+                margin-top: 13px;
+            }
+
+            .lede {
+                font-size: 10.5pt;
+                margin: 9px 0;
+            }
+
+            .screen {
+                margin: 7px 0 9px;
+                padding: 5px;
+            }
+
+            .screen figcaption,
+            .callouts {
+                font-size: 8.5pt;
+            }
+
+            .callouts {
+                gap: 2px 15px;
+            }
+
+            .steps {
+                gap: 8px;
+                margin: 7px 0 10px;
+            }
+
+            .step {
+                padding: 7px 9px;
+            }
+
+            .columns {
+                gap: 8px 18px;
+            }
+
+            .block {
+                padding-top: 5px;
+            }
+
+            p {
+                margin: 3px 0 6px;
+            }
+
+            ul {
+                margin-top: 3px;
+                margin-bottom: 4px;
+            }
+
+            li {
+                margin: 2px 0;
+            }
+
+            .callout {
+                margin: 9px 0 7px;
+                padding: 6px 9px;
+            }
+
+            .footer {
+                margin-top: 9px;
+            }
+        }
+    </style>
 </head>
 
 <body>
-  <main class="page">
-    <header>
-      <h1>Using LitRAG</h1>
-      <div class="subtitle">A quick guide for exploring<br>pathogen literature</div>
-    </header>
+    <main class="page">
+        <header>
+            <h1>Using LitRAG</h1>
+            <div class="subtitle">A quick guide for exploring<br>pathogen literature</div>
+        </header>
 
-    <p class="lede">LitRAG helps you find biological findings reported across the literature. Start with an organism, add the gene or protein you care about, choose the kind of result you want, and inspect the papers behind each row.</p>
+        <p class="lede">LitRAG helps you find biological findings reported across the literature. Start with an
+            organism, add the gene or protein you care about, choose the kind of result you want, and inspect the papers
+            behind each row.</p>
 
-    <figure class="screen">
-      <img src="/static/guide-ui-callouts.png" alt="LitRAG search page showing the organism, gene, search-term, data-type, search, and results controls">
-      <figcaption>The main search page. The numbered areas show the controls you use and where results will appear.</figcaption>
-      <ol class="callouts">
-        <li><strong>Organism:</strong> required starting point.</li>
-        <li><strong>Genes / proteins:</strong> optional names to focus the search.</li>
-        <li><strong>Search terms:</strong> phenotype, disease, host, or mechanism.</li>
-        <li><strong>Data type:</strong> the kind of biological finding to extract.</li>
-        <li><strong>Search:</strong> run the literature search and extraction.</li>
-        <li><strong>Results and sources:</strong> extracted rows, citations, and source passages appear below the controls.</li>
-      </ol>
-    </figure>
+        <figure class="screen">
+            <img src="/static/guide-ui-callouts.png"
+                alt="LitRAG search page showing the organism, gene, search-term, data-type, search, and results controls">
+            <figcaption>The main search page. The numbered areas show the controls you use and where results will
+                appear.</figcaption>
+            <ol class="callouts">
+                <li><strong>Organism:</strong> required starting point.</li>
+                <li><strong>Genes / proteins:</strong> optional names to focus the search.</li>
+                <li><strong>Search terms:</strong> phenotype, disease, host, or mechanism.</li>
+                <li><strong>Data type:</strong> the kind of biological finding to extract.</li>
+                <li><strong>Search:</strong> run the literature search and extraction.</li>
+                <li><strong>Results and sources:</strong> extracted rows, citations, and source passages appear below
+                    the controls.</li>
+            </ol>
+        </figure>
 
-    <section class="steps" aria-label="Three steps to use LitRAG">
-      <div class="step"><div class="number">1</div><h3>Describe your question</h3><p>Enter an organism, gene or protein, and useful terms such as “viral entry” or “isoniazid resistance.”</p></div>
-      <div class="step"><div class="number">2</div><h3>Choose a finding</h3><p>Select mutations, interactions, protein functions, susceptibility results, glycosylation, or a summary.</p></div>
-      <div class="step"><div class="number">3</div><h3>Check the evidence</h3><p>Read the extracted rows, open the linked citations, and download the table for follow-up work.</p></div>
-    </section>
+        <section class="steps" aria-label="Three steps to use LitRAG">
+            <div class="step">
+                <div class="number">1</div>
+                <h3>Describe your question</h3>
+                <p>Enter an organism, gene or protein, and useful terms such as “viral entry” or “isoniazid resistance.”
+                </p>
+            </div>
+            <div class="step">
+                <div class="number">2</div>
+                <h3>Choose a finding</h3>
+                <p>Select mutations, interactions, protein functions, susceptibility results, glycosylation, or a
+                    summary.</p>
+            </div>
+            <div class="step">
+                <div class="number">3</div>
+                <h3>Check the evidence</h3>
+                <p>Read the extracted rows, open the linked citations, and download the table for follow-up work.</p>
+            </div>
+        </section>
 
-    <div class="columns">
-      <section class="block">
-        <h2>What literature is searched?</h2>
-        <p>The backend searches a large, searchable collection built from approximately <strong>1.5 million publications in PubMed Central</strong>. These are biomedical research articles available through the PubMed Central open-access literature resource.</p>
-        <p>LitRAG searches passages from the articles, not just titles or abstracts. A result can therefore point you to the particular text that supports a finding. The collection may be updated, so the exact set of available papers can change over time.</p>
-      </section>
+        <div class="columns">
+            <section class="block">
+                <h2>What literature is searched?</h2>
+                <p>The backend searches a large, searchable collection built from approximately <strong>1.5 million
+                        publications in PubMed Central</strong>. These are biomedical research articles available
+                    through the PubMed Central open-access literature resource.</p>
+                <p>LitRAG searches passages from the articles, not just titles or abstracts. A result can therefore
+                    point you to the particular text that supports a finding. The collection may be updated, so the
+                    exact set of available papers can change over time.</p>
+            </section>
 
-      <section class="block">
-        <h2>What should I enter?</h2>
-        <ul>
-          <li><strong>Organism:</strong> use a species, pathogen, strain, or virus such as <em>SARS-CoV-2</em>.</li>
-          <li><strong>Genes:</strong> enter one or more names separated by commas, such as <em>Spike, ACE2</em> or <em>katG, inhA</em>.</li>
-          <li><strong>Other terms:</strong> add the phenotype, disease, assay, host, or mechanism that narrows the question.</li>
-          <li>Use specific terms when possible. “<em>Spike antibody escape</em>” is more useful than “<em>Spike</em>” alone.</li>
-        </ul>
-      </section>
+            <section class="block">
+                <h2>What should I enter?</h2>
+                <ul>
+                    <li><strong>Organism:</strong> use a species, pathogen, strain, or virus such as
+                        <em>SARS-CoV-2</em>.</li>
+                    <li><strong>Genes:</strong> enter one or more names separated by commas, such as <em>Spike,
+                            ACE2</em> or <em>katG, inhA</em>.</li>
+                    <li><strong>Other terms:</strong> add the phenotype, disease, assay, host, or mechanism that narrows
+                        the question.</li>
+                    <li>Use specific terms when possible. “<em>Spike antibody escape</em>” is more useful than
+                        “<em>Spike</em>” alone.</li>
+                </ul>
+            </section>
 
-      <section class="block">
-        <h2>What do the data types mean?</h2>
-        <ul>
-          <li><strong>Mutation:</strong> sequence changes and associated phenotypes.</li>
-          <li><strong>Protein interaction:</strong> pathogen and host or protein-protein interactions.</li>
-          <li><strong>Protein function:</strong> reported biological roles or activities.</li>
-          <li><strong>AST:</strong> antimicrobial susceptibility results, including MIC and S/I/R when reported.</li>
-          <li><strong>Glycosylation:</strong> protein sites, glycans, methods, and reported effects.</li>
-          <li><strong>Summary:</strong> a prose answer when a table is not the best fit.</li>
-        </ul>
-      </section>
+            <section class="block">
+                <h2>What do the data types mean?</h2>
+                <ul>
+                    <li><strong>Mutation:</strong> sequence changes and associated phenotypes.</li>
+                    <li><strong>Protein interaction:</strong> pathogen and host or protein-protein interactions.</li>
+                    <li><strong>Protein function:</strong> reported biological roles or activities.</li>
+                    <li><strong>AST:</strong> antimicrobial susceptibility results, including MIC and S/I/R when
+                        reported.</li>
+                    <li><strong>Glycosylation:</strong> protein sites, glycans, methods, and reported effects.</li>
+                    <li><strong>Summary:</strong> a prose answer when a table is not the best fit.</li>
+                </ul>
+            </section>
 
-      <section class="block">
-        <h2>How should I read a result?</h2>
-        <ul>
-          <li>Each row is a compact statement extracted from one or more passages.</li>
-          <li><strong>Support</strong> shows how many distinct sources or findings contributed to a merged row.</li>
-          <li>Flags call attention to unresolved citations, incomplete evidence, or values that were merged because they describe the same finding.</li>
-          <li>Standardized spellings help group equivalent terms; the cited paper remains the authority for the original wording.</li>
-        </ul>
-      </section>
-    </div>
+            <section class="block">
+                <h2>How should I read a result?</h2>
+                <ul>
+                    <li>Each row is a compact statement extracted from one or more passages.</li>
+                    <li><strong>Support</strong> shows how many distinct sources or findings contributed to a merged
+                        row.</li>
+                    <li>Flags call attention to unresolved citations, incomplete evidence, or values that were merged
+                        because they describe the same finding.</li>
+                    <li>Standardized spellings help group equivalent terms; the cited paper remains the authority for
+                        the original wording.</li>
+                </ul>
+            </section>
+        </div>
 
-    <div class="callout"><strong>Use results as literature leads, not as clinical or experimental conclusions.</strong> LitRAG does not replace reading the cited article. Check the passage, organism or strain, experimental method, and context before using a finding in an analysis, report, or experiment.</div>
+        <div class="callout"><strong>Use results as literature leads, not as clinical or experimental
+                conclusions.</strong> LitRAG does not replace reading the cited article. Check the passage, organism or
+            strain, experimental method, and context before using a finding in an analysis, report, or experiment.</div>
 
-    <section class="block">
-      <h2>Practical tips</h2>
-      <ul>
-        <li>Begin with the default number of retrieved passages. Increase it when the topic is broad or you need a wider literature sweep.</li>
-        <li>Keep duplicate merging enabled for a concise table. Turn it off when you want to inspect separate extracted reports.</li>
-        <li>Use the citation links and source passages to distinguish measured results from predictions, reviews, or statements copied across papers.</li>
-        <li>Download TSV or CSV for spreadsheet review; use JSON when you need citations, passage identifiers, and provenance fields.</li>
-      </ul>
-    </section>
+        <section class="block">
+            <h2>Practical tips</h2>
+            <ul>
+                <li>Begin with the default number of retrieved passages. Increase it when the topic is broad or you need
+                    a wider literature sweep.</li>
+                <li>Keep duplicate merging enabled for a concise table. Turn it off when you want to inspect separate
+                    extracted reports.</li>
+                <li>Use the citation links and source passages to distinguish measured results from predictions,
+                    reviews, or statements copied across papers.</li>
+                <li>Download TSV or CSV for spreadsheet review; use JSON when you need citations, passage identifiers,
+                    and provenance fields.</li>
+            </ul>
+        </section>
 
-    <div class="footer"><a href="/">Back to LitRAG</a> · <a href="/architecture">System overview</a></div>
-  </main>
+        <div class="footer"><a href="/">Back to LitRAG</a> · <a href="/architecture">System overview</a></div>
+    </main>
 </body>
 
 </html>
