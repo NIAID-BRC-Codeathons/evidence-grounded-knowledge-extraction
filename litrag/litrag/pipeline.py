@@ -78,6 +78,11 @@ class QuerySpec:
     max_context_tokens: Optional[int] = None
     keep_empty: bool = False
     no_dedupe: bool = False
+    # Free-text guidance layered onto the prompt. On the local path it gets its
+    # own labeled section (see prompts.build_prompt); the hosted path has no
+    # slot for that, so it rides along inside `other_terms` instead (see
+    # hosted_template_vars) -- less structured, but it still reaches the model.
+    instructions: str = ""
     query_id: str = ""
     # Backend name recorded in the identity hash so switching models
     # invalidates a resume rather than silently reusing the old answer.
@@ -123,7 +128,7 @@ class QuerySpec:
             self.organism, self.genes, self.other_terms,
             self.data_type, str(self.top_k),
             ",".join(self.collections) or (self.collection or ""),
-            self.backend,
+            self.backend, self.instructions,
         ])
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
@@ -173,8 +178,42 @@ class RunResult:
         }
 
 
+def hosted_template_vars(spec: QuerySpec, template: Template) -> Dict[str, str]:
+    """Slot values for an actual /v1/query call.
+
+    The hosted path has no slot of its own for free-text instructions, so they
+    ride in `other_terms` here -- the one slot proven to reach the prompt
+    without also feeding retrieval (that uses `search_text`, which reads
+    `other_terms` alone, never `instructions`). Only this hosted path enforces
+    the server's slot length; local generation writes its own prompt and never
+    calls this.
+    """
+    values = spec.template_vars()
+    if spec.instructions.strip():
+        other = values.get("other_terms", "")
+        combined = f"{other}; {spec.instructions.strip()}" if other else spec.instructions.strip()
+        slot = next((s for s in template.slots if s.name == "other_terms"), None)
+        if slot is not None and slot.max_len and len(combined) > slot.max_len:
+            budget = max(0, slot.max_len - len(other) - (2 if other else 0))
+            raise TemplateError(
+                f"other terms plus advanced instructions is {len(combined)} characters; "
+                f"template '{template.id}' allows other_terms up to {slot.max_len} on the "
+                f"hosted path (about {budget} left here for instructions). Shorten the "
+                f"instructions, or switch to a local model (--llm qwen/llama), where "
+                f"instructions get their own section with no length limit."
+            )
+        values["other_terms"] = combined
+    return template.validate_vars(values)
+
+
 def build_request(spec: QuerySpec, template: Template) -> Dict[str, Any]:
-    """The exact payload /v1/query will receive, without sending it."""
+    """The exact payload /v1/query will receive, without sending it.
+
+    Uses the plain slot values, not `hosted_template_vars` -- this is called
+    unconditionally for provenance on both paths (see `run_query`), and must
+    stay safe for a local run carrying instructions too long for the hosted
+    slot, which don't constrain it at all.
+    """
     template_vars = template.validate_vars(spec.template_vars())
     return RagStackClient.build_query_body(
         query=spec.search_text(template),
@@ -231,6 +270,7 @@ def _generate_locally(
         genes=spec.genes,
         other_terms=spec.other_terms,
         max_context_tokens=context_budget,
+        instructions=spec.instructions,
     )
 
     owns = llm_client is None
@@ -277,7 +317,6 @@ def run_query(
     does the extraction. Without it, the hosted /v1/query does both.
     """
     template = registry.resolve(spec.data_type)
-    template_vars = template.validate_vars(spec.template_vars())
 
     if template.is_local and endpoint is None:
         raise TemplateError(
@@ -295,7 +334,7 @@ def run_query(
             query=spec.search_text(template),
             top_k=spec.top_k,
             template=template.id,
-            template_vars=template_vars,
+            template_vars=hosted_template_vars(spec, template),
             collection=spec.collection,
             use_graph=False,
             retrieval_mode=api_retrieval_mode(spec.retrieval_mode),

@@ -23,7 +23,7 @@ from .collections import ALL, CollectionRegistry, clean_title
 from .config import ConfigError, load_config
 from . import glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmError, resolve_endpoint)
-from .pipeline import QuerySpec, build_request, run_query
+from .pipeline import QuerySpec, build_request, hosted_template_vars, run_query
 from .templates import TemplateError, TemplateRegistry
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -60,6 +60,7 @@ class QueryBody(BaseModel):
     keep_empty: bool = False
     no_dedupe: bool = False
     llm: str = DEFAULT_BACKEND
+    instructions: str = ""
 
 
 def _resolve(client: RagStackClient, value):
@@ -96,6 +97,7 @@ def _spec(body: QueryBody, endpoint=None, collections=None) -> QuerySpec:
         no_dedupe=body.no_dedupe,
         backend=endpoint.name if endpoint is not None else SERVER,
         collections=list(collections or []),
+        instructions=body.instructions.strip(),
     )
 
 
@@ -204,16 +206,21 @@ def preview_request(body: QueryBody) -> Dict[str, Any]:
                 "columns": template.columns,
             }
             if endpoint is None:
+                preview_body = build_request(spec, template)
+                # Shows what actually gets sent, instructions folded into
+                # other_terms and validated -- raises the same error here that
+                # a real submit would, instead of only surfacing it on Search.
+                preview_body["template_vars"] = hosted_template_vars(spec, template)
                 return {
                     "endpoint": "/v1/query",
-                    "body": build_request(spec, template),
+                    "body": preview_body,
                     "template": declaration,
                 }
 
             from .prompts import build_prompt
             prompt, digest, _ = build_prompt(
                 template, [], organism=spec.organism, genes=spec.genes,
-                other_terms=spec.other_terms,
+                other_terms=spec.other_terms, instructions=spec.instructions,
             )
             return {
                 "endpoint": f"{endpoint.base_url}/chat/completions",

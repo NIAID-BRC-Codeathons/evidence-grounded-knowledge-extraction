@@ -7,7 +7,9 @@ import pytest
 
 from litrag.client import ApiError, RagStackClient
 from litrag.config import Config
-from litrag.pipeline import QuerySpec, build_request, merge_runs, run_query
+from litrag.pipeline import (QuerySpec, build_request, hosted_template_vars,
+                            merge_runs, run_query)
+from litrag.templates import TemplateError
 
 
 def make_client(handler):
@@ -458,3 +460,79 @@ def test_fusion_is_deterministic():
     a = [{"chunk_id": "p"}, {"chunk_id": "q"}]
     b = [{"chunk_id": "q"}, {"chunk_id": "p"}]
     assert fuse_rankings([a, b]) == fuse_rankings([a, b])
+
+
+# --- advanced instructions ------------------------------------------------
+#
+# The hosted path has no slot of its own for free-text guidance, so it rides
+# inside other_terms; the local path writes its own prompt section instead.
+
+
+def test_instructions_ride_in_other_terms_on_the_hosted_path(registry):
+    spec = QuerySpec(organism="M. tb", genes="katG", other_terms="isoniazid",
+                     data_type="mutation", instructions="Report only confirmed mutations.")
+    values = hosted_template_vars(spec, registry.resolve("mutation"))
+    assert values["other_terms"] == "isoniazid; Report only confirmed mutations."
+
+
+def test_instructions_stand_alone_when_there_are_no_other_terms(registry):
+    spec = QuerySpec(organism="M. tb", data_type="mutation",
+                     instructions="Report only confirmed mutations.")
+    values = hosted_template_vars(spec, registry.resolve("mutation"))
+    assert values["other_terms"] == "Report only confirmed mutations."
+
+
+def test_instructions_do_not_steer_retrieval(registry):
+    """Guidance shapes the answer; it must not change which papers are found."""
+    template = registry.resolve("mutation")
+    plain = QuerySpec(organism="M. tb", genes="katG", data_type="mutation")
+    guided = QuerySpec(organism="M. tb", genes="katG", data_type="mutation",
+                       instructions="Report positions as A226, K128.")
+    assert guided.search_text(template) == plain.search_text(template)
+
+
+def test_overlong_instructions_are_rejected_before_the_call(registry):
+    spec = QuerySpec(organism="M. tb", data_type="mutation", instructions="x" * 250)
+    with pytest.raises(TemplateError) as excinfo:
+        hosted_template_vars(spec, registry.resolve("mutation"))
+    message = str(excinfo.value)
+    assert "200" in message, "the message should name the slot's limit"
+    assert "--llm qwen" in message, "and point at the path with no limit"
+
+
+def test_the_budget_accounts_for_other_terms_already_in_the_slot(registry):
+    """Other terms spend the same 200 characters, so they shrink the budget."""
+    instructions = "y" * 150
+    template = registry.resolve("mutation")
+    assert hosted_template_vars(
+        QuerySpec(organism="M. tb", data_type="mutation", instructions=instructions), template
+    )["other_terms"] == instructions
+
+    with pytest.raises(TemplateError):
+        hosted_template_vars(
+            QuerySpec(organism="M. tb", data_type="mutation",
+                      other_terms="z" * 60, instructions=instructions), template
+        )
+
+
+def test_build_request_stays_safe_for_a_local_run(registry):
+    """Provenance is built on both paths, so the hosted cap must not bind here."""
+    spec = QuerySpec(organism="M. tb", data_type="mutation", instructions="x" * 5000)
+    body = build_request(spec, registry.resolve("mutation"))
+    assert "other_terms" not in body["template_vars"]
+
+
+def test_run_query_sends_the_folded_instructions(registry, mutation_response):
+    bodies = []
+    client = make_client(responder(mutation_response, captured=bodies))
+    run_query(client, registry, QuerySpec(
+        organism="M. tb", data_type="mutation", instructions="Confirmed only."))
+    assert bodies[0]["template_vars"]["other_terms"] == "Confirmed only."
+
+
+def test_instructions_change_the_identity_hash():
+    """A resume must not hand back answers written under different guidance."""
+    plain = QuerySpec(organism="M. tb", genes="katG", data_type="mutation")
+    guided = QuerySpec(organism="M. tb", genes="katG", data_type="mutation",
+                       instructions="Confirmed only.")
+    assert plain.identity() != guided.identity()

@@ -111,7 +111,7 @@ Steps for `litrag query` with the default generator or any `--llm` value other t
 3. `cli._registry` fetches data types with `templates.TemplateRegistry.fetch`, which also pulls in `local_templates.declarations`.
 4. `pipeline.run_query` is called with the resolved endpoint.
 5. `pipeline._generate_locally` retrieves chunks through `client.retrieve_fused` (or `client.retrieve` for a non fused mode).
-6. `pipeline.plan_output_tokens` sizes the answer, then `prompts.build_prompt` builds the prompt from the template declaration.
+6. `pipeline.plan_output_tokens` sizes the answer, then `prompts.build_prompt` builds the prompt from the template declaration, appending any `--instructions` as its own labeled section after the schema and citation rules, so guidance steers what is extracted without changing the output shape `extract.py` parses. Nothing caps its length on this path.
 7. `llm.LlmClient.complete` sends the chat completion request to the chosen endpoint.
 8. `extract.extract` parses the answer into rows and resolves citations.
 9. `dedup.dedupe` merges rows that state the same fact, unless `--no-dedupe` was given.
@@ -138,7 +138,7 @@ Steps for `--llm server`, which issues one `POST /v1/query`:
 
 1. `cli.query` resolves the endpoint to `None`, since `server` has no endpoint of its own.
 2. `pipeline.run_query` is called with `endpoint=None`.
-3. `pipeline.build_request` assembles the request body from the `QuerySpec` and the template.
+3. `pipeline.hosted_template_vars` assembles the slot values. There is no slot for free-text guidance here, so `--instructions` rides inside `other_terms`, the one slot that reaches the prompt without also feeding retrieval, and shares that slot's server-set length cap; over it the run stops with the remaining budget rather than issuing the call. `pipeline.build_request` records the plain slot values for provenance on both paths, which is why it does not apply the fold or the cap.
 4. `client.RagStackClient.query` issues the single `POST /v1/query` call, which retrieves and generates server side.
 5. `extract.extract` parses the returned answer into rows.
 6. `dedup.dedupe` merges duplicate facts, unless disabled.
@@ -300,6 +300,8 @@ Query:
 | `--organism`, `-O` | The organism of interest, required |
 | `--genes`, `-g` | Comma separated genes or proteins |
 | `--other-terms`, `-t` | Extra search terms |
+| `--instructions` | Free-text guidance layered onto the prompt |
+| `--instructions-file`, `-I` | Read that guidance from a UTF-8 text file instead |
 | `--type`, `-T` | Data type to extract |
 | `--top-k`, `-k` | Chunks to retrieve, 1 to 100 |
 | `--collection`, `-c` | Corpus id, comma separated ids, or all |
@@ -325,6 +327,7 @@ Batch:
 | `--format`, `-f` | Output format |
 | `--concurrency`, `-j` | Parallel queries, 1 to 16 |
 | `--type`, `-T` | Default data type for rows that omit one |
+| `--instructions`, `--instructions-file` / `-I` | Same effect as in query, applied to every row; there is no per-row column |
 | `--top-k`, `-k` | Chunks to retrieve per query |
 | `--collection`, `-c` | Corpus id, comma separated ids, or all |
 | `--resume` | Skip queries already recorded in the progress file |

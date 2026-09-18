@@ -25,6 +25,7 @@ function requestBody() {
     llm: $('backend').value,
     keep_empty: $('keepEmpty').checked,
     no_dedupe: !$('dedupe').checked,
+    instructions: $('advancedInstructions').value.trim(),
   };
 }
 
@@ -405,12 +406,46 @@ async function viewRequest() {
   }
 }
 
+// On the hosted path, advanced instructions ride inside the template's
+// `other_terms` slot (no dedicated slot exists there) and share its server-set
+// length limit. A local model (Qwen/Llama) writes its own prompt and has no
+// such limit, so the budget only applies when "Hosted RAGStack" is selected.
+function otherTermsBudget() {
+  const template = currentTemplate();
+  const slot = template && (template.slots || []).find((s) => s.name === 'other_terms');
+  return slot ? slot.max_len : null;
+}
+
+function instructionsLength() {
+  const other = $('otherTerms').value.trim();
+  const instructions = $('advancedInstructions').value.trim();
+  if (!instructions) return other.length;
+  return other ? other.length + 2 + instructions.length : instructions.length;
+}
+
 function checkBackendSupport() {
   const template = currentTemplate();
   const isServer = $('backend').value === 'server';
+  const maxLen = isServer ? otherTermsBudget() : null;
+  const badge = $('instructionsBudget');
+
+  if (maxLen) {
+    const used = instructionsLength();
+    badge.textContent = `${used} / ${maxLen}`;
+    badge.classList.toggle('warn', used > maxLen);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+
   if (template && template.local && isServer) {
     showError(`"${template.label}" is defined by LitRAG, not the server, `
       + 'so it needs a local model. Pick Qwen or Llama.');
+    $('searchBtn').disabled = true;
+  } else if (maxLen && instructionsLength() > maxLen) {
+    showError('Other Terms plus Advanced Instructions is over the hosted '
+      + `path's ${maxLen}-character limit for this data type. Shorten them, `
+      + 'or pick Qwen or Llama, which have no such limit.');
     $('searchBtn').disabled = true;
   } else {
     $('searchBtn').disabled = false;
@@ -498,6 +533,8 @@ function init() {
   });
   $('dataType').addEventListener('change', checkBackendSupport);
   $('backend').addEventListener('change', checkBackendSupport);
+  $('otherTerms').addEventListener('input', checkBackendSupport);
+  $('advancedInstructions').addEventListener('input', checkBackendSupport);
   $('topK').addEventListener('input', (e) => { $('topKValue').textContent = e.target.value; });
   $('searchForm').addEventListener('submit', search);
   $('viewRequestBtn').addEventListener('click', viewRequest);
