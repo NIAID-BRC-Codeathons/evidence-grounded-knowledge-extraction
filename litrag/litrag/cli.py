@@ -17,7 +17,8 @@ from .config import ConfigError, load_config
 from . import glossary as _glossary
 from .llm import (DEFAULT_BACKEND, PRESETS, SERVER, LlmClient, LlmError,
                   resolve_endpoint)
-from .pipeline import QuerySpec, build_request, merge_runs, run_query
+from .pipeline import (QuerySpec, build_request, hosted_template_vars,
+                       merge_runs, run_query)
 from .templates import TemplateError, TemplateRegistry
 
 app = typer.Typer(
@@ -101,7 +102,11 @@ def _endpoint(llm, llm_model, thinking):
 def _dry_run(spec, template, endpoint) -> None:
     """Show exactly what will be sent, for either generation path."""
     if endpoint is None:
-        typer.echo(json.dumps(build_request(spec, template), indent=2))
+        body = build_request(spec, template)
+        # Shows what actually gets sent, instructions folded into other_terms
+        # and validated -- raises the same error here that a real run would.
+        body["template_vars"] = hosted_template_vars(spec, template)
+        typer.echo(json.dumps(body, indent=2))
         return
 
     from .prompts import build_prompt
@@ -118,7 +123,7 @@ def _dry_run(spec, template, endpoint) -> None:
     }, indent=2))
     prompt, digest, _ = build_prompt(
         template, [], organism=spec.organism, genes=spec.genes,
-        other_terms=spec.other_terms,
+        other_terms=spec.other_terms, instructions=spec.instructions,
     )
     typer.echo(f"\n--- prompt (hash {digest}, context omitted) ---\n{prompt}")
 
@@ -237,6 +242,12 @@ def query(
     organism: str = typer.Option(..., "--organism", "-O", help="Organism of interest."),
     genes: str = typer.Option("", "--genes", "-g", help="Comma-separated genes/proteins."),
     other_terms: str = typer.Option("", "--other-terms", "-t", help="Additional search terms."),
+    instructions: str = typer.Option(
+        "", "--instructions",
+        help="Extra guidance for the LLM. Gets its own labeled section with a "
+             "local generator (--llm qwen/llama); folded into --other-terms on "
+             "the hosted path, which has no dedicated slot for it.",
+    ),
     data_type: str = typer.Option(
         "summary", "--type", "-T",
         help="Data type: ppi, protein-function, mutation, summary (see `litrag templates`).",
@@ -275,6 +286,7 @@ def query(
         keep_empty=keep_empty, no_dedupe=no_dedupe,
         retrieval_mode=retrieval_mode,
         backend=endpoint.name if endpoint else SERVER,
+        instructions=instructions,
     )
 
     with _connect(api_key, base_url) as client:
