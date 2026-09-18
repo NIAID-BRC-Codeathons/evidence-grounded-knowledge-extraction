@@ -65,6 +65,37 @@
     p { margin: 6px 0 9px; }
     .lede { font-size: 12pt; margin: 14px 0 13px; }
 
+    .screen {
+      margin: 12px 0 15px;
+      padding: 9px;
+      border: 1px solid var(--line);
+      background: #fbfcfd;
+    }
+
+    .screen img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .screen figcaption {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 9.5pt;
+    }
+
+    .callouts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 3px 22px;
+      margin: 6px 0 0 19px;
+      padding: 0;
+      color: var(--ink);
+      font-size: 9.5pt;
+    }
+
+    .callouts li { margin: 1px 0; }
+
     .steps {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -135,6 +166,9 @@
       h1 { font-size: 22pt; }
       h2 { font-size: 13pt; margin-top: 13px; }
       .lede { font-size: 10.5pt; margin: 9px 0; }
+      .screen { margin: 7px 0 9px; padding: 5px; }
+      .screen figcaption, .callouts { font-size: 8.5pt; }
+      .callouts { gap: 2px 15px; }
       .steps { gap: 8px; margin: 7px 0 10px; }
       .step { padding: 7px 9px; }
       .columns { gap: 8px 18px; }
@@ -156,6 +190,19 @@
     </header>
 
     <p class="lede">LitRAG helps you find biological findings reported across the literature. Start with an organism, add the gene or protein you care about, choose the kind of result you want, and inspect the papers behind each row.</p>
+
+    <figure class="screen">
+      <img src="/static/guide-ui-callouts.png" alt="LitRAG search page showing the organism, gene, search-term, data-type, search, and results controls">
+      <figcaption>The main search page. The numbered areas show the controls you use and where results will appear.</figcaption>
+      <ol class="callouts">
+        <li><strong>Organism:</strong> required starting point.</li>
+        <li><strong>Genes / proteins:</strong> optional names to focus the search.</li>
+        <li><strong>Search terms:</strong> phenotype, disease, host, or mechanism.</li>
+        <li><strong>Data type:</strong> the kind of biological finding to extract.</li>
+        <li><strong>Search:</strong> run the literature search and extraction.</li>
+        <li><strong>Results and sources:</strong> extracted rows, citations, and source passages appear below the controls.</li>
+      </ol>
+    </figure>
 
     <section class="steps" aria-label="Three steps to use LitRAG">
       <div class="step"><div class="number">1</div><h3>Describe your question</h3><p>Enter an organism, gene or protein, and useful terms such as “viral entry” or “isoniazid resistance.”</p></div>
