@@ -181,3 +181,21 @@ def test_partial_resume_runs_only_missing_queries(registry, mutation_response, t
     assert len(calls) == 2, "only the unfinished queries should be requested"
     assert resumed.skipped == 2 and len(resumed.runs) == 2
     assert resumed.restored_rows
+
+
+def test_instructions_apply_to_every_query_in_the_batch(tmp_path):
+    """One curation job asks one question, so the guidance is run-wide."""
+    path = tmp_path / "q.tsv"
+    path.write_text("organism\tgenes\nH5N1\tHA\nH5N1\tNA\n", encoding="utf-8")
+    defaults = BatchDefaults(instructions="Confirmed findings only.")
+    specs = load_specs(path, defaults)
+    assert len(specs) == 2
+    assert all(s.instructions == "Confirmed findings only." for s in specs)
+
+
+def test_batch_instructions_invalidate_a_resume(tmp_path):
+    path = tmp_path / "q.tsv"
+    path.write_text("organism\tgenes\nH5N1\tHA\n", encoding="utf-8")
+    plain = load_specs(path)[0]
+    guided = load_specs(path, BatchDefaults(instructions="Confirmed findings only."))[0]
+    assert plain.identity() != guided.identity()
