@@ -10,7 +10,8 @@ for batch curation and a standalone web UI for interactive work.
 This is the team's project for the NIAID-BRCs AI Codeathon 2.0, September 16
 to 18, 2026, at Argonne National Laboratory. Project page:
 [evidence-grounded-knowledge-extraction](https://niaid-brc-codeathons.github.io/projects/evidence-grounded-knowledge-extraction/).
-Leads: Vijayaraj Nagarajan and Maulik Shukla.
+
+Lead: Maulik Shukla
 
 ## Contents
 
