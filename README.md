@@ -165,7 +165,7 @@ Requires Python 3.9 or later. The repository pins 3.12 for development in
 
 ### Configure
 
-The API key is resolved in this order: argument, environment, config file.
+Keys are read only and are issued by the codeathon organizers; ask the project lead if you do not have one. The key is resolved in this order: argument, environment, config file.
 
 ```bash
 litrag query --api-key rk-...            # 1. explicit
