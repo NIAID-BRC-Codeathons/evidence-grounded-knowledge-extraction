@@ -135,24 +135,40 @@ Experiment 2 a quarter of its precision, 0.465 → 0.340. With the higher
 different organism or gene than the one asked for, and the model attributes it
 to the query rather than to the passage.
 
-Experiment 1 recall by gene, for the genes with the most reference alleles:
+Recall by gene, for the genes with the most reference alleles. Rows are ordered
+by Experiment 1 recall:
 
-| Gene | Reference | Found | Recall |
-| --- | ---: | ---: | ---: |
-| `parC` | 57 | 23 | 40% |
-| `gyrA` | 118 | 46 | 39% |
-| `gyrB` | 47 | 14 | 30% |
-| `parE` | 43 | 11 | 26% |
-| `rpoB` | 109 | 27 | 25% |
-| `ftsI` | 54 | 12 | 22% |
-| `pmrB` | 83 | 17 | 20% |
-| `folP` | 23 | 3 | 13% |
-| `fusA` | 61 | 6 | 10% |
-| `oprD` | 32 | 1 | 3% |
-| `ampD` | 25 | 0 | 0% |
+| Gene | Reference | Exp 1 found | Exp 1 recall | Exp 2 found | Exp 2 recall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `parC` | 57 | 23 | **40%** | 9 | 16% |
+| `gyrA` | 118 | 46 | **39%** | 24 | 20% |
+| `gyrB` | 47 | 14 | **30%** | 9 | 19% |
+| `parE` | 43 | 11 | **26%** | 3 | 7% |
+| `rpoB` | 109 | 27 | 25% | 27 | 25% |
+| `ftsI` | 54 | 12 | **22%** | 11 | 20% |
+| `pmrB` | 83 | 17 | 20% | 33 | **40%** |
+| `folP` | 23 | 3 | 13% | 3 | 13% |
+| `fusA` | 61 | 6 | **10%** | 4 | 7% |
+| `oprD` | 32 | 1 | **3%** | 0 | 0% |
+| `ampD` | 25 | 0 | 0% | 1 | **4%** |
 
-79 of the 135 reference genes had at least one allele recovered. Full list in
-each `scores.json` under `per_gene_recall`.
+`Reference` is one column for both runs: the queries are identical, so each gene
+has the same denominator either way.
+
+Experiment 2 is the weaker of the two on 7 of these 11 genes and ties on two
+(`rpoB`, `folP`). It wins twice: `pmrB`, where it doubles Experiment 1 (40%
+against 20%), and `ampD`, where it finds the one allele Experiment 1 misses
+entirely.
+
+The gap is not spread evenly. The four quinolone-target genes — `parC`, `gyrA`,
+`gyrB`, `parE` — account for 49 of the 102 true positives separating the two runs
+(94 found against 45), the largest single block of the aggregate recall
+difference. `pmrB` alone pushes 16 back the other way.
+
+79 of the 135 reference genes had at least one allele recovered in Experiment 1,
+56 in Experiment 2. Each `scores.json` records only these top 15 genes by
+reference count under `per_gene_recall`; for the full list, call
+`compare_to_reference.per_gene_recall` with a larger `limit`.
 
 ## Method
 
@@ -241,9 +257,9 @@ fixed in the collection than worked around downstream.
 
 ### Loss-of-function genes distort the worst recall numbers
 
-The floor of the per-gene table — `ampD` 0%, `oprD` 3%, and `fptA`, which
-returned nothing at all — is substantially a scoring artifact rather than a
-retrieval failure.
+The floor of the per-gene table — Experiment 1's `ampD` 0% and `oprD` 3%, and
+`fptA`, which returned nothing at all in either run — is substantially a scoring
+artifact rather than a retrieval failure.
 
 All three are `POINT_DISRUPT` genes, along with `acrR`, `amrR`, `cirA`, `marR`,
 `mexR`, `mexZ`, `mgrB`, `nalD`, `nfsA`, `nfsB`, `nfxB`, `ompC`, `ompF`,
@@ -271,8 +287,11 @@ evaluation, not a tweak to this one.
 
 **Neither run approaches usable recall alone.** The best single result recovers
 about a quarter of curated alleles and the union a third. The per-gene spread
-(`parC` 40%, `ampD` 0%) shows the gap is not uniform, and would repay examining
-retrieval for the weak genes before tuning generation.
+(Experiment 1: `parC` 40%, `ampD` 0%) shows the gap is not uniform, and would
+repay examining retrieval for the weak genes before tuning generation. The two
+collections do not rank the genes the same way either — `pmrB` tops that table
+for Experiment 2 but sits seventh of eleven for Experiment 1 — so a per-gene view
+is worth keeping when comparing collections.
 
 ### Known problems in the output
 
