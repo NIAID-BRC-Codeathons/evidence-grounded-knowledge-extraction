@@ -99,6 +99,34 @@ def _endpoint(llm, llm_model, thinking):
         raise typer.Exit(2)
 
 
+def _instructions(text: str, path: Optional[Path]) -> str:
+    """Resolve --instructions / --instructions-file into one string.
+
+    Guidance long enough to be worth keeping in a file is also long enough that
+    silently picking one of two given sources would be the wrong guess, so
+    supplying both is an error rather than a precedence rule.
+    """
+    if path is None:
+        return text
+    if text.strip():
+        _err("use --instructions or --instructions-file, not both.")
+        raise typer.Exit(2)
+    try:
+        content = path.read_text(encoding="utf-8").strip()
+    except UnicodeDecodeError:
+        _err(f"{path}: not UTF-8 text. --instructions-file takes a plain text file.")
+        raise typer.Exit(2)
+    except OSError as exc:
+        _err(f"{path}: {exc.strerror or exc}")
+        raise typer.Exit(2)
+    if not content:
+        # Naming a file and getting no guidance is a mistake worth reporting,
+        # not a silent fall back to an unguided run.
+        _err(f"{path}: empty, so there are no instructions to send.")
+        raise typer.Exit(2)
+    return content
+
+
 def _dry_run(spec, template, endpoint) -> None:
     """Show exactly what will be sent, for either generation path."""
     if endpoint is None:
@@ -248,6 +276,12 @@ def query(
              "local generator (--llm qwen/llama); folded into --other-terms on "
              "the hosted path, which has no dedicated slot for it.",
     ),
+    instructions_file: Optional[Path] = typer.Option(
+        None, "--instructions-file", "-I",
+        exists=True, dir_okay=False, readable=True,
+        help="Read the instructions from a UTF-8 text file instead, for guidance "
+             "too long to pass on the command line. Not usable with --instructions.",
+    ),
     data_type: str = typer.Option(
         "summary", "--type", "-T",
         help="Data type: ppi, protein-function, mutation, summary (see `litrag templates`).",
@@ -286,7 +320,7 @@ def query(
         keep_empty=keep_empty, no_dedupe=no_dedupe,
         retrieval_mode=retrieval_mode,
         backend=endpoint.name if endpoint else SERVER,
-        instructions=instructions,
+        instructions=_instructions(instructions, instructions_file),
     )
 
     with _connect(api_key, base_url) as client:
@@ -359,6 +393,20 @@ def batch(
     fmt: str = typer.Option("tsv", "--format", "-f", help="table|tsv|csv|json|jsonl|md."),
     concurrency: int = typer.Option(4, "--concurrency", "-j", min=1, max=16),
     data_type: str = typer.Option("summary", "--type", "-T", help="Default data type for rows that omit one."),
+    instructions: str = typer.Option(
+        "", "--instructions",
+        help="Extra guidance for the LLM, applied to every query in the batch. "
+             "Gets its own labeled section with a local generator (--llm "
+             "qwen/llama); folded into each row's other terms on the hosted "
+             "path, which has no dedicated slot for it.",
+    ),
+    instructions_file: Optional[Path] = typer.Option(
+        None, "--instructions-file", "-I",
+        exists=True, dir_okay=False, readable=True,
+        help="Read the batch instructions from a UTF-8 text file instead, for "
+             "guidance too long to pass on the command line. Not usable with "
+             "--instructions.",
+    ),
     top_k: int = typer.Option(10, "--top-k", "-k", min=1, max=100),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c",
@@ -385,6 +433,7 @@ def batch(
         data_type=data_type, top_k=top_k, collection=collection,
         keep_empty=keep_empty, no_dedupe=no_dedupe,
         backend=endpoint.name if endpoint else SERVER,
+        instructions=_instructions(instructions, instructions_file),
     )
 
     progress_path = progress
@@ -427,7 +476,10 @@ def batch(
         try:
             for spec in specs:
                 template = registry.resolve(spec.data_type)
-                template.validate_vars(spec.template_vars())
+                if endpoint is None:
+                    hosted_template_vars(spec, template)
+                else:
+                    template.validate_vars(spec.template_vars())
         except TemplateError as exc:
             _err(str(exc))
             raise typer.Exit(2)
