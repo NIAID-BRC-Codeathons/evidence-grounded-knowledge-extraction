@@ -1,0 +1,269 @@
+266 queries from /home/kodalivk/brc_code/amr_pmid_pdfs/experiment2/experiment2_queries.tsv (concurrency 4, generator: Qwen3.6-35B (local, thinking off), collections: RefAMR)
+[1/266] ok   Enterobacter cloacae (acrB) -> 3 rows, 50 sources, 2.08s
+[2/266] ok   Staphylococcus aureus (acrB) -> 1 rows, 50 sources, 2.14s
+[3/266] ok   Escherichia (acrB) -> 4 rows, 50 sources, 3.78s
+[4/266] ok   Acinetobacter baumannii (adeL) -> 1 rows, 50 sources, 0.9s
+[5/266] ok   Escherichia (acrR) -> 4 rows, 50 sources, 2.65s
+[6/266] ok   Burkholderia cepacia (ampD) -> 1 rows, 50 sources, 0.82s
+[7/266] ok   Klebsiella pneumoniae (acrR) -> 3 rows, 50 sources, 3.79s
+[8/266] ok   Enterobacter cloacae (ampD) -> 4 rows, 50 sources, 1.85s
+[9/266] ok   Pseudomonas aeruginosa (amgS) -> 2 rows, 50 sources, 4.5s
+[10/266] ok   Pseudomonas aeruginosa (ampD) -> 3 rows, 50 sources, 4.09s
+[11/266] ok   Pseudomonas aeruginosa (ampR) -> 1 rows, 50 sources, 2.01s
+[12/266] ok   Burkholderia cepacia (amrR) -> 4 rows, 50 sources, 2.2s
+[13/266] ok   Klebsiella pneumoniae (arnC) -> 3 rows, 50 sources, 1.4s
+[14/266] ok   Pseudomonas aeruginosa (aroB) -> 1 rows, 50 sources, 1.11s
+[15/266] ok   Burkholderia pseudomallei (amrR) -> 7 rows, 50 sources, 3.05s
+[16/266] ok   Salmonella (acrB) -> 2 rows, 50 sources, 17.96s
+[17/266] ok   Acinetobacter baumannii (baeS) -> 4 rows, 50 sources, 4.81s
+[18/266] ok   Acinetobacter baumannii (baeR) -> 5 rows, 50 sources, 6.36s
+[19/266] ok   Enterobacter asburiae (baeS) -> 4 rows, 50 sources, 1.42s
+[20/266] ok   Escherichia (baeR) -> 1 rows, 50 sources, 6.95s
+[21/266] ok   Klebsiella pneumoniae (baeS) -> 4 rows, 50 sources, 2.66s
+[22/266] ok   Escherichia (basR) -> 2 rows, 50 sources, 1.21s
+[23/266] ok   Burkholderia pseudomallei (bpeR) -> 2 rows, 50 sources, 1.35s
+[24/266] ok   Enterobacter cloacae (baeS) -> 5 rows, 50 sources, 4.8s
+[25/266] ok   Burkholderia pseudomallei (bpeT) -> 3 rows, 50 sources, 1.65s
+[26/266] ok   Streptococcus pneumoniae (cdsA) -> 5 rows, 50 sources, 2.48s
+[27/266] ok   Escherichia (baeS) -> 9 rows, 50 sources, 8.89s
+[28/266] ok   Enterococcus faecalis (cls) -> 5 rows, 50 sources, 1.35s
+[29/266] ok   Escherichia (cirA) -> 11 rows, 50 sources, 4.44s
+[30/266] ok   Campylobacter (cmeR) -> 3 rows, 50 sources, 1.32s
+[31/266] ok   Enterococcus faecium (cls) -> 5 rows, 50 sources, 3.14s
+[32/266] ok   Pseudomonas aeruginosa (cmrA) -> 1 rows, 50 sources, 0.77s
+[33/266] ok   Klebsiella pneumoniae (cirA) -> 13 rows, 50 sources, 8.09s
+[34/266] ok   Pseudomonas aeruginosa (colS) -> 1 rows, 50 sources, 1.13s
+[35/266] ok   Pseudomonas aeruginosa (cprS) -> 1 rows, 50 sources, 1.13s
+[36/266] ok   Enterobacter cloacae (cpxA) -> 2 rows, 50 sources, 0.92s
+[37/266] ok   Staphylococcus aureus (cls) -> 7 rows, 50 sources, 6.65s
+[38/266] ok   Pseudomonas aeruginosa (colR) -> 10 rows, 50 sources, 3.77s
+[39/266] ok   Pseudomonas aeruginosa (cpxR) -> 2 rows, 50 sources, 2.08s
+[40/266] ok   Pseudomonas aeruginosa (czcS) -> 0 rows, 50 sources, 0.83s
+[41/266] ok   Escherichia (cyaA) -> 1 rows, 50 sources, 2.05s
+[42/266] ok   Klebsiella pneumoniae (crrB) -> 4 rows, 50 sources, 3.25s
+[43/266] ok   Clostridioides difficile (dacS) -> 2 rows, 50 sources, 1.12s
+[44/266] ok   Burkholderia pseudomallei (dut) -> 1 rows, 50 sources, 1.06s
+[45/266] ok   Staphylococcus aureus (dfrB) -> 5 rows, 50 sources, 2.34s
+[46/266] ok   Enterococcus faecium (dltC) -> 2 rows, 50 sources, 2.35s
+[47/266] ok   Enterococcus faecium (eat(A)) -> 3 rows, 50 sources, 0.99s
+[48/266] ok   Pseudomonas aeruginosa (dacB) -> 3 rows, 50 sources, 5.52s
+[49/266] ok   Escherichia (emrR) -> 1 rows, 50 sources, 1.42s
+[50/266] ok   Escherichia (fabG) -> 4 rows, 50 sources, 1.37s
+[51/266] ok   Klebsiella pneumoniae (envZ) -> 2 rows, 50 sources, 2.83s
+[52/266] ok   Haemophilus influenzae (folA) -> 3 rows, 50 sources, 2.1s
+[53/266] ok   Staphylococcus aureus (fexA) -> 3 rows, 50 sources, 2.69s
+[54/266] ok   Escherichia (fabI) -> 10 rows, 50 sources, 3.5s
+[55/266] ok   Neisseria gonorrhoeae (folP) -> 0 rows, 50 sources, 0.61s
+[56/266] ok   Haemophilus influenzae (folP) -> 2 rows, 50 sources, 2.06s
+[57/266] ok   Neisseria meningitidis (folP) -> 2 rows, 50 sources, 1.06s
+[58/266] ok   Salmonella (folP) -> 6 rows, 50 sources, 2.05s
+[59/266] ok   Escherichia (folP) -> 1 rows, 50 sources, 4.91s
+[60/266] ok   Streptococcus pyogenes (folP) -> 2 rows, 50 sources, 1.1s
+[61/266] ok   Staphylococcus aureus (folP) -> 2 rows, 50 sources, 1.17s
+[62/266] ok   Pseudomonas aeruginosa (fptA) -> 0 rows, 50 sources, 1.62s
+[63/266] ok   Escherichia (ftsI) -> 7 rows, 50 sources, 3.48s
+[64/266] ok   Acinetobacter baumannii (ftsI) -> 9 rows, 50 sources, 3.62s
+[65/266] ok   Haemophilus influenzae (ftsI) -> 13 rows, 50 sources, 3.84s
+[66/266] ok   Pseudomonas aeruginosa (fusA1) -> 1 rows, 50 sources, 2.02s
+[67/266] ok   Klebsiella pneumoniae (ftsI) -> 8 rows, 50 sources, 4.65s
+[68/266] ok   Staphylococcus aureus (fusA) -> 4 rows, 50 sources, 2.47s
+[69/266] ok   Pseudomonas aeruginosa (ftsI) -> 5 rows, 50 sources, 3.91s
+[70/266] ok   Staphylococcus aureus (fusE) -> 1 rows, 50 sources, 1.48s
+[71/266] ok   Pseudomonas aeruginosa (galU) -> 2 rows, 50 sources, 2.58s
+[72/266] ok   Staphylococcus aureus (gdpP) -> 2 rows, 50 sources, 2.28s
+[73/266] ok   Pseudomonas aeruginosa (glpT) -> 1 rows, 50 sources, 2.41s
+[74/266] ok   Enterococcus faecalis (gshF) -> 0 rows, 50 sources, 0.98s
+[75/266] ok   Staphylococcus pseudintermedius (grlA) -> 4 rows, 50 sources, 2.46s
+[76/266] ok   Staphylococcus aureus (glpT) -> 8 rows, 50 sources, 4.26s
+[77/266] ok   Burkholderia cepacia (gyrA) -> 7 rows, 50 sources, 3.17s
+[78/266] ok   Acinetobacter baumannii (gyrA) -> 9 rows, 50 sources, 3.32s
+[79/266] ok   Campylobacter (gyrA) -> 3 rows, 50 sources, 1.6s
+[80/266] ok   Citrobacter freundii (gyrA) -> 2 rows, 50 sources, 1.34s
+[81/266] ok   Burkholderia pseudomallei (gyrA) -> 8 rows, 50 sources, 3.41s
+[82/266] ok   Clostridioides difficile (gyrA) -> 3 rows, 50 sources, 1.97s
+[83/266] ok   Corynebacterium diphtheriae (gyrA) -> 1 rows, 50 sources, 2.25s
+[84/266] ok   Enterococcus faecalis (gyrA) -> 3 rows, 50 sources, 2.17s
+[85/266] ok   Enterococcus faecium (gyrA) -> 6 rows, 50 sources, 2.36s
+[86/266] ok   Enterobacter cloacae (gyrA) -> 6 rows, 50 sources, 4.02s
+[87/266] ok   Helicobacter pylori (gyrA) -> 2 rows, 50 sources, 1.64s
+[88/266] ok   Klebsiella oxytoca (gyrA) -> 5 rows, 50 sources, 1.85s
+[89/266] ok   Haemophilus influenzae (gyrA) -> 9 rows, 50 sources, 3.93s
+[90/266] ok   Neisseria gonorrhoeae (gyrA) -> 4 rows, 50 sources, 1.56s
+[91/266] ok   Neisseria meningitidis (gyrA) -> 6 rows, 50 sources, 2.14s
+[92/266] ok   Klebsiella pneumoniae (gyrA) -> 9 rows, 50 sources, 3.58s
+[93/266] ok   Serratia marcescens (gyrA) -> 1 rows, 50 sources, 1.2s
+[94/266] ok   Staphylococcus aureus (gyrA) -> 7 rows, 50 sources, 2.7s
+[95/266] ok   Staphylococcus pseudintermedius (gyrA) -> 5 rows, 50 sources, 1.59s
+[96/266] ok   Pseudomonas aeruginosa (gyrA) -> 16 rows, 50 sources, 8.37s
+[97/266] ok   Vibrio parahaemolyticus (gyrA) -> 1 rows, 50 sources, 1.24s
+[98/266] ok   Vibrio vulnificus (gyrA) -> 1 rows, 50 sources, 1.01s
+[99/266] ok   Clostridioides difficile (gyrB) -> 3 rows, 50 sources, 1.74s
+[100/266] ok   Escherichia (gyrB) -> 4 rows, 50 sources, 1.36s
+[101/266] ok   Neisseria gonorrhoeae (gyrB) -> 2 rows, 50 sources, 0.88s
+[102/266] ok   Vibrio cholerae (gyrA) -> 1 rows, 50 sources, 10.13s
+[103/266] ok   Pseudomonas aeruginosa (gyrB) -> 4 rows, 50 sources, 2.35s
+[104/266] ok   Salmonella (gyrB) -> 6 rows, 50 sources, 1.97s
+[105/266] ok   Staphylococcus aureus (gyrB) -> 2 rows, 50 sources, 0.91s
+[106/266] ok   Staphylococcus aureus (ileS) -> 1 rows, 50 sources, 1.04s
+[107/266] ok   Klebsiella pneumoniae (lamB) -> 1 rows, 50 sources, 3.12s
+[108/266] ok   Enterococcus faecalis (liaF) -> 1 rows, 50 sources, 0.73s
+[109/266] ok   Enterococcus faecium (liaF) -> 6 rows, 50 sources, 2.76s
+[110/266] ok   Enterococcus faecalis (liaR) -> 1 rows, 50 sources, 0.74s
+[111/266] ok   Klebsiella pneumoniae (lapB) -> 0 rows, 50 sources, 9.03s
+[112/266] ok   Enterococcus faecalis (liaS) -> 4 rows, 50 sources, 1.29s
+[113/266] ok   Enterococcus faecium (liaR) -> 3 rows, 50 sources, 4.68s
+[114/266] ok   Escherichia (lon) -> 2 rows, 50 sources, 1.38s
+[115/266] ok   Enterococcus faecium (liaS) -> 1 rows, 50 sources, 2.75s
+[116/266] ok   Acinetobacter baumannii (lpxA) -> 1 rows, 50 sources, 1.2s
+[117/266] ok   Acinetobacter baumannii (lpxC) -> 2 rows, 50 sources, 1.13s
+[118/266] ok   Klebsiella pneumoniae (lpxM) -> 1 rows, 50 sources, 1.06s
+[119/266] ok   Staphylococcus aureus (mepR) -> 3 rows, 50 sources, 1.13s
+[120/266] ok   Escherichia (marR) -> 18 rows, 50 sources, 5.31s
+[121/266] ok   Pseudomonas aeruginosa (mexD) -> 1 rows, 50 sources, 0.82s
+[122/266] ok   Pseudomonas aeruginosa (mexB) -> 1 rows, 50 sources, 5.54s
+[123/266] ok   Pseudomonas aeruginosa (mexR) -> 12 rows, 50 sources, 3.89s
+[124/266] ok   Pseudomonas aeruginosa (mexT) -> 6 rows, 50 sources, 2.16s
+[125/266] ok   Pseudomonas aeruginosa (mexY) -> 2 rows, 50 sources, 1.47s
+[126/266] ok   Pseudomonas aeruginosa (mexZ) -> 2 rows, 50 sources, 2.15s
+[127/266] ok   Klebsiella pneumoniae (mgrB) -> 8 rows, 50 sources, 2.04s
+[128/266] ok   Enterobacter cloacae (mgrB) -> 1 rows, 50 sources, 3.1s
+[129/266] ok   Escherichia (mrdA) -> 1 rows, 50 sources, 1.15s
+[130/266] ok   Staphylococcus aureus (mprF) -> 3 rows, 50 sources, 2.15s
+[131/266] ok   Klebsiella pneumoniae (mrdA) -> 1 rows, 50 sources, 0.68s
+[132/266] ok   Neisseria gonorrhoeae (mtrD) -> 5 rows, 50 sources, 1.97s
+[133/266] ok   Clostridioides difficile (mreE) -> 2 rows, 50 sources, 2.4s
+[134/266] ok   Escherichia (murA) -> 1 rows, 50 sources, 0.74s
+[135/266] ok   Staphylococcus aureus (murA) -> 7 rows, 50 sources, 2.6s
+[136/266] ok   Clostridioides difficile (murG) -> 1 rows, 50 sources, 0.71s
+[137/266] ok   Neisseria gonorrhoeae (mtrR) -> 5 rows, 50 sources, 5.73s
+[138/266] ok   Pseudomonas aeruginosa (nalC) -> 1 rows, 50 sources, 2.31s
+[139/266] ok   Escherichia (gyrA) -> 2 rows, 50 sources, 78.23s
+[140/266] ok   Escherichia (nfsA) -> 25 rows, 50 sources, 7.08s
+[141/266] ok   Escherichia (nfsB) -> 10 rows, 50 sources, 3.42s
+[142/266] ok   Pseudomonas aeruginosa (nalD) -> 6 rows, 50 sources, 12.06s
+[143/266] ok   Pseudomonas aeruginosa (nfxB) -> 3 rows, 50 sources, 2.08s
+[144/266] ok   Klebsiella pneumoniae (nfsB) -> 7 rows, 50 sources, 3.62s
+[145/266] ok   Salmonella (gyrA) -> 26 rows, 50 sources, 77.95s
+[146/266] ok   Escherichia (ompC) -> 3 rows, 50 sources, 2.82s
+[147/266] ok   Escherichia (ompF) -> 5 rows, 50 sources, 1.71s
+[148/266] ok   Pseudomonas aeruginosa (oprD) -> 17 rows, 50 sources, 5.31s
+[149/266] ok   Klebsiella pneumoniae (oqxR) -> 5 rows, 50 sources, 1.64s
+[150/266] ok   Acinetobacter baumannii (parC) -> 5 rows, 50 sources, 2.97s
+[151/266] ok   Klebsiella pneumoniae (ompK35) -> 5 rows, 50 sources, 12.79s
+[152/266] ok   Enterococcus faecalis (parC) -> 3 rows, 50 sources, 1.21s
+[153/266] ok   Klebsiella pneumoniae (ompK36) -> 6 rows, 50 sources, 12.95s
+[154/266] ok   Enterobacter cloacae (parC) -> 4 rows, 50 sources, 1.84s
+[155/266] ok   Enterococcus faecium (parC) -> 5 rows, 50 sources, 2.23s
+[156/266] ok   Haemophilus influenzae (parC) -> 5 rows, 50 sources, 2.16s
+[157/266] ok   Escherichia (parC) -> 6 rows, 50 sources, 3.17s
+[158/266] ok   Klebsiella oxytoca (parC) -> 2 rows, 50 sources, 1.24s
+[159/266] ok   Neisseria gonorrhoeae (parC) -> 1 rows, 50 sources, 1.1s
+[160/266] ok   Neisseria meningitidis (parC) -> 3 rows, 50 sources, 1.02s
+[161/266] ok   Klebsiella pneumoniae (parC) -> 6 rows, 50 sources, 2.26s
+[162/266] ok   Staphylococcus aureus (parC) -> 3 rows, 50 sources, 1.57s
+[163/266] ok   Streptococcus pneumoniae (parC) -> 2 rows, 50 sources, 1.43s
+[164/266] ok   Pseudomonas aeruginosa (parC) -> 4 rows, 50 sources, 3.88s
+[165/266] ok   Salmonella (parC) -> 6 rows, 50 sources, 4.67s
+[166/266] ok   Vibrio parahaemolyticus (parC) -> 2 rows, 50 sources, 1.01s
+[167/266] ok   Vibrio cholerae (parC) -> 2 rows, 50 sources, 2.16s
+[168/266] ok   Vibrio vulnificus (parC) -> 1 rows, 50 sources, 0.97s
+[169/266] ok   Haemophilus influenzae (parE) -> 1 rows, 50 sources, 0.96s
+[170/266] ok   Neisseria gonorrhoeae (parE) -> 1 rows, 50 sources, 0.96s
+[171/266] ok   Escherichia (parE) -> 5 rows, 50 sources, 2.31s
+[172/266] ok   Neisseria meningitidis (parE) -> 1 rows, 50 sources, 1.33s
+[173/266] ok   Pseudomonas aeruginosa (parE) -> 1 rows, 50 sources, 2.25s
+[174/266] ok   Staphylococcus aureus (parE) -> 1 rows, 50 sources, 0.65s
+[175/266] ok   Salmonella (parE) -> 5 rows, 50 sources, 2.05s
+[176/266] ok   Pseudomonas aeruginosa (parS) -> 1 rows, 50 sources, 1.47s
+[177/266] ok   Vibrio cholerae (parE) -> 1 rows, 50 sources, 1.74s
+[178/266] ok   Pseudomonas aeruginosa (parR) -> 1 rows, 50 sources, 1.98s
+[179/266] ok   Helicobacter pylori (pbp1a) -> 1 rows, 50 sources, 1.31s
+[180/266] ok   Streptococcus pneumoniae (pbp2b) -> 1 rows, 50 sources, 1.23s
+[181/266] ok   Streptococcus pneumoniae (pbp1a) -> 2 rows, 50 sources, 1.59s
+[182/266] ok   Staphylococcus aureus (pbp2) -> 1 rows, 50 sources, 1.09s
+[183/266] ok   Streptococcus agalactiae (pbp2x) -> 1 rows, 50 sources, 1.14s
+[184/266] ok   Neisseria gonorrhoeae (pbp2) -> 5 rows, 50 sources, 2.69s
+[185/266] ok   Streptococcus pneumoniae (pbp2x) -> 1 rows, 50 sources, 1.19s
+[186/266] ok   Streptococcus pyogenes (pbp2x) -> 2 rows, 50 sources, 1.17s
+[187/266] ok   Staphylococcus aureus (pbp4) -> 1 rows, 50 sources, 1.37s
+[188/266] ok   Pseudomonas aeruginosa (pbpA) -> 2 rows, 50 sources, 1.77s
+[189/266] ok   Enterococcus faecium (pbp5) -> 2 rows, 50 sources, 2.61s
+[190/266] ok   Neisseria gonorrhoeae (penA) -> 2 rows, 50 sources, 3.39s
+[191/266] ok   Burkholderia cepacia (penR) -> 2 rows, 50 sources, 2.08s
+[192/266] ok   Neisseria meningitidis (penA) -> 9 rows, 50 sources, 2.95s
+[193/266] ok   Staphylococcus aureus (pgsA) -> 1 rows, 50 sources, 1.41s
+[194/266] ok   Klebsiella pneumoniae (phoP) -> 5 rows, 50 sources, 2.31s
+[195/266] ok   Klebsiella pneumoniae (phoQ) -> 10 rows, 50 sources, 2.58s
+[196/266] ok   Pseudomonas aeruginosa (phoQ) -> 5 rows, 50 sources, 1.65s
+[197/266] ok   Pseudomonas aeruginosa (piuA) -> 4 rows, 50 sources, 1.93s
+[198/266] ok   Pseudomonas aeruginosa (piuD) -> 8 rows, 50 sources, 3.0s
+[199/266] ok   Pseudomonas aeruginosa (phoP) -> 26 rows, 50 sources, 8.4s
+[200/266] ok   Pseudomonas aeruginosa (pmrA) -> 1 rows, 50 sources, 0.95s
+[201/266] ok   Klebsiella pneumoniae (pmrA) -> 6 rows, 50 sources, 1.88s
+[202/266] ok   Salmonella (pmrA) -> 5 rows, 50 sources, 3.56s
+[203/266] ok   Acinetobacter baumannii (pmrA) -> 40 rows, 50 sources, 10.23s
+[204/266] ok   Acinetobacter baumannii (pmrB) -> 40 rows, 50 sources, 9.52s
+[205/266] ok   Klebsiella pneumoniae (pmrB) -> 8 rows, 50 sources, 3.52s
+[206/266] ok   Escherichia (pmrB) -> 25 rows, 50 sources, 7.16s
+[207/266] ok   Pseudomonas aeruginosa (pmrB) -> 7 rows, 50 sources, 2.67s
+[208/266] ok   Salmonella (pmrB) -> 4 rows, 50 sources, 1.95s
+[209/266] ok   Campylobacter (porA) -> 2 rows, 50 sources, 1.12s
+[210/266] ok   Neisseria gonorrhoeae (ponA) -> 2 rows, 50 sources, 3.5s
+[211/266] ok   Escherichia (ptsI) -> 1 rows, 50 sources, 0.98s
+[212/266] ok   Acinetobacter baumannii (pmrC) -> 48 rows, 50 sources, 12.84s
+[213/266] ok   Salmonella (ramR) -> 2 rows, 50 sources, 1.34s
+[214/266] ok   Klebsiella pneumoniae (ramR) -> 2 rows, 50 sources, 8.07s
+[215/266] ok   Pseudomonas aeruginosa (rplB) -> 1 rows, 50 sources, 1.19s
+[216/266] ok   Enterococcus faecium (rplC) -> 1 rows, 50 sources, 0.88s
+[217/266] ok   Staphylococcus aureus (rplC) -> 0 rows, 50 sources, 0.96s
+[218/266] ok   Enterococcus faecium (rplD) -> 2 rows, 50 sources, 1.15s
+[219/266] ok   Campylobacter (rplD) -> 2 rows, 50 sources, 3.5s
+[220/266] ok   Neisseria gonorrhoeae (rplD) -> 2 rows, 50 sources, 1.68s
+[221/266] ok   Escherichia (ompR) -> 7 rows, 50 sources, 83.94s
+[222/266] ok   Streptococcus pneumoniae (rplD) -> 1 rows, 50 sources, 1.47s
+[223/266] ok   Enterococcus faecium (rplV) -> 1 rows, 50 sources, 0.96s
+[224/266] ok   Neisseria gonorrhoeae (rplV) -> 1 rows, 50 sources, 0.91s
+[225/266] ok   Campylobacter (rplV) -> 6 rows, 50 sources, 2.16s
+[226/266] ok   Corynebacterium diphtheriae (rpoB) -> 1 rows, 50 sources, 0.92s
+[227/266] ok   Enterococcus faecium (rpoB) -> 2 rows, 50 sources, 0.81s
+[228/266] ok   Escherichia (rpoB) -> 2 rows, 50 sources, 0.82s
+[229/266] ok   Haemophilus influenzae (rpoB) -> 1 rows, 50 sources, 0.91s
+[230/266] ok   Neisseria gonorrhoeae (rpoB) -> 2 rows, 50 sources, 0.81s
+[231/266] ok   Neisseria meningitidis (rpoB) -> 2 rows, 50 sources, 0.82s
+[232/266] ok   Clostridioides difficile (rpoB) -> 20 rows, 50 sources, 8.21s
+[233/266] ok   Acinetobacter baumannii (rpoB) -> 0 rows, 50 sources, 9.35s
+[234/266] ok   Staphylococcus pseudintermedius (rpoB) -> 1 rows, 50 sources, 1.45s
+[235/266] ok   Staphylococcus aureus (rpoB) -> 10 rows, 50 sources, 4.51s
+[236/266] ok   Enterococcus faecium (rpoC) -> 2 rows, 50 sources, 1.11s
+[237/266] ok   Clostridioides difficile (rpoC) -> 10 rows, 50 sources, 2.77s
+[238/266] ok   Neisseria gonorrhoeae (rpoD) -> 1 rows, 50 sources, 0.69s
+[239/266] ok   Staphylococcus epidermidis (rpoB) -> 11 rows, 50 sources, 6.53s
+[240/266] ok   Staphylococcus aureus (rpoC) -> 2 rows, 50 sources, 1.49s
+[241/266] ok   Neisseria gonorrhoeae (rpsE) -> 0 rows, 50 sources, 1.28s
+[242/266] ok   Acinetobacter baumannii (rpsJ) -> 1 rows, 50 sources, 1.54s
+[243/266] ok   Enterococcus faecalis (rpsJ) -> 1 rows, 50 sources, 2.52s
+[244/266] ok   Enterococcus faecium (rpsJ) -> 1 rows, 50 sources, 1.39s
+[245/266] ok   Neisseria gonorrhoeae (rpsJ) -> 1 rows, 50 sources, 1.3s
+[246/266] ok   Klebsiella pneumoniae (rpsJ) -> 1 rows, 50 sources, 1.72s
+[247/266] ok   Escherichia (rpsJ) -> 3 rows, 50 sources, 3.01s
+[248/266] ok   Escherichia (rpsL) -> 1 rows, 50 sources, 1.3s
+[249/266] ok   Campylobacter (rpsL) -> 1 rows, 50 sources, 1.57s
+[250/266] ok   Staphylococcus aureus (rpsJ) -> 1 rows, 50 sources, 1.65s
+[251/266] ok   Salmonella (soxR) -> 1 rows, 50 sources, 1.02s
+[252/266] ok   Escherichia (soxR) -> 1 rows, 50 sources, 1.34s
+[253/266] ok   Klebsiella pneumoniae (rseA) -> 3 rows, 50 sources, 2.5s
+[254/266] ok   Salmonella (soxS) -> 1 rows, 50 sources, 1.03s
+[255/266] ok   Escherichia (soxS) -> 1 rows, 50 sources, 2.0s
+[256/266] ok   Escherichia (tufA) -> 1 rows, 50 sources, 0.9s
+[257/266] ok   Escherichia (uhpT) -> 1 rows, 50 sources, 1.02s
+[258/266] ok   Escherichia (uhpA) -> 1 rows, 50 sources, 3.13s
+[259/266] ok   Clostridioides difficile (vanR-Cd) -> 1 rows, 50 sources, 1.35s
+[260/266] ok   Clostridioides difficile (vanS-Cd) -> 6 rows, 50 sources, 2.97s
+[261/266] ok   Staphylococcus aureus (uhpT) -> 11 rows, 50 sources, 6.7s
+[262/266] ok   Staphylococcus aureus (walK) -> 1 rows, 50 sources, 1.19s
+[263/266] ok   Staphylococcus aureus (vraS) -> 2 rows, 50 sources, 3.74s
+[264/266] ok   Burkholderia pseudomallei (yciV) -> 0 rows, 50 sources, 0.92s
+[265/266] ok   Enterococcus faecalis (yybT) -> 0 rows, 50 sources, 0.88s
+[266/266] ok   Neisseria gonorrhoeae (porB1b) -> 7 rows, 50 sources, 67.91s
+Wrote /home/kodalivk/brc_code/amr_pmid_pdfs/experiment2/experiment2_results.tsv
+Done: 266 ok, 0 failed, 0 restored -> 1017 merged rows

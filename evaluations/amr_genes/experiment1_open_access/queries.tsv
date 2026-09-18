@@ -1,0 +1,267 @@
+organism	genes	data_type	other_terms	top_k
+Enterobacter cloacae	acrB	mutation	antimicrobial resistance	50
+Escherichia	acrB	mutation	antimicrobial resistance	50
+Salmonella	acrB	mutation	antimicrobial resistance	50
+Staphylococcus aureus	acrB	mutation	antimicrobial resistance	50
+Escherichia	acrR	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	acrR	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	adeL	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	amgS	mutation	antimicrobial resistance	50
+Burkholderia cepacia	ampD	mutation	antimicrobial resistance	50
+Enterobacter cloacae	ampD	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	ampD	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	ampR	mutation	antimicrobial resistance	50
+Burkholderia cepacia	amrR	mutation	antimicrobial resistance	50
+Burkholderia pseudomallei	amrR	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	arnC	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	aroB	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	baeR	mutation	antimicrobial resistance	50
+Escherichia	baeR	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	baeS	mutation	antimicrobial resistance	50
+Enterobacter asburiae	baeS	mutation	antimicrobial resistance	50
+Enterobacter cloacae	baeS	mutation	antimicrobial resistance	50
+Escherichia	baeS	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	baeS	mutation	antimicrobial resistance	50
+Escherichia	basR	mutation	antimicrobial resistance	50
+Burkholderia pseudomallei	bpeR	mutation	antimicrobial resistance	50
+Burkholderia pseudomallei	bpeT	mutation	antimicrobial resistance	50
+Streptococcus pneumoniae	cdsA	mutation	antimicrobial resistance	50
+Escherichia	cirA	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	cirA	mutation	antimicrobial resistance	50
+Enterococcus faecalis	cls	mutation	antimicrobial resistance	50
+Enterococcus faecium	cls	mutation	antimicrobial resistance	50
+Staphylococcus aureus	cls	mutation	antimicrobial resistance	50
+Campylobacter	cmeR	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	cmrA	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	colR	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	colS	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	cprS	mutation	antimicrobial resistance	50
+Enterobacter cloacae	cpxA	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	cpxR	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	crrB	mutation	antimicrobial resistance	50
+Escherichia	cyaA	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	czcS	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	dacB	mutation	antimicrobial resistance	50
+Clostridioides difficile	dacS	mutation	antimicrobial resistance	50
+Staphylococcus aureus	dfrB	mutation	antimicrobial resistance	50
+Enterococcus faecium	dltC	mutation	antimicrobial resistance	50
+Burkholderia pseudomallei	dut	mutation	antimicrobial resistance	50
+Enterococcus faecium	eat(A)	mutation	antimicrobial resistance	50
+Escherichia	emrR	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	envZ	mutation	antimicrobial resistance	50
+Escherichia	fabG	mutation	antimicrobial resistance	50
+Escherichia	fabI	mutation	antimicrobial resistance	50
+Staphylococcus aureus	fexA	mutation	antimicrobial resistance	50
+Haemophilus influenzae	folA	mutation	antimicrobial resistance	50
+Escherichia	folP	mutation	antimicrobial resistance	50
+Haemophilus influenzae	folP	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	folP	mutation	antimicrobial resistance	50
+Neisseria meningitidis	folP	mutation	antimicrobial resistance	50
+Salmonella	folP	mutation	antimicrobial resistance	50
+Staphylococcus aureus	folP	mutation	antimicrobial resistance	50
+Streptococcus pyogenes	folP	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	fptA	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	ftsI	mutation	antimicrobial resistance	50
+Escherichia	ftsI	mutation	antimicrobial resistance	50
+Haemophilus influenzae	ftsI	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	ftsI	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	ftsI	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	fusA1	mutation	antimicrobial resistance	50
+Staphylococcus aureus	fusA	mutation	antimicrobial resistance	50
+Staphylococcus aureus	fusE	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	galU	mutation	antimicrobial resistance	50
+Staphylococcus aureus	gdpP	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	glpT	mutation	antimicrobial resistance	50
+Staphylococcus aureus	glpT	mutation	antimicrobial resistance	50
+Staphylococcus pseudintermedius	grlA	mutation	antimicrobial resistance	50
+Enterococcus faecalis	gshF	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	gyrA	mutation	antimicrobial resistance	50
+Burkholderia cepacia	gyrA	mutation	antimicrobial resistance	50
+Burkholderia pseudomallei	gyrA	mutation	antimicrobial resistance	50
+Campylobacter	gyrA	mutation	antimicrobial resistance	50
+Citrobacter freundii	gyrA	mutation	antimicrobial resistance	50
+Clostridioides difficile	gyrA	mutation	antimicrobial resistance	50
+Corynebacterium diphtheriae	gyrA	mutation	antimicrobial resistance	50
+Enterobacter cloacae	gyrA	mutation	antimicrobial resistance	50
+Enterococcus faecalis	gyrA	mutation	antimicrobial resistance	50
+Enterococcus faecium	gyrA	mutation	antimicrobial resistance	50
+Escherichia	gyrA	mutation	antimicrobial resistance	50
+Haemophilus influenzae	gyrA	mutation	antimicrobial resistance	50
+Helicobacter pylori	gyrA	mutation	antimicrobial resistance	50
+Klebsiella oxytoca	gyrA	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	gyrA	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	gyrA	mutation	antimicrobial resistance	50
+Neisseria meningitidis	gyrA	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	gyrA	mutation	antimicrobial resistance	50
+Salmonella	gyrA	mutation	antimicrobial resistance	50
+Serratia marcescens	gyrA	mutation	antimicrobial resistance	50
+Staphylococcus aureus	gyrA	mutation	antimicrobial resistance	50
+Staphylococcus pseudintermedius	gyrA	mutation	antimicrobial resistance	50
+Vibrio cholerae	gyrA	mutation	antimicrobial resistance	50
+Vibrio parahaemolyticus	gyrA	mutation	antimicrobial resistance	50
+Vibrio vulnificus	gyrA	mutation	antimicrobial resistance	50
+Clostridioides difficile	gyrB	mutation	antimicrobial resistance	50
+Escherichia	gyrB	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	gyrB	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	gyrB	mutation	antimicrobial resistance	50
+Salmonella	gyrB	mutation	antimicrobial resistance	50
+Staphylococcus aureus	gyrB	mutation	antimicrobial resistance	50
+Staphylococcus aureus	ileS	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	lamB	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	lapB	mutation	antimicrobial resistance	50
+Enterococcus faecalis	liaF	mutation	antimicrobial resistance	50
+Enterococcus faecium	liaF	mutation	antimicrobial resistance	50
+Enterococcus faecalis	liaR	mutation	antimicrobial resistance	50
+Enterococcus faecium	liaR	mutation	antimicrobial resistance	50
+Enterococcus faecalis	liaS	mutation	antimicrobial resistance	50
+Enterococcus faecium	liaS	mutation	antimicrobial resistance	50
+Escherichia	lon	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	lpxA	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	lpxC	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	lpxM	mutation	antimicrobial resistance	50
+Escherichia	marR	mutation	antimicrobial resistance	50
+Staphylococcus aureus	mepR	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	mexB	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	mexD	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	mexR	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	mexT	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	mexY	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	mexZ	mutation	antimicrobial resistance	50
+Enterobacter cloacae	mgrB	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	mgrB	mutation	antimicrobial resistance	50
+Staphylococcus aureus	mprF	mutation	antimicrobial resistance	50
+Escherichia	mrdA	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	mrdA	mutation	antimicrobial resistance	50
+Clostridioides difficile	mreE	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	mtrD	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	mtrR	mutation	antimicrobial resistance	50
+Escherichia	murA	mutation	antimicrobial resistance	50
+Staphylococcus aureus	murA	mutation	antimicrobial resistance	50
+Clostridioides difficile	murG	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	nalC	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	nalD	mutation	antimicrobial resistance	50
+Escherichia	nfsA	mutation	antimicrobial resistance	50
+Escherichia	nfsB	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	nfsB	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	nfxB	mutation	antimicrobial resistance	50
+Escherichia	ompC	mutation	antimicrobial resistance	50
+Escherichia	ompF	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	ompK35	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	ompK36	mutation	antimicrobial resistance	50
+Escherichia	ompR	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	oprD	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	oqxR	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	parC	mutation	antimicrobial resistance	50
+Enterobacter cloacae	parC	mutation	antimicrobial resistance	50
+Enterococcus faecalis	parC	mutation	antimicrobial resistance	50
+Enterococcus faecium	parC	mutation	antimicrobial resistance	50
+Escherichia	parC	mutation	antimicrobial resistance	50
+Haemophilus influenzae	parC	mutation	antimicrobial resistance	50
+Klebsiella oxytoca	parC	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	parC	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	parC	mutation	antimicrobial resistance	50
+Neisseria meningitidis	parC	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	parC	mutation	antimicrobial resistance	50
+Salmonella	parC	mutation	antimicrobial resistance	50
+Staphylococcus aureus	parC	mutation	antimicrobial resistance	50
+Streptococcus pneumoniae	parC	mutation	antimicrobial resistance	50
+Vibrio cholerae	parC	mutation	antimicrobial resistance	50
+Vibrio parahaemolyticus	parC	mutation	antimicrobial resistance	50
+Vibrio vulnificus	parC	mutation	antimicrobial resistance	50
+Escherichia	parE	mutation	antimicrobial resistance	50
+Haemophilus influenzae	parE	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	parE	mutation	antimicrobial resistance	50
+Neisseria meningitidis	parE	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	parE	mutation	antimicrobial resistance	50
+Salmonella	parE	mutation	antimicrobial resistance	50
+Staphylococcus aureus	parE	mutation	antimicrobial resistance	50
+Vibrio cholerae	parE	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	parR	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	parS	mutation	antimicrobial resistance	50
+Helicobacter pylori	pbp1a	mutation	antimicrobial resistance	50
+Streptococcus pneumoniae	pbp1a	mutation	antimicrobial resistance	50
+Streptococcus pneumoniae	pbp2b	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	pbp2	mutation	antimicrobial resistance	50
+Staphylococcus aureus	pbp2	mutation	antimicrobial resistance	50
+Streptococcus agalactiae	pbp2x	mutation	antimicrobial resistance	50
+Streptococcus pneumoniae	pbp2x	mutation	antimicrobial resistance	50
+Streptococcus pyogenes	pbp2x	mutation	antimicrobial resistance	50
+Staphylococcus aureus	pbp4	mutation	antimicrobial resistance	50
+Enterococcus faecium	pbp5	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	pbpA	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	penA	mutation	antimicrobial resistance	50
+Neisseria meningitidis	penA	mutation	antimicrobial resistance	50
+Burkholderia cepacia	penR	mutation	antimicrobial resistance	50
+Staphylococcus aureus	pgsA	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	phoP	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	phoP	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	phoQ	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	phoQ	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	piuA	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	piuD	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	pmrA	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	pmrA	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	pmrA	mutation	antimicrobial resistance	50
+Salmonella	pmrA	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	pmrB	mutation	antimicrobial resistance	50
+Escherichia	pmrB	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	pmrB	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	pmrB	mutation	antimicrobial resistance	50
+Salmonella	pmrB	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	pmrC	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	ponA	mutation	antimicrobial resistance	50
+Campylobacter	porA	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	porB1b	mutation	antimicrobial resistance	50
+Escherichia	ptsI	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	ramR	mutation	antimicrobial resistance	50
+Salmonella	ramR	mutation	antimicrobial resistance	50
+Pseudomonas aeruginosa	rplB	mutation	antimicrobial resistance	50
+Enterococcus faecium	rplC	mutation	antimicrobial resistance	50
+Staphylococcus aureus	rplC	mutation	antimicrobial resistance	50
+Campylobacter	rplD	mutation	antimicrobial resistance	50
+Enterococcus faecium	rplD	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	rplD	mutation	antimicrobial resistance	50
+Streptococcus pneumoniae	rplD	mutation	antimicrobial resistance	50
+Campylobacter	rplV	mutation	antimicrobial resistance	50
+Enterococcus faecium	rplV	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	rplV	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	rpoB	mutation	antimicrobial resistance	50
+Clostridioides difficile	rpoB	mutation	antimicrobial resistance	50
+Corynebacterium diphtheriae	rpoB	mutation	antimicrobial resistance	50
+Enterococcus faecium	rpoB	mutation	antimicrobial resistance	50
+Escherichia	rpoB	mutation	antimicrobial resistance	50
+Haemophilus influenzae	rpoB	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	rpoB	mutation	antimicrobial resistance	50
+Neisseria meningitidis	rpoB	mutation	antimicrobial resistance	50
+Staphylococcus aureus	rpoB	mutation	antimicrobial resistance	50
+Staphylococcus epidermidis	rpoB	mutation	antimicrobial resistance	50
+Staphylococcus pseudintermedius	rpoB	mutation	antimicrobial resistance	50
+Clostridioides difficile	rpoC	mutation	antimicrobial resistance	50
+Enterococcus faecium	rpoC	mutation	antimicrobial resistance	50
+Staphylococcus aureus	rpoC	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	rpoD	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	rpsE	mutation	antimicrobial resistance	50
+Acinetobacter baumannii	rpsJ	mutation	antimicrobial resistance	50
+Enterococcus faecalis	rpsJ	mutation	antimicrobial resistance	50
+Enterococcus faecium	rpsJ	mutation	antimicrobial resistance	50
+Escherichia	rpsJ	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	rpsJ	mutation	antimicrobial resistance	50
+Neisseria gonorrhoeae	rpsJ	mutation	antimicrobial resistance	50
+Staphylococcus aureus	rpsJ	mutation	antimicrobial resistance	50
+Campylobacter	rpsL	mutation	antimicrobial resistance	50
+Escherichia	rpsL	mutation	antimicrobial resistance	50
+Klebsiella pneumoniae	rseA	mutation	antimicrobial resistance	50
+Escherichia	soxR	mutation	antimicrobial resistance	50
+Salmonella	soxR	mutation	antimicrobial resistance	50
+Escherichia	soxS	mutation	antimicrobial resistance	50
+Salmonella	soxS	mutation	antimicrobial resistance	50
+Escherichia	tufA	mutation	antimicrobial resistance	50
+Escherichia	uhpA	mutation	antimicrobial resistance	50
+Escherichia	uhpT	mutation	antimicrobial resistance	50
+Staphylococcus aureus	uhpT	mutation	antimicrobial resistance	50
+Clostridioides difficile	vanR-Cd	mutation	antimicrobial resistance	50
+Clostridioides difficile	vanS-Cd	mutation	antimicrobial resistance	50
+Staphylococcus aureus	vraS	mutation	antimicrobial resistance	50
+Staphylococcus aureus	walK	mutation	antimicrobial resistance	50
+Burkholderia pseudomallei	yciV	mutation	antimicrobial resistance	50
+Enterococcus faecalis	yybT	mutation	antimicrobial resistance	50
