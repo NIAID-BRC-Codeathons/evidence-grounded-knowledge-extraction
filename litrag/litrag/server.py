@@ -321,5 +321,10 @@ def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
 
 
+@app.get("/architecture")
+def architecture() -> FileResponse:
+    return FileResponse(WEB_DIR / "architecture.html")
+
+
 if WEB_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
