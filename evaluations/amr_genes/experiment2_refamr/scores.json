@@ -1,0 +1,119 @@
+{
+  "results": "results.tsv",
+  "result_rows": 1017,
+  "unscorable_rows": 265,
+  "scorable_predictions": 514,
+  "genes_in_predictions": 89,
+  "reference_allele_rows": 1501,
+  "reference_skipped_non_substitution": 62,
+  "reference_mutations": 1283,
+  "reference_in_queried_genes": 1283,
+  "gene_mutation": {
+    "tp": 239,
+    "fp": 275,
+    "fn": 1044,
+    "precision": 0.465,
+    "recall": 0.1863,
+    "f1": 0.266
+  },
+  "organism_gene_mutation": {
+    "tp": 242,
+    "fp": 469,
+    "fn": 1131,
+    "precision": 0.3404,
+    "recall": 0.1763,
+    "f1": 0.2322
+  },
+  "per_gene_recall": [
+    {
+      "gene": "gyra",
+      "reference": 118,
+      "found": 24,
+      "recall": 0.2034
+    },
+    {
+      "gene": "rpob",
+      "reference": 109,
+      "found": 27,
+      "recall": 0.2477
+    },
+    {
+      "gene": "pmrb",
+      "reference": 83,
+      "found": 33,
+      "recall": 0.3976
+    },
+    {
+      "gene": "fusa",
+      "reference": 61,
+      "found": 4,
+      "recall": 0.0656
+    },
+    {
+      "gene": "parc",
+      "reference": 57,
+      "found": 9,
+      "recall": 0.1579
+    },
+    {
+      "gene": "ftsi",
+      "reference": 54,
+      "found": 11,
+      "recall": 0.2037
+    },
+    {
+      "gene": "gyrb",
+      "reference": 47,
+      "found": 9,
+      "recall": 0.1915
+    },
+    {
+      "gene": "pare",
+      "reference": 43,
+      "found": 3,
+      "recall": 0.0698
+    },
+    {
+      "gene": "oprd",
+      "reference": 32,
+      "found": 0,
+      "recall": 0.0
+    },
+    {
+      "gene": "ampd",
+      "reference": 25,
+      "found": 1,
+      "recall": 0.04
+    },
+    {
+      "gene": "folp",
+      "reference": 23,
+      "found": 3,
+      "recall": 0.1304
+    },
+    {
+      "gene": "fusa1",
+      "reference": 19,
+      "found": 0,
+      "recall": 0.0
+    },
+    {
+      "gene": "mexr",
+      "reference": 19,
+      "found": 5,
+      "recall": 0.2632
+    },
+    {
+      "gene": "pena",
+      "reference": 19,
+      "found": 5,
+      "recall": 0.2632
+    },
+    {
+      "gene": "tufa",
+      "reference": 19,
+      "found": 0,
+      "recall": 0.0
+    }
+  ]
+}
