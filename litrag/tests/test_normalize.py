@@ -148,3 +148,46 @@ def test_full_names_and_codes_agree():
     """Two papers writing one substitution differently must merge."""
     forms = ["NS1-53 glycine to aspartate", "NS1-53 Gly-to-Asp", "G53D", "Gly53Asp"]
     assert len({normalize_mutation(f) for f in forms}) == 1
+
+
+@pytest.mark.parametrize("value", [
+    "C39Ter", "Cys39Ter", "C39*", "Cys39*", "p.Cys39Ter", "cys39ter",
+])
+def test_stop_codon_notations_agree(value):
+    """A truncation is written with Ter or *, and the two sides of a
+    substitution need not use the same notation. The AMR reference catalog
+    spells these `cirA_Q42Ter`, while models emit `Q42*`; before these merged,
+    one truncation counted as several facts."""
+    assert normalize_mutation(value, "cirA") == "C39*"
+
+
+def test_mixed_notation_substitutions_agree():
+    """One side three-letter, the other one-letter -- common in prose."""
+    forms = ["S315Ter", "Ser315Ter", "S315*", "Ser315*"]
+    assert len({normalize_mutation(f) for f in forms}) == 1
+
+
+@pytest.mark.parametrize("value", [
+    "G288S/M/C", "G288C/M/S", "Gly288Ser/Met/Cys", "G288S/G288M/G288C",
+])
+def test_allele_lists_agree_regardless_of_order_or_notation(value):
+    """An alternation names several alleles at one position. Order and notation
+    vary between papers, so the dedup key must not."""
+    assert normalize_mutation(value, "acrB") == "G288C/G288M/G288S"
+
+
+def test_expand_mutation_splits_an_allele_list():
+    """`G288S/M/C` is three claims; a caller counting facts needs them apart."""
+    from litrag.normalize import expand_mutation
+    assert expand_mutation("G288S/M/C", "acrB") == ["G288C", "G288M", "G288S"]
+    assert expand_mutation("S315T") == ["S315T"]
+
+
+@pytest.mark.parametrize("value", [
+    "D47del", "Transposon insertion", "overexpression", "AmrR-P81del",
+])
+def test_expand_mutation_declines_non_substitutions(value):
+    """Indels and prose are not substitutions; guessing at them would invent
+    facts, so they yield nothing rather than a partial parse."""
+    from litrag.normalize import expand_mutation
+    assert expand_mutation(value) == []
