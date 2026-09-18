@@ -11,8 +11,6 @@ This is the team's project for the NIAID-BRCs AI Codeathon 2.0, September 16
 to 18, 2026, at Argonne National Laboratory. Project page:
 [evidence-grounded-knowledge-extraction](https://niaid-brc-codeathons.github.io/projects/evidence-grounded-knowledge-extraction/).
 
-Lead: Maulik Shukla
-
 ## Contents
 
 - [What it is](#what-it-is)
