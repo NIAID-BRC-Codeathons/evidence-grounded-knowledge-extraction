@@ -40,22 +40,22 @@ This document is for maintainers of LitRAG and for other codeathon teams who nee
 | `litrag/litrag/cli.py` | Typer commands: version, templates, glossary, collections, query, batch, serve | Console script `litrag` |
 | `litrag/litrag/server.py` | FastAPI application backing the web UI | `litrag serve`, uvicorn |
 | `litrag/litrag/client.py` | Typed httpx wrapper over the read only RAGStack API, with retry and rank fusion | cli, server, batch, pipeline, provenance |
-| `litrag/litrag/config.py` | Resolves the API key and base URL from argument, environment, then config file | cli, server |
+| `litrag/litrag/config.py` | Resolves the API key and base URL from argument, environment, then config file | cli, server, client |
 | `litrag/litrag/collections.py` | Corpus registry: readable names, the all-collections option, title cleanup | cli, server |
-| `litrag/litrag/templates.py` | Fetches and resolves data type declarations, server side and local | cli, server, batch, pipeline, prompts |
+| `litrag/litrag/templates.py` | Fetches and resolves data type declarations, server side and local | cli, server, batch, pipeline, prompts, extract |
 | `litrag/litrag/local_templates.py` | Data types defined by LitRAG itself, plus a user override file | templates |
 | `litrag/litrag/llm.py` | OpenAI compatible generation backends: presets, endpoint resolution, chat completion | cli, server, batch, pipeline |
-| `litrag/litrag/prompts.py` | Builds the local generation prompt from a template declaration | pipeline, cli (dry run), server (request preview) |
+| `litrag/litrag/prompts.py` | Builds the local generation prompt from a template declaration | pipeline, extract (assertion values), cli (dry run), server (request preview) |
 | `litrag/litrag/pipeline.py` | One curation query end to end: retrieve, generate, extract, dedupe, stamp | cli, server, batch |
 | `litrag/litrag/extract.py` | Parses a model answer into rows, resolves citations, flags problems | pipeline, batch, dedup, formats |
 | `litrag/litrag/dedup.py` | Merges rows that state the same fact, per template identity rules | pipeline, batch (via merge_runs) |
 | `litrag/litrag/normalize.py` | Value normalization used to compute row identity for dedup | extract, dedup |
-| `litrag/litrag/provenance.py` | Stamps each row with the settings and request that produced it | pipeline |
+| `litrag/litrag/provenance.py` | Stamps each row with the settings and request that produced it | pipeline, formats |
 | `litrag/litrag/formats.py` | Renders rows as TSV, CSV, JSON, JSONL, Markdown or a plain text table | cli, server |
 | `litrag/litrag/glossary.py` | Plain language definitions for columns and row flags | cli, server |
 | `litrag/litrag/batch.py` | Runs many queries concurrently from a file, with resume support | cli |
 
-The dependency graph below shows which module imports which. `cli` and `server` sit at the top because nothing imports them; `pipeline` sits in the middle because both surfaces route through it; the remaining modules are leaves that pipeline and its neighbours build on.
+The dependency graph below shows which module imports which at module load. Four imports made inside a function are not drawn: `cli` and `server` import `prompts` for the request preview, `cli` imports `extract` for the batch path, and `extract` imports `prompts` for the assertion vocabulary. `cli` and `server` sit at the top because nothing imports them; `pipeline` sits in the middle because both surfaces route through it; the remaining modules are leaves that pipeline and its neighbours build on.
 
 ```mermaid
 flowchart TD
@@ -347,20 +347,20 @@ Serve:
 
 Individual test modules that need a live seeming server build their own `httpx.MockTransport` handlers, seen in `test_batch.py`, `test_pipeline.py`, `test_server.py`, `test_llm.py` and `test_ast.py`. Between the recorded fixtures and the mocked transports, the suite makes no real network call.
 
-Run the suite from the repository root with `uv run pytest`, or, once `uv sync` has built the workspace virtual environment at the repository root, with `.venv/bin/python -m pytest` from inside `litrag/`.
+Run the suite from the repository root with `uv run pytest`, or with `pytest` from inside `litrag/` in a pip virtual environment built with `pip install -e "litrag[dev]"`.
 
 ## Known gaps
 
 Not tested:
 
 - No load or concurrency testing exists against `litrag serve`, so its behaviour under many simultaneous browser sessions is unknown.
-- `client.py` does implement retry and backoff (up to four attempts, exponential backoff, on HTTP 429, 500, 502, 503 and 504), but no test exercises that retry path.
 - Batch concurrency (`--concurrency`, `-j`) is not exercised above small values in the test suite, so behaviour at the upper bound of 16 is unverified.
 
 Tested and found negative, per the deployment notes in `README.md`:
 
 - The RAGStack server does not accept new templates: `POST /v1/prompt-templates` returns HTTP 405.
 - The `llm` field on the hosted `/v1/query` is inert: passing it returns HTTP 200 with an empty answer and no sources.
-- Only read only endpoints are used by design. Ingest, collection management, grading, and admin endpoints exist on the server but are deliberately out of scope for this client.
+
+By design, not by test: only read only endpoints are used. Ingest, collection management, grading, and admin endpoints exist on the server but are deliberately out of scope for this client.
 
 A reader cannot conclude from this document alone that the untested paths above are safe at scale, only that they have not yet been exercised by the test suite.

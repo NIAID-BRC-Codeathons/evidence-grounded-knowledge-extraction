@@ -34,7 +34,7 @@ A curator wants to know what isoniazid resistance mutations have been reported i
 
 ### The sources it found
 
-The run reports "8 sources to 7 rows". A source here is a retrieved passage, not a whole paper. Several passages can come from the same paper, and each one is read and counted separately, since one paper can state more than one relevant fact across different sections. Eight passages went in, and the model's answer was cleaned down to seven rows before anything was shown.
+The run reported eight sources and seven rows. A source here is a retrieved passage, not a whole paper. Several passages can come from the same paper, and each one is read and counted separately, since one paper can state more than one relevant fact across different sections. Eight passages went in, and the model's answer was cleaned down to seven rows before anything was shown. The sample table below shows five of them.
 
 ### The table it produced
 
@@ -73,19 +73,19 @@ The web page shows a definition on hover for every column that has one. The rows
 | Mutation | The sequence change, shown as the source wrote it. Different spellings of the same change, such as `Ser315Thr`, `S315T`, and `katG-S315T`, are recognized as one fact behind the scenes. |
 | Phenotype | The observable effect attributed to the finding. |
 | Assertion | Where the claim stands in its source. See the table below for the five allowed values. |
-| Reference | The citation marker the model wrote in its answer. Resolved to a real paper in the Citations information; a marker that matches no retrieved source is flagged rather than guessed at. |
+| Reference | The citation marker the model wrote in its answer. The web page replaces this column with a Citations column of clickable links; in a download it stays as the marker. A marker that matches no retrieved source is flagged rather than guessed at. |
 | n | How many mentions across retrieved passages merged into this row. A higher number means the same fact was stated more than once. Check the citations to see whether that is several papers or one paper mentioned more than once. |
 | `_n_support` | The download version of the n column above: how many extracted mentions merged into this row. |
 | `_flags` | The quality signals attached to this row. Each one is explained in the flags table below. |
-| `_citations` | The papers backing this row, each one linked to PubMed or a DOI. |
-| `_pmids` | The PubMed identifiers of the papers behind this row, one for each citation. |
+| `_citations` | The papers backing this row, as short text citations: first author, journal, year, and PubMed identifier where one exists. |
+| `_pmids` | The PubMed identifiers of the papers behind this row, one for each citation that has one. |
 | `_chunk_ids` | The identifiers of the exact passages the row's claim was read from. Each one can be used to pull the original passage text back. |
 | `_as_written` | The mutation exactly as the source paper wrote it, before any conversion. |
 | `_standard_notation` | The mutation converted to a standard form, such as `G53D`. This converted form is also what the tool uses to recognize that two differently written mentions are the same fact. |
 
 ### The Assertion vocabulary
 
-On a local generator, the Assertion column is limited to five values. This axis says where a claim stands in its source, not how confident the model feels about it. Whether a source measured something or only relayed someone else's claim is something you can check against its text; a model's own confidence is not.
+On a local generator, the model is asked to use one of five values in the Assertion column. This axis says where a claim stands in its source, not how confident the model feels about it. Whether a source measured something or only relayed someone else's claim is something you can check against its text; a model's own confidence is not.
 
 | Value | Meaning |
 |---|---|
@@ -97,7 +97,7 @@ On a local generator, the Assertion column is limited to five values. This axis 
 
 ## What the flags mean
 
-A flag is a quality signal attached to a row. The same wording appears on hover over a flag chip in the web page.
+A flag is a quality signal attached to a row. The web page shows a one-line definition on hover over each flag chip; the table below expands each one and adds what to do about it.
 
 | Flag | In plain words | What to do with it |
 |---|---|---|
@@ -129,7 +129,7 @@ The path from a row back to its evidence is fixed, from the table to the origina
 1. Start at the row's reference number, the citation marker the model wrote next to the claim.
 2. That marker resolves to a citation: a real paper, expanded to its PMID, DOI, journal, year, and first author.
 3. The citation carries one or more paragraph markers, one for each passage that supports the claim. A paper cited through two different passages shows two markers.
-4. Each paragraph marker points to a chunk, an identifier for one retrieved passage. The passage text itself can always be pulled back using that chunk identifier.
+4. Each paragraph marker points to a chunk, an identifier for one retrieved passage. The literature API can return the passage text for that identifier; the tool records the identifier but does not fetch the text for you.
 
 In the web page, the reference number inside a claim is a clickable link. That link scrolls straight to the highlighted passage that supports the claim, so the whole path is one click rather than a lookup.
 

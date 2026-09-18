@@ -196,7 +196,7 @@ litrag serve --port 8080
 | `-O, --organism` | Organism (required) |
 | `-g, --genes` | Comma-separated genes or proteins |
 | `-t, --other-terms` | Extra search terms |
-| `-T, --type` | `ppi`, `protein-function`, `mutation`, `summary`, `ast` (see [Data types](#data-types)) |
+| `-T, --type` | `ppi`, `protein-function`, `mutation`, `summary`, `ast`, `glycosylation`, `host-virus` (see [Data types](#data-types)) |
 | `-k, --top-k` | Chunks to retrieve (1 to 100, default 10) |
 | `-c, --collection` | Corpus id, comma-separated ids, or `all` (default: PubMed Central) |
 | `-f, --format` | `table`, `tsv`, `csv`, `json`, `jsonl`, `md` |
