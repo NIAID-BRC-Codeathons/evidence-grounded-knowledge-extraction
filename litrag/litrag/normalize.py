@@ -26,13 +26,18 @@ AA_THREE_TO_ONE = {
     "ter": "*", "stop": "*", "sec": "U", "pyl": "O",
 }
 
-# Ser315Thr / p.Ser315Thr  ->  three-letter substitution
-_THREE_LETTER_SUB = re.compile(
-    r"^(?:p\.)?(" + "|".join(AA_THREE_TO_ONE) + r")(\d+)(" + "|".join(AA_THREE_TO_ONE) + r")$",
-    re.IGNORECASE,
-)
-# S315T / p.S315T  ->  one-letter substitution
-_ONE_LETTER_SUB = re.compile(r"^(?:p\.)?([A-Z])(\d+)([A-Z*])$", re.IGNORECASE)
+# One side of a substitution: a three-letter code, a one-letter code, or the
+# stop symbol. Three-letter names come first so the alternation prefers "Ser"
+# over a bare "S" when both could start the match.
+_AA_CODE = r"(?:" + "|".join(AA_THREE_TO_ONE) + r"|[A-Z]|\*)"
+# Ser315Thr / S315T / C39Ter / Cys39* / p.His596Asn  ->  amino-acid substitution.
+# The two sides are matched independently: mixing notations is common in the
+# literature ("C39Ter"), and requiring both to agree left those unparsed, so a
+# stop codon written three ways counted as three distinct facts.
+_AA_SUB = re.compile(rf"^(?:p\.)?({_AA_CODE})(\d+)({_AA_CODE})$", re.IGNORECASE)
+# An alternation lists several alleles at one position: "G288S/M/C" is three
+# substitutions, and the trailing codes may be bare ("S/M/C") or written out.
+_ALTERNATION = re.compile(r"\s*/\s*")
 # c-15t / g-10a  ->  ref base, position, alt base. The position may be negative
 # (promoter numbering), so the sign must survive: c-15t and c15t are different
 # sites. Nucleotide notation is conventionally lowercase, which is what
@@ -112,12 +117,53 @@ def normalize_gene(value: Optional[str]) -> str:
     return cleaned.lower()
 
 
+def _aa_letter(code: str) -> str:
+    """One-letter form of an amino-acid code, whichever notation it came in."""
+    return AA_THREE_TO_ONE.get(code.lower(), code.upper())
+
+
+def expand_mutation(value: Optional[str], gene: Optional[str] = None) -> list:
+    """Canonical substitutions in `value`, one per allele it names.
+
+    "G288S/M/C" is three claims about position 288, not one; a caller scoring
+    or counting facts needs them separately. Returns [] when nothing parses as
+    a substitution.
+    """
+    cleaned = clean(value)
+    if not cleaned:
+        return []
+
+    parts = _ALTERNATION.split(cleaned.strip())
+    head = normalize_mutation(parts[0], gene)
+    first = _AA_SUB.match(head)
+    if not first:
+        return []
+
+    ref, pos, _alt = first.groups()
+    out = [head]
+    for part in parts[1:]:
+        part = part.strip()
+        if not part:
+            continue
+        whole = normalize_mutation(part, gene)
+        if _AA_SUB.match(whole):
+            out.append(whole)            # a second full substitution
+        elif part.lower() in AA_THREE_TO_ONE or (len(part) == 1 and part.isalpha()):
+            out.append(f"{_aa_letter(ref)}{int(pos)}{_aa_letter(part)}")
+        else:
+            return []                    # not an allele list; do not guess
+    return sorted(dict.fromkeys(out))
+
+
 def normalize_mutation(value: Optional[str], gene: Optional[str] = None) -> str:
     """Canonical form for a mutation, independent of notation.
 
-    Ser315Thr, S315T, and katG-S315T all reduce to "S315T". Anything that does
-    not parse as a known notation falls back to normalized text, which still
-    collapses case and spacing differences.
+    Ser315Thr, S315T, and katG-S315T all reduce to "S315T". The two sides need
+    not share a notation, so C39Ter and Cys39* also reduce to "C39*". An allele
+    list reduces to its sorted expansion, "G288S/M/C" -> "G288C/G288M/G288S";
+    `expand_mutation` returns those separately. Anything that does not parse as
+    a known notation falls back to normalized text, which still collapses case
+    and spacing differences.
     """
     cleaned = clean(value)
     if not cleaned:
@@ -171,15 +217,17 @@ def normalize_mutation(value: Optional[str], gene: Optional[str] = None) -> str:
     if prose:
         return prose
 
-    three = _THREE_LETTER_SUB.match(token)
-    if three:
-        ref, pos, alt = three.groups()
-        return f"{AA_THREE_TO_ONE[ref.lower()]}{int(pos)}{AA_THREE_TO_ONE[alt.lower()]}"
+    if "/" in token:
+        # "G288S/M/C" and "Gly288Ser/Met/Cys" are the same statement. Joining
+        # the expansion in sorted order gives both the same dedup key.
+        alleles = expand_mutation(token, gene)
+        if alleles:
+            return "/".join(alleles)
 
-    one = _ONE_LETTER_SUB.match(token)
-    if one:
-        ref, pos, alt = one.groups()
-        return f"{ref.upper()}{int(pos)}{alt.upper()}"
+    sub = _AA_SUB.match(token)
+    if sub:
+        ref, pos, alt = sub.groups()
+        return f"{_aa_letter(ref)}{int(pos)}{_aa_letter(alt)}"
 
     hgvs = _HGVS_CODING.match(token)
     if hgvs:
