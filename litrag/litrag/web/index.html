@@ -37,6 +37,30 @@
       </div>
     </div>
 
+    <div class="formRow">
+      <div class="formGroup grow">
+        <label for="advancedInstructions">Advanced Instructions
+          <span id="instructionsBudget" class="topKValue hidden"></span>
+        </label>
+        <textarea id="advancedInstructions" rows="2"
+                  placeholder='Provide extra guidance for the LLM.
+Examples: Follow these patterns for extracting mutations, residues, and amino acid positions from the literature.
+Use the following patterns to identify relevant information:
+**Residue Number Patterns:**
+• Single residues: "residue 226", "position 128", "amino acid 456", "aa 123"
+• Ranges: "residues 1-73", "amino acids 420-440", "residues 85 to 207", "1-460 aa"
+• Range phrases: "residues 1 through 73", "from residue 85 to 207", "spanning residues 420-440"
+• Count references: "73 amino acids", "460 aa", "207 residues" (may indicate domain boundaries)
+
+**Amino Acid Position Patterns:**
+• Single letter + position: "A226", "K128", "S123", "D456"
+• Three-letter + position: "Ala226", "Lys128", "Ser123", "Asp456"
+• Full name + position: "alanine 226", "lysine 128", "serine 123", "aspartic acid 456"
+• With context: "residue A226", "position K128", "amino acid Ser123"
+                  '></textarea>
+      </div>
+    </div>
+
     <div class="formRow controls">
       <div class="formGroup">
         <label for="dataType">Data Type</label>

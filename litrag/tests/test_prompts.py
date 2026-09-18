@@ -146,3 +146,32 @@ def test_prose_rule_only_applies_where_there_is_a_mutation_column():
     from litrag.prompts import column_rules
     rules = " ".join(column_rules(["Organism", "Strain", "Antibiotic", "MIC"]))
     assert "glycine to aspartate" not in rules
+
+
+def test_instructions_get_their_own_section(registry, mutation_response):
+    """Guidance is layered on top of the schema rules, never in place of them."""
+    template = registry.resolve("mutation")
+    prompt, _, _ = build_prompt(template, mutation_response["sources"], "M. tb",
+                                instructions="Report positions as A226, K128.")
+    assert "Additional instructions from the user:" in prompt
+    assert "Report positions as A226, K128." in prompt
+    # The output shape the rest of the pipeline parses must survive.
+    assert "\t".join(template.columns) in prompt
+    # And guidance belongs with the instructions, not buried after the papers.
+    assert prompt.index("A226") < prompt.index("--- LITERATURE CONTEXT ---")
+
+
+def test_blank_instructions_add_no_section(registry, mutation_response):
+    template = registry.resolve("mutation")
+    plain, _, _ = build_prompt(template, mutation_response["sources"], "M. tb")
+    blank, _, _ = build_prompt(template, mutation_response["sources"], "M. tb",
+                               instructions="   \n  ")
+    assert blank == plain
+
+
+def test_instructions_change_the_prompt_hash(registry, mutation_response):
+    sources = mutation_response["sources"]
+    _, plain, _ = build_prompt(registry.resolve("mutation"), sources, "M. tb")
+    _, guided, _ = build_prompt(registry.resolve("mutation"), sources, "M. tb",
+                                instructions="Confirmed findings only.")
+    assert plain != guided, "provenance must distinguish a guided run"

@@ -189,6 +189,7 @@ def build_prompt(
     genes: str = "",
     other_terms: str = "",
     max_context_tokens: Optional[int] = None,
+    instructions: str = "",
 ) -> Tuple[str, str, int]:
     """Build the prompt, its hash, and how many sources it actually includes."""
     max_chars = None
@@ -199,11 +200,17 @@ def build_prompt(
     context, n_included = build_context(sources, max_chars)
     spec_bits = describe_subject(organism, genes, other_terms)
 
-    instructions = (
+    base_instructions = (
         _table_instructions(template, spec_bits, n_included)
         if template.is_table
         else _prose_instructions(template, spec_bits, n_included)
     )
-    prompt = f"{instructions}\n\n--- LITERATURE CONTEXT ---\n\n{context}"
+    # User-supplied guidance, layered on top of the schema/citation rules above
+    # rather than replacing them -- it steers what gets extracted, not the
+    # output shape the rest of the pipeline (extract.py, dedup.py) depends on.
+    if instructions.strip():
+        base_instructions += f"\n\nAdditional instructions from the user:\n{instructions.strip()}"
+
+    prompt = f"{base_instructions}\n\n--- LITERATURE CONTEXT ---\n\n{context}"
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
     return prompt, digest, n_included

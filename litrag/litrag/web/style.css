@@ -50,17 +50,19 @@ label { font-size: 12px; font-weight: 600; color: var(--muted); }
 .req { color: var(--err); }
 .checkLabel { font-weight: 500; display: flex; align-items: center; gap: 5px; cursor: pointer; }
 
-input[type=text], select {
+input[type=text], select, textarea {
   padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px;
   font-size: 13.5px; background: #fff; color: var(--text); min-height: 36px;
 }
-input[type=text]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+textarea { font-family: inherit; resize: vertical; }
+input[type=text]:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
 .topKValue {
   display: inline-block; min-width: 20px; padding: 0 5px;
   background: var(--accent); color: #fff; border-radius: 3px;
   font-size: 11px; text-align: center;
 }
+.topKValue.warn { background: var(--err); }
 
 button {
   padding: 8px 15px; border-radius: 5px; font-size: 13.5px;

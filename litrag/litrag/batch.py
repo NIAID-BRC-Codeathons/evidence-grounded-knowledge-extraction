@@ -77,6 +77,10 @@ def _coerce(spec_fields: Dict[str, Any], defaults: "BatchDefaults") -> QuerySpec
         no_dedupe=defaults.no_dedupe,
         query_id=str(spec_fields.get("query_id") or "").strip(),
         backend=defaults.backend,
+        # Batch-wide, not per row: one curation job asks one question of the
+        # literature, so the guidance that shapes the answer is a property of
+        # the run rather than of any single organism/gene pair.
+        instructions=defaults.instructions,
     )
 
 
@@ -90,6 +94,7 @@ class BatchDefaults:
     keep_empty: bool = False
     no_dedupe: bool = False
     backend: str = "server"
+    instructions: str = ""
 
 
 def load_specs(path: Path, defaults: Optional[BatchDefaults] = None) -> List[QuerySpec]:

@@ -22,6 +22,7 @@ to 18, 2026, at Argonne National Laboratory. Project page:
   - [CLI](#cli)
     - [`query`](#query)
     - [`batch`](#batch)
+    - [Advanced instructions](#advanced-instructions)
   - [Web UI](#web-ui)
 - [Data types](#data-types)
   - [Antimicrobial susceptibility testing (`ast`)](#antimicrobial-susceptibility-testing-ast)
@@ -194,6 +195,8 @@ litrag serve --port 8080
 | `-O, --organism` | Organism (required) |
 | `-g, --genes` | Comma-separated genes or proteins |
 | `-t, --other-terms` | Extra search terms |
+| `--instructions` | Extra guidance for the LLM (see [Advanced instructions](#advanced-instructions)) |
+| `-I, --instructions-file` | Read that guidance from a UTF-8 text file instead |
 | `-T, --type` | `ppi`, `protein-function`, `mutation`, `summary`, `ast`, `glycosylation`, `host-virus` (see [Data types](#data-types)) |
 | `-k, --top-k` | Chunks to retrieve (1 to 100, default 10) |
 | `-c, --collection` | Corpus id, comma-separated ids, or `all` (default: PubMed Central) |
@@ -227,6 +230,38 @@ including its extracted rows. `--resume` skips what is already done and
 rebuilds the complete table from the sidecar, so an interrupted run costs
 nothing to finish.
 
+`--instructions` and `-I, --instructions-file` work here too, and apply to
+every row of the file: one curation job asks one question of the literature,
+so the guidance is a property of the run rather than of any single
+organism-gene pair. There is no per-row instructions column.
+
+#### Advanced instructions
+
+Free-text guidance that steers what gets extracted, layered on top of the
+schema and citation rules rather than replacing them, so the output shape the
+rest of the pipeline parses is unaffected. It never changes which papers are
+retrieved.
+
+```bash
+litrag query -O H5N1 -g HA -T mutation --instructions "Confirmed findings only."
+litrag query -O H5N1 -g HA -T mutation -I residue-patterns.txt
+litrag batch queries.tsv -o curated.tsv -I residue-patterns.txt
+```
+
+Use `--instructions-file` for guidance too long to pass on a command line;
+pass one or the other, never both. The file must be UTF-8 and non-empty.
+
+How the guidance reaches the model depends on the generator:
+
+| Generator | Delivery | Limit |
+|---|---|---|
+| `qwen`, `llama`, a URL | Its own labeled section in the prompt | None |
+| `server` (hosted `/v1/query`) | Folded into the template's `other_terms` slot, since the hosted API declares no slot of its own for guidance | Shares that slot's server-set cap, currently 200 characters including the query's own other terms |
+
+Over that cap the run stops with the character counts and the remaining
+budget, before any call is spent; on `batch` it stops once up front rather
+than on every row. Anything longer needs a local generator.
+
 ### Web UI
 
 ```bash
@@ -237,6 +272,12 @@ The API key stays in the server process and is never sent to the browser. The
 page offers the same fields as the CLI, plus per-row citations as clickable
 PMID and DOI links, expandable source cards, and TSV, CSV, JSON, and Markdown
 download.
+
+The Advanced Instructions box carries the same guidance as `--instructions`.
+On a hosted run it shows the characters used against the slot's cap and
+disables Search when the cap is exceeded, so the limit surfaces while typing
+rather than on submit; the badge is hidden for a local generator, which has no
+such limit.
 
 ## Data types
 
