@@ -1,111 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LitRAG — Literature Curation</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a6fb5'/%3E%3Ctext x='16' y='23' font-size='19' font-family='Helvetica,Arial' font-weight='bold' fill='white' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LitRAG — Literature Curation</title>
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a6fb5'/%3E%3Ctext x='16' y='23' font-size='19' font-family='Helvetica,Arial' font-weight='bold' fill='white' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
-<header class="topbar">
-  <h1>LitRAG</h1>
-  <span class="tagline">Automated literature curation &amp; knowledge extraction</span>
-  <span class="spacer"></span>
-  <a href="/architecture" class="serverInfo">System overview</a>
-  <span id="serverInfo" class="serverInfo"></span>
-</header>
+  <header class="topbar">
+    <h1>LitRAG</h1>
+    <span class="tagline">Automated literature curation &amp; knowledge extraction</span>
+    <span class="spacer"></span>
+    <a href="/guide" class="serverInfo">How to use</a>
+    <a href="/architecture" class="serverInfo">System overview</a>
+    <span id="serverInfo" class="serverInfo"></span>
+  </header>
 
-<section class="searchPanel">
-  <form id="searchForm" autocomplete="off">
-    <div class="formRow">
-      <div class="formGroup grow">
-        <label for="organism">Organism of Interest <span class="req">*</span></label>
-        <input type="text" id="organism" required
-               placeholder="e.g., SARS-CoV-2, Mycobacterium tuberculosis">
+  <section class="searchPanel">
+    <form id="searchForm" autocomplete="off">
+      <div class="formRow">
+        <div class="formGroup grow">
+          <label for="organism">Organism of Interest <span class="req">*</span></label>
+          <input type="text" id="organism" required placeholder="e.g., SARS-CoV-2, Mycobacterium tuberculosis">
+        </div>
+        <div class="formGroup grow">
+          <label for="genes">Genes of Interest</label>
+          <input type="text" id="genes" placeholder="e.g., Spike, NSP13, ACE2 (comma-separated)">
+        </div>
       </div>
-      <div class="formGroup grow">
-        <label for="genes">Genes of Interest</label>
-        <input type="text" id="genes" placeholder="e.g., Spike, NSP13, ACE2 (comma-separated)">
-      </div>
-    </div>
 
-    <div class="formRow">
-      <div class="formGroup grow">
-        <label for="otherTerms">Other Terms</label>
-        <input type="text" id="otherTerms"
-               placeholder="e.g., antibiotic resistance, viral entry, host interaction">
+      <div class="formRow">
+        <div class="formGroup grow">
+          <label for="otherTerms">Other Terms</label>
+          <input type="text" id="otherTerms" placeholder="e.g., antibiotic resistance, viral entry, host interaction">
+        </div>
       </div>
-    </div>
 
-    <div class="formRow controls">
-      <div class="formGroup">
-        <label for="dataType">Data Type</label>
-        <select id="dataType"></select>
+      <div class="formRow controls">
+        <div class="formGroup">
+          <label for="dataType">Data Type</label>
+          <select id="dataType"></select>
+        </div>
+        <div class="formGroup">
+          <label for="collection">Collection</label>
+          <select id="collection"></select>
+        </div>
+        <div class="formGroup">
+          <label for="backend">Model</label>
+          <select id="backend"></select>
+        </div>
+        <div class="formGroup topk">
+          <label for="topK">RAG Results <span id="topKValue" class="topKValue">10</span></label>
+          <input type="range" id="topK" min="1" max="100" value="10">
+        </div>
+        <div class="formGroup check">
+          <label class="checkLabel">
+            <input type="checkbox" id="dedupe" checked> Merge duplicates
+          </label>
+          <label class="checkLabel">
+            <input type="checkbox" id="keepEmpty"> Keep empty rows
+          </label>
+        </div>
+        <div class="formGroup buttons">
+          <button type="submit" id="searchBtn" class="primary">Search &amp; Extract</button>
+          <button type="button" id="viewRequestBtn" class="secondary" disabled>View request</button>
+        </div>
       </div>
-      <div class="formGroup">
-        <label for="collection">Collection</label>
-        <select id="collection"></select>
-      </div>
-      <div class="formGroup">
-        <label for="backend">Model</label>
-        <select id="backend"></select>
-      </div>
-      <div class="formGroup topk">
-        <label for="topK">RAG Results <span id="topKValue" class="topKValue">10</span></label>
-        <input type="range" id="topK" min="1" max="100" value="10">
-      </div>
-      <div class="formGroup check">
-        <label class="checkLabel">
-          <input type="checkbox" id="dedupe" checked> Merge duplicates
-        </label>
-        <label class="checkLabel">
-          <input type="checkbox" id="keepEmpty"> Keep empty rows
-        </label>
-      </div>
-      <div class="formGroup buttons">
-        <button type="submit" id="searchBtn" class="primary">Search &amp; Extract</button>
-        <button type="button" id="viewRequestBtn" class="secondary" disabled>View request</button>
-      </div>
-    </div>
-  </form>
-</section>
-
-<main class="results">
-  <div id="status" class="status">Enter an organism to search the literature.</div>
-  <div id="summary" class="summary hidden"></div>
-
-  <section id="answerSection" class="answerSection hidden">
-    <div class="sectionHeader">
-      <h2 id="answerTitle">Extracted Data</h2>
-      <div class="downloads">
-        <span class="dlLabel">Download</span>
-        <button data-fmt="tsv" class="dl">TSV</button>
-        <button data-fmt="csv" class="dl">CSV</button>
-        <button data-fmt="json" class="dl">JSON</button>
-        <button data-fmt="md" class="dl">MD</button>
-      </div>
-    </div>
-    <div id="answerBody"></div>
+    </form>
   </section>
 
-  <section id="sourcesSection" class="sourcesSection hidden">
-    <h2 id="sourcesTitle">Sources</h2>
-    <div id="sourcesBody"></div>
-  </section>
-</main>
+  <main class="results">
+    <div id="status" class="status">Enter an organism to search the literature.</div>
+    <div id="summary" class="summary hidden"></div>
 
-<div id="modal" class="modal hidden">
-  <div class="modalCard">
-    <div class="modalHeader">
-      <h3 id="modalTitle">Request</h3>
-      <button type="button" id="modalClose" class="modalClose">&times;</button>
+    <section id="answerSection" class="answerSection hidden">
+      <div class="sectionHeader">
+        <h2 id="answerTitle">Extracted Data</h2>
+        <div class="downloads">
+          <span class="dlLabel">Download</span>
+          <button data-fmt="tsv" class="dl">TSV</button>
+          <button data-fmt="csv" class="dl">CSV</button>
+          <button data-fmt="json" class="dl">JSON</button>
+          <button data-fmt="md" class="dl">MD</button>
+        </div>
+      </div>
+      <div id="answerBody"></div>
+    </section>
+
+    <section id="sourcesSection" class="sourcesSection hidden">
+      <h2 id="sourcesTitle">Sources</h2>
+      <div id="sourcesBody"></div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal hidden">
+    <div class="modalCard">
+      <div class="modalHeader">
+        <h3 id="modalTitle">Request</h3>
+        <button type="button" id="modalClose" class="modalClose">&times;</button>
+      </div>
+      <div class="modalNote" id="modalNote"></div>
+      <pre id="modalBody" class="modalBody"></pre>
     </div>
-    <div class="modalNote" id="modalNote"></div>
-    <pre id="modalBody" class="modalBody"></pre>
   </div>
-</div>
 
-<script src="/static/app.js"></script>
+  <script src="/static/app.js"></script>
 </body>
+
 </html>

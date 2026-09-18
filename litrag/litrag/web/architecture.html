@@ -1,135 +1,409 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LitRAG - System Overview</title>
-<style>
-:root { --ink: #17212b; --muted: #536273; --line: #cbd5df; --blue: #155e91; --blue-pale: #eaf3f9; --gold: #8a5a00; --gold-pale: #fff6dc; }
-* { box-sizing: border-box; }
-body { margin: 0; color: var(--ink); font: 10.5pt/1.42 Georgia, "Times New Roman", serif; background: #eef2f5; }
-.page { max-width: 940px; margin: 24px auto; padding: 34px 42px; background: white; box-shadow: 0 2px 16px #17212b20; }
-header { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; border-bottom: 2px solid var(--blue); padding-bottom: 10px; }
-h1 { margin: 0; color: var(--blue); font: 700 25pt/1.05 Georgia, "Times New Roman", serif; letter-spacing: 0; }
-.subtitle { color: var(--muted); font-size: 10pt; text-align: right; }
-h2 { margin: 19px 0 6px; color: var(--blue); font-size: 14pt; line-height: 1.1; }
-h3 { margin: 0 0 3px; font-size: 10.5pt; color: var(--ink); }
-p { margin: 5px 0 8px; }
-.lede { font-size: 11.5pt; margin: 13px 0 11px; }
-.diagram { margin: 8px 0 12px; padding: 9px 10px 5px; border: 1px solid var(--line); background: #fbfcfd; }
-.diagram svg { display: block; width: 100%; height: auto; }
-.diagram-note { margin: 3px 0 0; color: var(--muted); font-size: 8.5pt; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
-.block { border-top: 1px solid var(--line); padding-top: 7px; }
-ul { margin: 4px 0 5px 17px; padding: 0; }
-li { margin: 2px 0; }
-.callout { border-left: 4px solid var(--gold); background: var(--gold-pale); padding: 8px 10px; margin: 11px 0; }
-.facts { display: grid; grid-template-columns: 115px 1fr; gap: 3px 10px; margin: 5px 0 0; }
-.facts dt { color: var(--muted); font-weight: bold; }
-.facts dd { margin: 0; }
-code { font: 0.9em Menlo, Consolas, monospace; color: #143d59; }
-.footer { margin-top: 15px; padding-top: 7px; border-top: 1px solid var(--line); color: var(--muted); font-size: 8.5pt; }
-.nav { font: 9pt Menlo, Consolas, monospace; }
-.nav a { color: var(--blue); }
-@media (max-width: 700px) { .page { margin: 0; padding: 22px 18px; box-shadow: none; } header { display: block; } .subtitle { text-align: left; margin-top: 5px; } .grid { grid-template-columns: 1fr; } }
-@media print {
-  @page { size: letter; margin: 0.42in; }
-  body { background: white; font-size: 9.3pt; line-height: 1.28; }
-  .page { max-width: none; margin: 0; padding: 0; box-shadow: none; }
-  h1 { font-size: 22pt; } h2 { font-size: 12pt; margin-top: 12px; }
-  .lede { font-size: 10pt; margin: 8px 0; }
-  .diagram { margin: 5px 0 7px; padding: 5px 7px 2px; }
-  .grid { gap: 7px 18px; }
-  .block { padding-top: 5px; }
-  p { margin: 3px 0 5px; } ul { margin-top: 2px; margin-bottom: 3px; } li { margin: 1px 0; }
-  .callout { margin: 7px 0; padding: 5px 8px; }
-  .footer { margin-top: 8px; }
-  a { color: inherit; text-decoration: none; }
-  .nav { display: none; }
-}
-</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LitRAG - System Overview</title>
+    <style>
+        :root {
+            --ink: #17212b;
+            --muted: #536273;
+            --line: #cbd5df;
+            --blue: #155e91;
+            --blue-pale: #eaf3f9;
+            --gold: #8a5a00;
+            --gold-pale: #fff6dc;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            font: 10.5pt/1.42 Georgia, "Times New Roman", serif;
+            background: #eef2f5;
+        }
+
+        .page {
+            max-width: 940px;
+            margin: 24px auto;
+            padding: 34px 42px;
+            background: white;
+            box-shadow: 0 2px 16px #17212b20;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 20px;
+            border-bottom: 2px solid var(--blue);
+            padding-bottom: 10px;
+        }
+
+        h1 {
+            margin: 0;
+            color: var(--blue);
+            font: 700 25pt/1.05 Georgia, "Times New Roman", serif;
+            letter-spacing: 0;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            font-size: 10pt;
+            text-align: right;
+        }
+
+        h2 {
+            margin: 19px 0 6px;
+            color: var(--blue);
+            font-size: 14pt;
+            line-height: 1.1;
+        }
+
+        h3 {
+            margin: 0 0 3px;
+            font-size: 10.5pt;
+            color: var(--ink);
+        }
+
+        p {
+            margin: 5px 0 8px;
+        }
+
+        .lede {
+            font-size: 11.5pt;
+            margin: 13px 0 11px;
+        }
+
+        .diagram {
+            margin: 8px 0 12px;
+            padding: 9px 10px 5px;
+            border: 1px solid var(--line);
+            background: #fbfcfd;
+        }
+
+        .diagram svg {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .diagram-note {
+            margin: 3px 0 0;
+            color: var(--muted);
+            font-size: 8.5pt;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 24px;
+        }
+
+        .block {
+            border-top: 1px solid var(--line);
+            padding-top: 7px;
+        }
+
+        ul {
+            margin: 4px 0 5px 17px;
+            padding: 0;
+        }
+
+        li {
+            margin: 2px 0;
+        }
+
+        .callout {
+            border-left: 4px solid var(--gold);
+            background: var(--gold-pale);
+            padding: 8px 10px;
+            margin: 11px 0;
+        }
+
+        .facts {
+            display: grid;
+            grid-template-columns: 115px 1fr;
+            gap: 3px 10px;
+            margin: 5px 0 0;
+        }
+
+        .facts dt {
+            color: var(--muted);
+            font-weight: bold;
+        }
+
+        .facts dd {
+            margin: 0;
+        }
+
+        code {
+            font: 0.9em Menlo, Consolas, monospace;
+            color: #143d59;
+        }
+
+        .footer {
+            margin-top: 15px;
+            padding-top: 7px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 8.5pt;
+        }
+
+        .nav {
+            font: 9pt Menlo, Consolas, monospace;
+        }
+
+        .nav a {
+            color: var(--blue);
+        }
+
+        @media (max-width: 700px) {
+            .page {
+                margin: 0;
+                padding: 22px 18px;
+                box-shadow: none;
+            }
+
+            header {
+                display: block;
+            }
+
+            .subtitle {
+                text-align: left;
+                margin-top: 5px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media print {
+            @page {
+                size: letter;
+                margin: 0.42in;
+            }
+
+            body {
+                background: white;
+                font-size: 9.3pt;
+                line-height: 1.28;
+            }
+
+            .page {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+
+            h1 {
+                font-size: 22pt;
+            }
+
+            h2 {
+                font-size: 12pt;
+                margin-top: 12px;
+            }
+
+            .lede {
+                font-size: 10pt;
+                margin: 8px 0;
+            }
+
+            .diagram {
+                margin: 5px 0 7px;
+                padding: 5px 7px 2px;
+            }
+
+            .grid {
+                gap: 7px 18px;
+            }
+
+            .block {
+                padding-top: 5px;
+            }
+
+            p {
+                margin: 3px 0 5px;
+            }
+
+            ul {
+                margin-top: 2px;
+                margin-bottom: 3px;
+            }
+
+            li {
+                margin: 1px 0;
+            }
+
+            .callout {
+                margin: 7px 0;
+                padding: 5px 8px;
+            }
+
+            .footer {
+                margin-top: 8px;
+            }
+
+            a {
+                color: inherit;
+                text-decoration: none;
+            }
+
+            .nav {
+                display: none;
+            }
+        }
+    </style>
 </head>
+
 <body>
-<main class="page">
-  <header>
-    <h1>LitRAG system overview</h1>
-    <div class="subtitle">Evidence-grounded literature curation<br>One pipeline, two user interfaces</div>
-  </header>
+    <main class="page">
+        <header>
+            <h1>LitRAG system overview</h1>
+            <div class="subtitle">Evidence-grounded literature curation<br>One pipeline, two user interfaces</div>
+        </header>
 
-  <p class="lede">LitRAG turns an organism, optional genes, and a data type into a structured, citation-resolved result. The CLI, browser UI, and batch runner all call the same Python pipeline, so validation, extraction, deduplication, and provenance behave consistently.</p>
+        <p class="lede">LitRAG turns an organism, optional genes, and a data type into a structured, citation-resolved
+            result. The CLI, browser UI, and batch runner all call the same Python pipeline, so validation, extraction,
+            deduplication, and provenance behave consistently.</p>
 
-  <section class="diagram" aria-label="High-level LitRAG flow diagram">
-    <svg viewBox="0 0 860 202" role="img" aria-labelledby="diagram-title diagram-desc">
-      <title id="diagram-title">LitRAG query flow</title>
-      <desc id="diagram-desc">CLI, web UI, and batch inputs converge on one query pipeline. It resolves templates, retrieves evidence, generates an answer, extracts and normalizes rows, deduplicates them, attaches provenance, and renders outputs.</desc>
-      <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#536273"/></marker></defs>
-      <g font-family="Georgia, serif" font-size="13" text-anchor="middle">
-        <g fill="#eaf3f9" stroke="#155e91"><rect x="12" y="22" width="105" height="38" rx="4"/><rect x="12" y="82" width="105" height="38" rx="4"/><rect x="12" y="142" width="105" height="38" rx="4"/></g>
-        <text x="64" y="46">CLI</text><text x="64" y="106">Web UI</text><text x="64" y="166">Batch</text>
-        <rect x="170" y="67" width="130" height="68" rx="5" fill="#155e91" stroke="#0f456c"/><g fill="white"><text x="235" y="92">QuerySpec</text><text x="235" y="112" font-size="11">validate + plan</text></g>
-        <rect x="350" y="67" width="128" height="68" rx="5" fill="#eaf3f9" stroke="#155e91"/><text x="414" y="92">Template</text><text x="414" y="112" font-size="11">search + schema</text>
-        <rect x="530" y="67" width="132" height="68" rx="5" fill="#fff6dc" stroke="#8a5a00"/><text x="596" y="92">Retrieve</text><text x="596" y="112" font-size="11">RAGStack sources</text>
-        <rect x="714" y="22" width="132" height="38" rx="4" fill="#fff6dc" stroke="#8a5a00"/><text x="780" y="46">Hosted /v1/query</text>
-        <rect x="714" y="82" width="132" height="38" rx="4" fill="#fff6dc" stroke="#8a5a00"/><text x="780" y="106">Local chat model</text>
-        <rect x="714" y="142" width="132" height="38" rx="4" fill="#eaf3f9" stroke="#155e91"/><text x="780" y="166">Extract rows</text>
-        <g fill="none" stroke="#536273" stroke-width="1.5" marker-end="url(#arrow)"><path d="M117 41 H155 V84 H170"/><path d="M117 101 H170"/><path d="M117 161 H155 V118 H170"/><path d="M300 101 H350"/><path d="M478 101 H530"/><path d="M662 84 H704 V41 H714"/><path d="M662 118 H704 V101 H714"/><path d="M846 41 H852 V161 H846"/><path d="M846 101 H852 V161 H846"/></g>
-      </g>
-    </svg>
-    <p class="diagram-note">The hosted path lets RAGStack retrieve and generate. The local path retrieves first, builds a LitRAG prompt, then calls an OpenAI-compatible model endpoint.</p>
-  </section>
+        <section class="diagram" aria-label="High-level LitRAG flow diagram">
+            <svg viewBox="0 0 860 202" role="img" aria-labelledby="diagram-title diagram-desc">
+                <title id="diagram-title">LitRAG query flow</title>
+                <desc id="diagram-desc">CLI, web UI, and batch inputs converge on one query pipeline. It resolves
+                    templates, retrieves evidence, generates an answer, extracts and normalizes rows, deduplicates them,
+                    attaches provenance, and renders outputs.</desc>
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+                        orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#536273" />
+                    </marker>
+                </defs>
+                <g font-family="Georgia, serif" font-size="13" text-anchor="middle">
+                    <g fill="#eaf3f9" stroke="#155e91">
+                        <rect x="12" y="22" width="105" height="38" rx="4" />
+                        <rect x="12" y="82" width="105" height="38" rx="4" />
+                        <rect x="12" y="142" width="105" height="38" rx="4" />
+                    </g>
+                    <text x="64" y="46">CLI</text><text x="64" y="106">Web UI</text><text x="64" y="166">Batch</text>
+                    <rect x="170" y="67" width="130" height="68" rx="5" fill="#155e91" stroke="#0f456c" />
+                    <g fill="white"><text x="235" y="92">QuerySpec</text><text x="235" y="112" font-size="11">validate +
+                            plan</text></g>
+                    <rect x="350" y="67" width="128" height="68" rx="5" fill="#eaf3f9" stroke="#155e91" /><text x="414"
+                        y="92">Template</text><text x="414" y="112" font-size="11">search + schema</text>
+                    <rect x="530" y="67" width="132" height="68" rx="5" fill="#fff6dc" stroke="#8a5a00" /><text x="596"
+                        y="92">Retrieve</text><text x="596" y="112" font-size="11">RAGStack sources</text>
+                    <rect x="714" y="22" width="132" height="38" rx="4" fill="#fff6dc" stroke="#8a5a00" /><text x="780"
+                        y="46">Hosted /v1/query</text>
+                    <rect x="714" y="82" width="132" height="38" rx="4" fill="#fff6dc" stroke="#8a5a00" /><text x="780"
+                        y="106">Local chat model</text>
+                    <rect x="714" y="142" width="132" height="38" rx="4" fill="#eaf3f9" stroke="#155e91" /><text x="780"
+                        y="166">Extract rows</text>
+                    <g fill="none" stroke="#536273" stroke-width="1.5" marker-end="url(#arrow)">
+                        <path d="M117 41 H155 V84 H170" />
+                        <path d="M117 101 H170" />
+                        <path d="M117 161 H155 V118 H170" />
+                        <path d="M300 101 H350" />
+                        <path d="M478 101 H530" />
+                        <path d="M662 84 H704 V41 H714" />
+                        <path d="M662 118 H704 V101 H714" />
+                        <path d="M846 41 H852 V161 H846" />
+                        <path d="M846 101 H852 V161 H846" />
+                    </g>
+                </g>
+            </svg>
+            <p class="diagram-note">The hosted path lets RAGStack retrieve and generate. The local path retrieves first,
+                builds a LitRAG prompt, then calls an OpenAI-compatible model endpoint.</p>
+        </section>
 
-  <div class="grid">
-    <section class="block">
-      <h2>1. Interfaces and request setup</h2>
-      <ul>
-        <li><strong>CLI:</strong> <code>litrag query</code>, <code>batch</code>, metadata commands, and <code>serve</code>.</li>
-        <li><strong>Web:</strong> FastAPI serves the browser and <code>/api/query</code>, preview, metadata, and export routes.</li>
-        <li><strong>Batch:</strong> TSV, CSV, JSON, or YAML specs run with bounded concurrency and resumable JSONL progress.</li>
-        <li>Inputs become a <code>QuerySpec</code>: organism, genes, terms, data type, collections, top-k, backend, and output policy.</li>
-      </ul>
-    </section>
-    <section class="block">
-      <h2>2. Templates and retrieval</h2>
-      <ul>
-        <li>Templates define required slots, output columns, labels, versions, hashes, and token limits.</li>
-        <li>Server templates come from <code>/v1/prompt-templates</code>; LitRAG adds local types such as AST and glycosylation.</li>
-        <li>Default local retrieval uses fused hybrid + BM25 rankings; other modes include hybrid, vector, and BM25.</li>
-        <li>RAGStack returns ranked passages, identifiers, scores, and character spans. The chunk is the evidence unit.</li>
-      </ul>
-    </section>
-    <section class="block">
-      <h2>3. Generation and extraction</h2>
-      <ul>
-        <li><strong>Hosted:</strong> one <code>/v1/query</code> request performs server-side retrieval and generation.</li>
-        <li><strong>Local:</strong> LitRAG sizes the context and output, builds a prompt, and calls Qwen, Llama, or another compatible endpoint.</li>
-        <li>The extractor tolerates fenced and pipe tables, malformed alignment, transposed tables, and compound rows.</li>
-        <li>Citation markers and author references are resolved back to retrieved sources; unsupported or incomplete rows are flagged or dropped.</li>
-      </ul>
-    </section>
-    <section class="block">
-      <h2>4. Normalize, merge, and explain</h2>
-      <ul>
-        <li>Normalization standardizes genes, mutations, sites, antibiotics, interaction labels, and SIR values for comparison.</li>
-        <li>Template-specific identity rules merge equivalent facts while retaining variants, citations, chunk IDs, and support counts.</li>
-        <li>Every row receives provenance: query ID, template version/hash, model, collection, top-k, retrieval mode, timestamp, request ID, generator, endpoint, and prompt hash.</li>
-        <li>Results render as terminal tables, TSV, CSV, JSON, JSONL, Markdown, or interactive source-linked tables.</li>
-      </ul>
-    </section>
-  </div>
+        <div class="grid">
+            <section class="block">
+                <h2>1. Interfaces and request setup</h2>
+                <ul>
+                    <li><strong>CLI:</strong> <code>litrag query</code>, <code>batch</code>, metadata commands, and
+                        <code>serve</code>.</li>
+                    <li><strong>Web:</strong> FastAPI serves the browser and <code>/api/query</code>, preview, metadata,
+                        and export routes.</li>
+                    <li><strong>Batch:</strong> TSV, CSV, JSON, or YAML specs run with bounded concurrency and resumable
+                        JSONL progress.</li>
+                    <li>Inputs become a <code>QuerySpec</code>: organism, genes, terms, data type, collections, top-k,
+                        backend, and output policy.</li>
+                </ul>
+            </section>
+            <section class="block">
+                <h2>2. Templates and retrieval</h2>
+                <ul>
+                    <li>Templates define required slots, output columns, labels, versions, hashes, and token limits.
+                    </li>
+                    <li>Server templates come from <code>/v1/prompt-templates</code>; LitRAG adds local types such as
+                        AST and glycosylation.</li>
+                    <li>Default local retrieval uses fused hybrid + BM25 rankings; other modes include hybrid, vector,
+                        and BM25.</li>
+                    <li>RAGStack returns ranked passages, identifiers, scores, and character spans. The chunk is the
+                        evidence unit.</li>
+                </ul>
+            </section>
+            <section class="block">
+                <h2>3. Generation and extraction</h2>
+                <ul>
+                    <li><strong>Hosted:</strong> one <code>/v1/query</code> request performs server-side retrieval and
+                        generation.</li>
+                    <li><strong>Local:</strong> LitRAG sizes the context and output, builds a prompt, and calls Qwen,
+                        Llama, or another compatible endpoint.</li>
+                    <li>The extractor tolerates fenced and pipe tables, malformed alignment, transposed tables, and
+                        compound rows.</li>
+                    <li>Citation markers and author references are resolved back to retrieved sources; unsupported or
+                        incomplete rows are flagged or dropped.</li>
+                </ul>
+            </section>
+            <section class="block">
+                <h2>4. Normalize, merge, and explain</h2>
+                <ul>
+                    <li>Normalization standardizes genes, mutations, sites, antibiotics, interaction labels, and SIR
+                        values for comparison.</li>
+                    <li>Template-specific identity rules merge equivalent facts while retaining variants, citations,
+                        chunk IDs, and support counts.</li>
+                    <li>Every row receives provenance: query ID, template version/hash, model, collection, top-k,
+                        retrieval mode, timestamp, request ID, generator, endpoint, and prompt hash.</li>
+                    <li>Results render as terminal tables, TSV, CSV, JSON, JSONL, Markdown, or interactive source-linked
+                        tables.</li>
+                </ul>
+            </section>
+        </div>
 
-  <div class="callout"><strong>Evidence boundary.</strong> LitRAG is read-only against RAGStack: it retrieves and cites literature but does not ingest data, administer collections, grade answers, or manage the backend. Model output is nondeterministic; provenance and chunk-level citations make each result inspectable rather than claiming certainty.</div>
+        <div class="callout"><strong>Evidence boundary.</strong> LitRAG is read-only against RAGStack: it retrieves and
+            cites literature but does not ingest data, administer collections, grade answers, or manage the backend.
+            Model output is nondeterministic; provenance and chunk-level citations make each result inspectable rather
+            than claiming certainty.</div>
 
-  <section class="block">
-    <h2>Runtime facts</h2>
-    <dl class="facts">
-      <dt>Package</dt><dd>Python 3.9+, packaged with setuptools; <code>uv sync</code> creates the environment.</dd>
-      <dt>Entry point</dt><dd><code>litrag = litrag.cli:main</code>; web server uses Uvicorn and FastAPI.</dd>
-      <dt>Configuration</dt><dd>API key is read by the server process from the explicit option, <code>LITRAG_API_KEY</code>, or the user config file. It is not sent to the browser.</dd>
-      <dt>Test boundary</dt><dd>Tests use fixtures and HTTP mock transports; live RAGStack and model behavior are outside the test suite.</dd>
-    </dl>
-  </section>
+        <section class="block">
+            <h2>Runtime facts</h2>
+            <dl class="facts">
+                <dt>Package</dt>
+                <dd>Python 3.9+, packaged with setuptools; <code>uv sync</code> creates the environment.</dd>
+                <dt>Entry point</dt>
+                <dd><code>litrag = litrag.cli:main</code>; web server uses Uvicorn and FastAPI.</dd>
+                <dt>Configuration</dt>
+                <dd>API key is read by the server process from the explicit option, <code>LITRAG_API_KEY</code>, or the
+                    user config file. It is not sent to the browser.</dd>
+                <dt>Test boundary</dt>
+                <dd>Tests use fixtures and HTTP mock transports; live RAGStack and model behavior are outside the test
+                    suite.</dd>
+            </dl>
+        </section>
 
-  <div class="footer"><span class="nav"><a href="/">Back to LitRAG</a> | </span>Source of truth: <code>litrag/cli.py</code>, <code>litrag/server.py</code>, <code>litrag/pipeline.py</code>, <code>litrag/client.py</code>, <code>litrag/extract.py</code>, <code>litrag/dedup.py</code>, and <code>litrag/provenance.py</code>.</div>
-</main>
+        <div class="footer"><span class="nav"><a href="/">Back to LitRAG</a> | </span>Source of truth:
+            <code>litrag/cli.py</code>, <code>litrag/server.py</code>, <code>litrag/pipeline.py</code>,
+            <code>litrag/client.py</code>, <code>litrag/extract.py</code>, <code>litrag/dedup.py</code>, and
+            <code>litrag/provenance.py</code>.</div>
+    </main>
 </body>
+
 </html>
