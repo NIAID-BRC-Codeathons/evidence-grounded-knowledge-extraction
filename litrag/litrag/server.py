@@ -333,5 +333,10 @@ def architecture() -> FileResponse:
     return FileResponse(WEB_DIR / "architecture.html")
 
 
+@app.get("/guide")
+def guide() -> FileResponse:
+    return FileResponse(WEB_DIR / "guide.html")
+
+
 if WEB_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
