@@ -2,7 +2,9 @@
 
 import pytest
 
-from litrag.normalize import clean, is_null, normalize_gene, normalize_mutation
+from litrag.normalize import (
+    clean, is_null, normalize_gene, normalize_mutation, normalize_text,
+)
 
 
 @pytest.mark.parametrize("value", [
@@ -191,3 +193,31 @@ def test_expand_mutation_declines_non_substitutions(value):
     facts, so they yield nothing rather than a partial parse."""
     from litrag.normalize import expand_mutation
     assert expand_mutation(value) == []
+
+
+@pytest.mark.parametrize("value,gene,expected", [
+    ("AmpDH157Y", "ampD", "H157Y"),
+    ("AmrRE190*", "amrR", "E190*"),
+    ("fusA1R680C", "fusA1", "R680C"),
+    ("ampdH157Y", "AMPD", "H157Y"),          # case differs on both sides
+])
+def test_gene_glued_to_substitution_is_stripped(value, gene, expected):
+    """Prose writes the gene straight onto the mutation, with no separator to
+    key on: "the AmpDH157Y variant". Without this the value fell through to
+    text and stopped merging with the plain `H157Y` row reporting the same
+    fact."""
+    assert normalize_mutation(value, gene) == expected
+
+
+@pytest.mark.parametrize("value,gene", [
+    ("MexRH157Y", "ampD"),         # a different gene's name, not this row's
+    ("AmpCH157Y", "ampD"),         # near-miss gene name
+    ("ampDinactivation", "ampD"),  # prose, not a substitution
+    ("ampD157Y", "ampD"),          # incomplete: no reference residue
+    ("AmpDH157Y", None),           # gene unknown, so nothing may be assumed
+])
+def test_glued_prefix_is_not_guessed_at(value, gene):
+    """The strip needs both the row's own gene name and a complete substitution
+    after it. With either missing the value falls back to normalized text,
+    rather than part of it being invented as a mutation."""
+    assert normalize_mutation(value, gene) == normalize_text(value)

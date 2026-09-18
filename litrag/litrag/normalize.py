@@ -182,6 +182,15 @@ def normalize_mutation(value: Optional[str], gene: Optional[str] = None) -> str:
         token = re.sub(
             rf"^{re.escape(gene_key)}\s*[-_:. ]\s*", "", token, flags=re.IGNORECASE
         ).strip()
+        # Prose glues the gene straight onto the substitution -- "AmpDH157Y",
+        # "AmrRE190*". There is no separator to key on, so the guard is the
+        # lookahead: strip only when the remainder is a complete substitution,
+        # which leaves "ampDinactivation" and "oprD loss" alone. The prefix must
+        # be this row's own gene, so a different gene name is never removed.
+        token = re.sub(
+            rf"^{re.escape(gene_key)}(?=(?:p\.)?{_AA_CODE}\d+{_AA_CODE}$)",
+            "", token, flags=re.IGNORECASE
+        ).strip()
     # Or any leading word that is clearly a qualifier before a substitution.
     token = re.sub(
         r"^[A-Za-z][A-Za-z0-9]{1,9}\s*[-_:]\s*(?=(?:p\.)?[A-Za-z]{1,3}\d+[A-Za-z*]{1,3}$)",
